@@ -90,12 +90,12 @@ resource "vault_policy" "operator_foundation" {
   policy = jsonencode({
     path = merge(
       {
-        "sys/mounts"                                                                         = { capabilities = local.acl_capability.read }
-        "sys/auth"                                                                           = { capabilities = local.acl_capability.read }
-        "sys/audit"                                                                          = { capabilities = local.acl_capability.list_sudo }
-        "sys/policies/acl"                                                                   = { capabilities = local.acl_capability.manage }
-        "sys/policies/acl/*"                                                                 = { capabilities = local.acl_capability.manage }
-        "sys/internal/ui/mounts/*"                                                           = { capabilities = local.acl_capability.read }
+        "sys/mounts"                                                                  = { capabilities = local.acl_capability.read }
+        "sys/auth"                                                                    = { capabilities = local.acl_capability.read }
+        "sys/audit"                                                                   = { capabilities = local.acl_capability.list_sudo }
+        "sys/policies/acl"                                                            = { capabilities = local.acl_capability.manage }
+        "sys/policies/acl/*"                                                          = { capabilities = local.acl_capability.manage }
+        "sys/internal/ui/mounts/*"                                                    = { capabilities = local.acl_capability.read }
         "${local.operator_proxy.state_backend.vault_kv_mount}/data/${each.key}/*"     = { capabilities = local.acl_capability.kv_data }
         "${local.operator_proxy.state_backend.vault_kv_mount}/metadata/${each.key}/*" = { capabilities = local.acl_capability.kv_metadata }
         "${local.operator_proxy.state_backend.vault_kv_mount}/delete/${each.key}/*"   = { capabilities = local.acl_capability.kv_version }
