@@ -1,0 +1,7 @@
+{
+    "default": true,
+    "MD013": false,
+    "MD007": { "indent": 4 },
+    "MD030": { "ol_single": 2, "ol_multi": 2 },
+    "MD046": false
+}

@@ -1,0 +1,24 @@
+#!/bin/sh
+# Validates commit messages against Conventional Commits using the reviewer container image.
+# Activation: git config core.hooksPath .githooks
+
+set -e
+
+IMAGE="registry.gitlab.com/csning1998/gitlab-ci-with-code-reviewer/reviewer:1.6.2"
+MSG_FILE="$1"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Relabel .git for container access when SELinux is enforcing.
+if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then
+    chcon -t container_file_t -R "${REPO_ROOT}/.git" || true
+fi
+
+# It is intentional to mount .git only since staged scanning
+# and message linting do not require a working tree.
+podman run --rm \
+    -v "${REPO_ROOT}/.git:/repo/.git:ro" \
+    -v "$(realpath "${MSG_FILE}"):/repo/COMMIT_EDITMSG:ro" \
+    -w /repo \
+    "$IMAGE" \
+    commitlint --config /etc/commitlint/commitlint.config.cjs \
+    --cwd /repo --edit /repo/COMMIT_EDITMSG

@@ -1,0 +1,28 @@
+---
+- name: "Section 0. Require operator home extra var"
+  ansible.builtin.assert:
+    that:
+      - workstation_selinux_home is string
+      - workstation_selinux_home | length > 0
+      - workstation_selinux_home != "/root"
+    fail_msg: >-
+      workstation_selinux_home must be the operator home directory.
+      become: true gathers facts as root. The CLI injects this extra var.
+
+# A parent with NoNewPrivs=1 requires process2 nnp_transition on runtime hops.
+- name: "Section A. Install local policy module"
+  ansible.builtin.include_tasks: A-policy-module.yaml
+  tags:
+    - nnp
+
+# Bind-mount sources stay container_file_t:s0 through persistent fcontext mapping.
+- name: "Section B. Register anchored fcontext"
+  ansible.builtin.include_tasks: B-fcontext.yaml
+  tags:
+    - fcontext
+
+# Unanchored specs label every matching basename after a filesystem relabel.
+- name: "Section C. Remove unanchored fcontext"
+  ansible.builtin.include_tasks: C-fcontext-absent.yaml
+  tags:
+    - fcontext

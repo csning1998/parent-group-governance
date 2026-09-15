@@ -1,0 +1,15 @@
+---
+- name: "Block C1: Remove unanchored fcontext"
+  block:
+    - name: "C1a. Remove unanchored and host-inapplicable fcontext specs"
+      community.general.sefcontext:
+        target: "{{ item.target }}"
+        state: absent
+      loop: "{{ workstation_selinux_fcontext_absent }}"
+      loop_control:
+        label: "{{ item.target }}"
+
+  rescue:
+    - name: "Block C1: Remove unanchored fcontext failed"
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"

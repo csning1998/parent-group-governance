@@ -1,0 +1,25 @@
+---
+include:
+  - component: $CI_SERVER_FQDN/csning1998/gitlab-ci-with-code-reviewer/core@1.5.1
+    inputs:
+      reviewer_image: $CI_REGISTRY/csning1998/gitlab-ci-with-code-reviewer/reviewer:1.5.1
+      claude_model: claude-sonnet-5
+      enable_sonarqube: true
+  - component: $CI_SERVER_FQDN/csning1998/gitlab-ci-with-code-reviewer/iac-terraform@1.5.1
+    inputs:
+      # CKV_GLB_1, CKV_GLB_3, CKV_GLB_4: require GitLab Premium/Ultimate merge request approval and push rules.
+      # CKV_TF_1: enforces commit-pinned Git URLs. Modules use immutable semantic versions from GitLab Terraform Registry.
+      checkov_skip: "CKV_GLB_1,CKV_GLB_3,CKV_GLB_4,CKV_TF_1"
+  - component: $CI_SERVER_FQDN/csning1998/gitlab-ci-with-code-reviewer/iac-ansible@1.5.1
+    inputs:
+      ansible_globs: ["ansible/**/*"]
+  - component: $CI_SERVER_FQDN/csning1998/gitlab-ci-with-code-reviewer/lang-go@1.5.1
+    inputs:
+      go_dir: 'tools/governance'
+      go_fmt_path: './tools/governance'
+      go_globs: ["tools/governance/**/*.go", "tools/governance/go.mod", "tools/governance/go.sum"]
+  - component: $CI_SERVER_FQDN/csning1998/gitlab-ci-with-code-reviewer/auto-tag@1.5.1
+    rules:
+      - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    inputs:
+      reviewer_image: $CI_REGISTRY/csning1998/gitlab-ci-with-code-reviewer/reviewer:1.5.1

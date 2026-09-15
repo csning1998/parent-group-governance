@@ -1,0 +1,35 @@
+module workstation_nnp_container_runtime 1.3;
+
+require {
+    type unconfined_t;
+    type container_runtime_t;
+    type container_engine_t;
+    type iptables_t;
+    type pasta_t;
+    type ptmx_t;
+    type config_home_t;
+    type user_tmp_t;
+    class process2 { nnp_transition nosuid_transition };
+    class chr_file { read write };
+    class file append;
+    class sock_file write;
+    class dir write;
+}
+
+# A parent with NoNewPrivs=1 requires process2 nnp_transition on each
+# domain hop through the container runtime and the netavark iptables helper.
+allow unconfined_t container_runtime_t:process2 { nnp_transition nosuid_transition };
+allow container_runtime_t iptables_t:process2 { nnp_transition nosuid_transition };
+
+# pasta inherits the parent PTY when Podman starts from a GUI terminal.
+# Cursor writes that PTY to ~/.config/Cursor/logs/*/ptyhost.log.
+allow pasta_t ptmx_t:chr_file { read write };
+allow pasta_t config_home_t:file append;
+
+# nft (iptables_t) inherits the same parent PTY on the netavark hop.
+allow iptables_t ptmx_t:chr_file { read write };
+
+# gitlab-runner creates podman.sock in a user_tmp_t parent directory.
+# The docker executor bind-mounts that directory as /run/podman.
+allow container_engine_t user_tmp_t:sock_file write;
+allow container_engine_t user_tmp_t:dir write;

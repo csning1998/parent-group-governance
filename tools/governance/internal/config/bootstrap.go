@@ -1,0 +1,151 @@
+package config
+
+import (
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
+	"os"
+	"os/exec"
+	"os/user"
+	"path/filepath"
+	"strconv"
+
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
+)
+
+// HostFacts holds the operator identity used by Compose ${HOST_UID}:${HOST_GID}.
+type HostFacts struct {
+	CurrentUID   int
+	CurrentGID   int
+	CurrentUname string
+}
+
+// DetectHostFacts looks up the current user numeric identity.
+func DetectHostFacts() (HostFacts, error) {
+	var facts HostFacts
+	u, err := user.Current()
+	if err != nil {
+		return facts, fmt.Errorf("config: lookup current user: %w", err)
+	}
+	facts.CurrentUname = u.Username
+	if uid, err := strconv.Atoi(u.Uid); err == nil {
+		facts.CurrentUID = uid
+	}
+	if gid, err := strconv.Atoi(u.Gid); err == nil {
+		facts.CurrentGID = gid
+	}
+	return facts, nil
+}
+
+type requiredTool struct {
+	Cmd  string
+	Name string
+}
+
+var hostTools = []requiredTool{
+	{"terraform", "HashiCorp Terraform"},
+	{"vault", "HashiCorp Vault"},
+	{"ansible", "Red Hat Ansible"},
+}
+
+// ToolCheck reports whether one required tool is installed.
+type ToolCheck struct {
+	Group     string
+	Name      string
+	Installed bool
+}
+
+// VerifyHostEnvironment validates Terraform, Vault, and Ansible against PATH.
+func VerifyHostEnvironment() []ToolCheck {
+	var checks []ToolCheck
+	for _, t := range hostTools {
+		_, err := exec.LookPath(t.Cmd)
+		checks = append(checks, ToolCheck{"Host IaC tools", t.Name, err == nil})
+	}
+	return checks
+}
+
+// generateRandomHexToken returns a random URL-safe base64 string decoded from nBytes of crypto/rand output.
+func generateRandomHexToken(nBytes int) (string, error) {
+	buf := make([]byte, nBytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("config: generate password: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+// BootstrapEnv initializes or updates root/.env with host identity and Vault defaults.
+func BootstrapEnv(root string, out *ui.Printer) (*Env, error) {
+	envPath := filepath.Join(root, ".env")
+	facts, err := DetectHostFacts()
+	if err != nil {
+		return nil, err
+	}
+
+	e, err := Load(envPath)
+	if err != nil {
+		return nil, err
+	}
+
+	_, statErr := os.Stat(envPath)
+	isNewFile := os.IsNotExist(statErr)
+
+	if isNewFile {
+		out.Print(ui.Info, "Creating new .env file...")
+		if err := populateNewEnv(e, root, facts); err != nil {
+			return nil, err
+		}
+	} else if err := patchExistingEnv(e, root, facts, out); err != nil {
+		return nil, err
+	}
+
+	if err := e.Save(); err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+// populateNewEnv sets every default field a freshly created .env file needs, unconditionally.
+func populateNewEnv(e *Env, root string, facts HostFacts) error {
+	sonarDBPassword, err := generateRandomHexToken(24)
+	if err != nil {
+		return err
+	}
+	for _, kv := range [][2]string{
+		{KeyProjectRoot, root},
+		{KeyDevVaultAddr, "https://172.16.0.1:8200"},
+		{KeyDevVaultCACert, "${PROJECT_ROOT}/vault/tls/ca.pem"},
+		{KeyVaultToken, ""},
+		{KeyHostUID, strconv.Itoa(facts.CurrentUID)},
+		{KeyHostGID, strconv.Itoa(facts.CurrentGID)},
+		{KeyUname, facts.CurrentUname},
+		{KeyUhome, "${HOME}"},
+		{KeySonarQubeDBPassword, sonarDBPassword},
+	} {
+		e.Set(kv[0], kv[1])
+	}
+	return nil
+}
+
+// patchExistingEnv refreshes host-identity fields on every run and backfills only the fields
+// an existing .env file is still missing.
+func patchExistingEnv(e *Env, root string, facts HostFacts, out *ui.Printer) error {
+	e.Set(KeyHostUID, strconv.Itoa(facts.CurrentUID))
+	e.Set(KeyHostGID, strconv.Itoa(facts.CurrentGID))
+	e.Set(KeyProjectRoot, root)
+	if e.Get(KeyDevVaultAddr) == "" {
+		e.Set(KeyDevVaultAddr, "https://172.16.0.1:8200")
+	}
+	if e.Get(KeyDevVaultCACert) == "" {
+		e.Set(KeyDevVaultCACert, "${PROJECT_ROOT}/vault/tls/ca.pem")
+	}
+	if e.Get(KeySonarQubeDBPassword) == "" {
+		sonarDBPassword, err := generateRandomHexToken(24)
+		if err != nil {
+			return err
+		}
+		out.Print(ui.Info, "Generated SONARQUBE_DB_PASSWORD.")
+		e.Set(KeySonarQubeDBPassword, sonarDBPassword)
+	}
+	return nil
+}

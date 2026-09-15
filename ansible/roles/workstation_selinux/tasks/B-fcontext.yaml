@@ -1,0 +1,91 @@
+---
+- name: "Block B1: Register anchored fcontext"
+  block:
+    - name: "B1a. Register persistent fcontext for anchored container_file_t paths"
+      community.general.sefcontext:
+        target: "{{ item.target }}"
+        setype: container_file_t
+        selevel: s0
+        ftype: "{{ item.ftype }}"
+        state: present
+      loop: "{{ workstation_selinux_fcontext_present }}"
+      loop_control:
+        label: "{{ item.target }}"
+
+  rescue:
+    - name: "Block B1: Register anchored fcontext failed"
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
+
+- name: "Block B2: Restore drifted labels"
+  block:
+    - name: "B2a. Stat restorecon targets"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ workstation_selinux_restorecon_paths }}"
+      register: workstation_selinux_restorecon_stat
+      changed_when: false
+
+    - name: "B2b. Dry-run restorecon on existing inodes"
+      ansible.builtin.command:
+        cmd: restorecon -RFn "{{ item.item }}"
+      loop: "{{ workstation_selinux_restorecon_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.stat.exists | default(false)
+      register: workstation_selinux_restorecon_dry
+      changed_when: false
+      failed_when: false
+
+    - name: "B2c. Apply restorecon -F when an inode drifted"
+      ansible.builtin.command:
+        cmd: restorecon -RFv "{{ item.item.item }}"
+      loop: "{{ workstation_selinux_restorecon_dry.results }}"
+      loop_control:
+        label: "{{ item.item.item }}"
+      when:
+        - item.skipped is not defined
+        - item.stdout | default('') | length > 0
+      changed_when: true
+
+  rescue:
+    - name: "Block B2: Restore drifted labels failed"
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
+
+- name: "Block B3: Restore Podman API socket labels"
+  block:
+    - name: "B3a. Find user-session Podman API sockets"
+      ansible.builtin.find:
+        paths:
+          - /run/user
+          - /run/podman
+        patterns: podman.sock
+        file_type: any
+        recurse: true
+      register: workstation_selinux_podman_socks
+      changed_when: false
+
+    - name: "B3b. Dry-run restorecon on Podman API sockets"
+      ansible.builtin.command:
+        cmd: restorecon -RFn "{{ item.path | dirname }}"
+      loop: "{{ workstation_selinux_podman_socks.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      register: workstation_selinux_podman_sock_dry
+      changed_when: false
+      failed_when: false
+
+    - name: "B3c. Apply restorecon -F when a Podman API socket drifted"
+      ansible.builtin.command:
+        cmd: restorecon -RFv "{{ item.item.path | dirname }}"
+      loop: "{{ workstation_selinux_podman_sock_dry.results }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+      when: item.stdout | default('') | length > 0
+      changed_when: true
+
+  rescue:
+    - name: "Block B3: Restore Podman API socket labels failed"
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"

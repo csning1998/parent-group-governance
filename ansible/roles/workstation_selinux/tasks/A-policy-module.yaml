@@ -1,0 +1,67 @@
+---
+- name: "Block A1: Policy build tooling and source"
+  block:
+    - name: "A1a. Ensure SELinux module build tooling is present"
+      ansible.builtin.dnf:
+        name:
+          - checkpolicy
+          - policycoreutils
+        state: present
+
+    - name: "A1b. Ensure local SELinux policy directory exists"
+      ansible.builtin.file:
+        path: "{{ workstation_selinux_local_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: "A1c. Deploy workstation nnp policy source"
+      ansible.builtin.copy:
+        src: "{{ workstation_selinux_policy_module }}.te"
+        dest: "{{ workstation_selinux_local_dir }}/{{ workstation_selinux_policy_module }}.te"
+        owner: root
+        group: root
+        mode: "0600"
+      register: workstation_selinux_policy_source
+
+  rescue:
+    - name: "Block A1: Policy build tooling and source failed"
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
+
+- name: "Block A2: Compile and install policy module"
+  block:
+    - name: "A2a. Query installed SELinux policy modules"
+      ansible.builtin.command:
+        cmd: semodule -l
+      changed_when: false
+      register: workstation_selinux_modules
+
+    # Compilation covers a first install and a source revision. semodule --install
+    # does not have a check-mode equivalent.
+    - name: "A2b. Compile and install the workstation nnp policy module"
+      check_mode: false
+      ansible.builtin.shell:
+        cmd: |
+          set -o errexit
+          _tmpdir="$(mktemp -d)"
+          trap 'rm -rf "${_tmpdir}"' EXIT
+          checkmodule -M -m \
+            -o "${_tmpdir}/{{ workstation_selinux_policy_module }}.mod" \
+            "{{ workstation_selinux_local_dir }}/{{ workstation_selinux_policy_module }}.te"
+          semodule_package \
+            -o "${_tmpdir}/{{ workstation_selinux_policy_module }}.pp" \
+            -m "${_tmpdir}/{{ workstation_selinux_policy_module }}.mod"
+          semodule --install "${_tmpdir}/{{ workstation_selinux_policy_module }}.pp"
+      when: >
+        workstation_selinux_policy_source.changed
+        or workstation_selinux_modules.stdout_lines
+        | select('match', '^' + workstation_selinux_policy_module + '(\\s|$)')
+        | list | length == 0
+      changed_when: true
+
+  rescue:
+    - name: "Block A2: Compile and install policy module failed"
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
