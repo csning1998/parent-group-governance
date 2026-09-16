@@ -12,6 +12,7 @@
 /governance
 /gitlab-runner-configs
 sonarqube/**/*
+coverage.out
 
 # HashiCorp Vault
 vault/data/*
