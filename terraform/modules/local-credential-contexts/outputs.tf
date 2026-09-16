@@ -5,10 +5,10 @@ output "bastion_vault_endpoint" {
   value = "https://172.16.0.1:8200"
 }
 
-# path.root always resolves to the root of the calling layer, never to the directory of
-# this module. This stays correct from every layer despite being computed here.
+# Resolves the Bastion Vault CA certificate path relative to path.module for local or Git source invocations.
+# Registry module consumers MUST supply var.vault_ca_cert_path to override default relative path resolution.
 output "bastion_vault_ca_cert_path" {
-  value = abspath("${path.root}/../../../vault/tls/ca.pem")
+  value = coalesce(var.vault_ca_cert_path, abspath("${path.module}/../../../vault/tls/ca.pem"))
 }
 
 # Reads Vault token directly from host token-helper file to break cyclic authentication dependencies during initialization.

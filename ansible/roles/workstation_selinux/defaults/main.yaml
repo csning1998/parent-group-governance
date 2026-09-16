@@ -99,7 +99,7 @@ workstation_selinux_fcontext_absent:
   - target: "/root/GitLab/meta-platform/.git(/.*)?"
   - target: "/root/GitLab/gitlab-ci-with-code-reviewer/runner-config(/.*)?"
   - target: "/root/GitLab/gitlab-ci-with-code-reviewer/.git(/.*)?"
-  - target: "/root/GitLab/personal/on-premise-agent/(vault|ollama_data|open-webui_data|searxng_data|pipelines|openclaw|openclaw_data)(/.*)?"
+  - target: "/root/GitLab{{ workstation_selinux_personal_on_premise_agent_rel }}"
   - target: "/root/GitLab/personal/on-premise-agent/.git(/.*)?"
   - target: "/root/GitLab/personal/on-premise-gitlab-deployment(/.*)?"
   - target: "/root/GitLab/personal/second-brain/(postgres-data|db/migrations)(/.*)?"

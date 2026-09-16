@@ -11,6 +11,7 @@ chcon -t container_file_t -R "${REPO_ROOT}/.git"
 chcon -t container_file_t "${REPO_ROOT}/.gitleaks.toml"
 
 podman run --rm \
+    --security-opt label=type:spc_t \
     -v "${REPO_ROOT}/.git:/repo/.git:ro" \
     -v "${REPO_ROOT}/.gitleaks.toml:/repo/.gitleaks.toml:ro" \
     -w /repo \

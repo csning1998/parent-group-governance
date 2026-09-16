@@ -24,7 +24,7 @@ locals {
     "gt-omscs" = {
       name        = "GT-OMSCS"
       description = "GT OMSCS coursework, side projects, and personal-relavant training."
-      visibility  = "private"
+      visibility  = "public"
       parent      = "personal"
     }
     rug = {
@@ -42,13 +42,13 @@ locals {
     "platform-engineering-lab" = {
       name        = "Platform Engineering Lab"
       description = "A centralized workspace for a personally crafted, production-grade internal development platform."
-      visibility  = "private"
+      visibility  = "public"
       parent      = null
     }
     terraform = {
       name        = "Terraform"
       description = "Terraform components related to platform engineering"
-      visibility  = "private"
+      visibility  = "public"
       parent      = "platform-engineering-lab"
     }
   }

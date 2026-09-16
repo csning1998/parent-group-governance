@@ -1,6 +1,9 @@
 ---
 # Schema consumed by the gitlab-ci-with-code-reviewer auto-tag component (tools/ci/internal/versiontag).
-# Single whole-repository module, matching the tagging behavior of this project prior to auto-tag 1.5.1.
 modules:
-  - name: ''
-    dir: '.'
+  - name: ""
+    dir: "."
+  - name: "project-baseline"
+    dir: "terraform/modules/project-baseline"
+  - name: "vault-credential"
+    dir: "terraform/modules/vault-credential"
