@@ -43,7 +43,7 @@ flowchart LR
     Foundation --> GroupFoundation["terraform group-foundation"]
     GroupFoundation --> Project["terraform meta-gitlab-project"]
     GroupFoundation --> Topology["terraform group-topology"]
-    Topology --> Runner["terraform group-runner"]
+    Topology --> Runner["terraform group-gitlab-runner"]
     Topology --> Sonar["terraform group-sonarqube"]
     Sonar --> Governance["terraform group-governance"]
     Topology --> ApiKeys["terraform group-api-keys"]
@@ -280,7 +280,7 @@ Rotation applies a write ahead staging protocol across the Vault document and th
 
 ### Item A. State Backend and Authentication
 
-Every layer stores state in the GitLab HTTP backend under the project hosting this repository, with one state name per layer. Three credential sources feed the providers, and the module `terraform/modules/local-credential-contexts` centralizes each source.
+Every layer stores state in the GitLab HTTP backend under the project hosting this repository, with one state name per layer. Three credential sources feed the providers, and the module `terraform/modules/contexts-local-credential` centralizes each source.
 
 - The HTTP backend and every `terraform_remote_state` block authenticate through the `read_api` token in `~/.terraform.d/credentials.tfrc.json`.
 - The Vault provider connects to `https://172.16.0.1:8200` with the CA at `vault/tls/ca.pem`, authenticating through the token helper file `~/.vault-token`. Reading the token from the helper file breaks the cyclic authentication dependency present during initialization.
@@ -295,7 +295,7 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 | `meta-gitlab-project`      | The GitLab project hosting this repository and every Terraform state                              | `group-foundation` |
 | `group-topology`           | Every subgroup and nested subgroup beneath the top level group                                    | `group-foundation` |
 | `group-governance`         | Group labels and the group CI variables sourced from Vault                                        | `group-topology`   |
-| `group-runner`             | The group runner registration and the rendered `gitlab-runner-configs/config.toml`                | `group-topology`   |
+| `group-gitlab-runner`      | The group runner registration and the rendered `gitlab-runner-configs/config.toml`                | `group-topology`   |
 | `group-sonarqube`          | The SonarQube global analysis token, written into Vault                                           | None               |
 | `group-api-keys`           | One Google Gemini API key per repository with AI review enabled                                   | None               |
 
@@ -312,16 +312,16 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 1.  Apply `foundation-vault-bastion`.
 2.  Apply `group-foundation`.
 3.  Apply `meta-gitlab-project` and `group-topology` in either order.
-4.  Apply `group-runner`, then start the runner service declared in `compose.yml`.
+4.  Apply `group-gitlab-runner`, then start the runner service declared in `compose.yml`.
 5.  Apply `group-sonarqube` once the SonarQube service becomes ready.
 6.  Apply `group-governance`, which reads the token written by `group-sonarqube`.
 7.  Apply `group-api-keys` at any point after `group-foundation`.
 
 ### Item D. Shared Modules
 
-- `local-credential-contexts` does not declare any resource. The module exposes the Bastion Vault endpoint, the CA path, the Vault token, and the GitLab state authentication block as outputs. Every layer reads the endpoint from the module instead of redeclaring a default.
-- `project-baseline` creates one GitLab project with a fixed merge policy, branch protection on `main`, and the optional AI review variables. The caller supplies every environment specific value.
-- `vault-credential` generates a set of random passwords and writes one KV version 2 secret. The module is the single generation point for the secrets under its control.
+- `contexts-local-credential` does not declare any resource. The module exposes the Bastion Vault endpoint, the CA path, the Vault token, and the GitLab state authentication block as outputs. Every layer reads the endpoint from the module instead of redeclaring a default.
+- `provisioner-gitlab-project` creates one GitLab project with a fixed merge policy, branch protection on `main`, and the optional AI review variables. The caller supplies every environment specific value.
+- `provisioner-vault-credential` generates a set of random passwords and writes one KV version 2 secret. The module is the single generation point for the secrets under its control.
 
 ## Section 7. Continuous Integration
 

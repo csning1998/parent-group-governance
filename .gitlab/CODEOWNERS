@@ -10,5 +10,5 @@ README.md                           @csning1998
 [Critical Infrastructure]
 terraform/layers/group-api-keys/       @csning1998
 terraform/layers/group-governance/     @csning1998
-terraform/layers/group-runner/         @csning1998
+terraform/layers/group-gitlab-runner/  @csning1998
 terraform/layers/meta-gitlab-project/  @csning1998

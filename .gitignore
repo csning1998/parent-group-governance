@@ -19,6 +19,7 @@ vault/data/*
 !vault/data/README.md
 vault/keys/
 vault/tls/
+terraform/layers/foundation-vault-bastion/tls
 
 # Environment
 .env

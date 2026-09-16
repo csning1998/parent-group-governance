@@ -14,8 +14,8 @@ resource "vault_mount" "pki_root" {
 resource "vault_pki_secret_backend_root_cert" "root" {
   provider    = vault.bastion
   backend     = vault_mount.pki_root.path
-  type        = "internal"
   common_name = var.pki_root_ca_common_name
+  type        = "internal"
   ttl         = "87600h" # 10 Years
 
   # Prevent resource destruction to avoid invalidating downstream certificates without a rotation handler.
@@ -27,7 +27,7 @@ resource "vault_pki_secret_backend_root_cert" "root" {
 # Stage the Vault listener CA certificate in the local layer directory for downstream remote state access.
 resource "local_file" "bastion_vault_ca_copy" {
   content  = data.local_file.bastion_vault_ca.content
-  filename = "${path.root}/tls/vault-dev-ca.crt"
+  filename = "${path.root}/tls/bastion-vault-ca.crt"
 }
 
 # 2. Bootstrap Issuing Intermediate.
@@ -79,8 +79,8 @@ resource "vault_pki_secret_backend_config_urls" "pki_inter_urls" {
   provider = vault.bastion
   backend  = vault_mount.pki_inter.path
 
-  issuing_certificates    = ["${module.local_creds.bastion_vault_endpoint}/v1/${vault_mount.pki_inter.path}/ca"]
-  crl_distribution_points = ["${module.local_creds.bastion_vault_endpoint}/v1/${vault_mount.pki_inter.path}/crl"]
+  issuing_certificates    = ["${module.local_credential_contexts.bastion_vault_config.endpoint}/v1/${vault_mount.pki_inter.path}/ca"]
+  crl_distribution_points = ["${module.local_credential_contexts.bastion_vault_config.endpoint}/v1/${vault_mount.pki_inter.path}/crl"]
 }
 
 # Set default issuer explicitly for the intermediate PKI backend.

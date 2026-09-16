@@ -17,9 +17,9 @@ terraform {
   }
 
   backend "http" {
-    address        = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-runner"
-    lock_address   = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-runner/lock"
-    unlock_address = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-runner/lock"
+    address        = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-gitlab-runner"
+    lock_address   = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-gitlab-runner/lock"
+    unlock_address = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-gitlab-runner/lock"
     lock_method    = "POST"
     unlock_method  = "DELETE"
     retry_wait_min = 5
@@ -32,6 +32,6 @@ provider "gitlab" {
 
 provider "vault" {
   alias        = "bastion"
-  address      = module.local_creds.bastion_vault_endpoint
-  ca_cert_file = module.local_creds.bastion_vault_ca_cert_path
+  address      = module.local_credential_contexts.bastion_vault_config.endpoint
+  ca_cert_file = module.local_credential_contexts.bastion_vault_config.ca_cert_path
 }

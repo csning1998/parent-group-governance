@@ -1,14 +1,12 @@
 
-module "local_creds" {
-  # Resolves relative to the directory containing this file (terraform/layers/<this layer>),
-  # two levels up to terraform/, then into modules/local-credential-contexts.
-  source = "../../modules/local-credential-contexts"
+module "local_credential_contexts" {
+  source = "../../modules/contexts-local-credential"
 }
 
 locals {
   # Target: group-topology and group-sonarqube state, hosted under this GitLab project.
   _state_base = "https://gitlab.com/api/v4/projects/86417732/terraform/state"
-  _state_auth = module.local_creds.gl_state_auth
+  _state_auth = module.local_credential_contexts._state_auth_gitlab_saas
 
   # Populates CLAUDE_MR_REVIEWER and GEMINI_MR_REVIEWER with a Personal Access Token dedicated to the review bot.
   # Project Access Token creation is unavailable within namespaces operating under the GitLab Free tier subscription model.

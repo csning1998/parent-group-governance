@@ -27,6 +27,6 @@ terraform {
 # The target Vault being configured (Bastion Vault)
 provider "vault" {
   alias        = "bastion"
-  address      = module.local_creds.bastion_vault_endpoint
-  ca_cert_file = module.local_creds.bastion_vault_ca_cert_path
+  address      = module.local_credential_contexts.bastion_vault_config.endpoint
+  ca_cert_file = module.local_credential_contexts.bastion_vault_config.ca_cert_path
 }

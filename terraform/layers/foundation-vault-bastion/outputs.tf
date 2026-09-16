@@ -22,7 +22,7 @@ output "role_name" {
 
 output "bastion_vault_endpoint" {
   description = "The address of the Vault server"
-  value       = module.local_creds.bastion_vault_endpoint
+  value       = module.local_credential_contexts.bastion_vault_config.endpoint
 }
 
 output "bastion_vault_listener_ca_cert_path" {

@@ -3,7 +3,9 @@
 modules:
   - name: ""
     dir: "."
-  - name: "project-baseline"
-    dir: "terraform/modules/project-baseline"
-  - name: "vault-credential"
-    dir: "terraform/modules/vault-credential"
+  - name: "provisioner-gitlab-project"
+    dir: "terraform/modules/provisioner-gitlab-project"
+  - name: "provisioner-vault-credential"
+    dir: "terraform/modules/provisioner-vault-credential"
+  - name: "contexts-local-credential"
+    dir: "terraform/modules/contexts-local-credential"

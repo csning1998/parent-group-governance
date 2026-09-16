@@ -5,10 +5,8 @@ ephemeral "vault_kv_secret_v2" "state_backend" {
   name     = "parent-group-governance/state-backend"
 }
 
-module "local_creds" {
-  # Resolves relative to the directory containing this file (terraform/layers/<this layer>),
-  # two levels up to terraform/, then into modules/local-credential-contexts.
-  source = "../../modules/local-credential-contexts"
+module "local_credential_contexts" {
+  source = "../../modules/contexts-local-credential"
 }
 
 resource "gitlab_group" "this" {

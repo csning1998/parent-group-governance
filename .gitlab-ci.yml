@@ -5,8 +5,9 @@ include:
     inputs:
       reviewer_image: $CI_REGISTRY/csning1998/gitlab-ci-with-code-reviewer/reviewer:1.6.2
       claude_model: claude-sonnet-5
+      gemini_model: gemini-3.8-flash
       enable_sonarqube: true
-      sonar_go_coverage_path: 'tools/governance/coverage.out'
+      sonar_go_coverage_path: "tools/governance/coverage.out"
   - component: $CI_SERVER_FQDN/csning1998/gitlab-ci-with-code-reviewer/iac-terraform@1.6.2
     inputs:
       # CKV_GLB_1, CKV_GLB_3, CKV_GLB_4: require GitLab Premium/Ultimate merge request approval and push rules.
@@ -17,11 +18,14 @@ include:
       ansible_globs: ["ansible/**/*"]
   - component: $CI_SERVER_FQDN/csning1998/gitlab-ci-with-code-reviewer/lang-go@1.6.2
     inputs:
-      go_dir: 'tools/governance'
-      go_fmt_path: './tools/governance'
-      go_globs: ["tools/governance/**/*.go", "tools/governance/go.mod", "tools/governance/go.sum"]
+      go_dir: "tools/governance"
+      go_fmt_path: "./tools/governance"
+      go_globs:
+        [
+          "tools/governance/**/*.go",
+          "tools/governance/go.mod",
+          "tools/governance/go.sum",
+        ]
   - component: $CI_SERVER_FQDN/csning1998/gitlab-ci-with-code-reviewer/auto-tag@1.6.2
-    rules:
-      - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     inputs:
       reviewer_image: $CI_REGISTRY/csning1998/gitlab-ci-with-code-reviewer/reviewer:1.6.2

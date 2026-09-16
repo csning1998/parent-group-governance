@@ -11,7 +11,7 @@ terraform {
 }
 
 resource "random_password" "this" {
-  for_each = var.generate
+  for_each = var.vault_credential_context.generate
 
   length      = each.value.length
   special     = each.value.special
@@ -22,11 +22,11 @@ resource "random_password" "this" {
 }
 
 resource "vault_kv_secret_v2" "this" {
-  mount = var.vault_kv_mount
-  name  = "${var.vault_kv_namespace}/${var.domain}/${var.component}"
+  mount = var.vault_credential_context.vault_kv_mount
+  name  = "${var.vault_credential_context.namespace}/${var.vault_credential_context.domain}/${var.vault_credential_context.component}"
 
   data_json = jsonencode(merge(
-    var.static,
+    var.vault_credential_context.static,
     { for k, v in random_password.this : k => v.result }
   ))
 }

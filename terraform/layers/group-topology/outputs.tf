@@ -5,7 +5,7 @@ output "top_group_id" {
 }
 
 output "subgroup_ids" {
-  description = "Map of subgroup paths to numeric identifiers, utilized by callers of module project-baseline to specify the namespace_id attribute."
+  description = "Map of subgroup paths to numeric identifiers, utilized by callers of module provisioner-gitlab-project to specify the namespace_id attribute."
   value = merge(
     { for key, group in gitlab_group.subgroups : key => group.id },
     { for key, group in gitlab_group.nested_subgroups : key => group.id },
