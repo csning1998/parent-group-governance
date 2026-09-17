@@ -10,7 +10,7 @@ networks:
 
 services:
   commitlint:
-    image: registry.gitlab.com/csning1998/gitlab-ci-with-code-reviewer/reviewer:edge
+    image: registry.gitlab.com/csning1998-lab/gitlab-ci-with-code-reviewer/reviewer:edge
     working_dir: /repo
     volumes:
       - ${REPO_GIT_DIR}:/repo/.git:ro

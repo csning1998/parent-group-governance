@@ -30,6 +30,11 @@ output "bastion_vault_listener_ca_cert_path" {
   value       = abspath(local_file.bastion_vault_ca_copy.filename)
 }
 
+output "bastion_vault_ca_cert_pem" {
+  description = "PEM content of the Bastion Vault listener CA certificate, for contexts-local-credential to regenerate its own local copy from live state"
+  value       = data.local_file.bastion_vault_ca.content
+}
+
 output "bastion_pki_root_cert_pem" {
   description = "Infrastructure Root CA certificate (PEM). Signs only the Bootstrap Issuing Intermediate."
   value       = vault_pki_secret_backend_root_cert.root.certificate

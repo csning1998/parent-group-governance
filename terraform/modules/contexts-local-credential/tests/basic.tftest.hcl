@@ -1,6 +1,6 @@
 
-# Exercises the coalesce() defaults which read real host files.
-# This requires related files exist on the gitlab runner, per the assumption of the module.
+# Exercises the coalesce() defaults. ca_cert_path defaults to a live copy fetched from the
+# state of foundation-vault-bastion and written to tls/bastion-ca.pem at path.cwd.
 run "meta_platform_default_call" {
   command = plan
 
@@ -10,8 +10,8 @@ run "meta_platform_default_call" {
   }
 
   assert {
-    condition     = can(regex("/vault/tls/ca\\.pem$", output.bastion_vault_config.ca_cert_path))
-    error_message = "the default ca_cert_path must resolve inside this repository's vault/tls/"
+    condition     = can(regex("bastion-ca\\.pem$", output.bastion_vault_config.ca_cert_path))
+    error_message = "the default ca_cert_path must resolve to the generated tls/bastion-ca.pem file"
   }
 }
 
@@ -30,8 +30,23 @@ run "explicit_endpoint_override" {
   }
 
   assert {
-    condition     = can(regex("/vault/tls/ca\\.pem$", output.bastion_vault_config.ca_cert_path))
+    condition     = can(regex("bastion-ca\\.pem$", output.bastion_vault_config.ca_cert_path))
     error_message = "overriding endpoint alone must leave ca_cert_path at its own default"
+  }
+}
+
+run "state_auth_unused_when_ca_cert_path_overridden" {
+  command = plan
+
+  variables {
+    bastion_vault_config = {
+      ca_cert_path = "/tmp/fake-ca.pem"
+    }
+  }
+
+  assert {
+    condition     = output._state_auth_gitlab_saas.password == ""
+    error_message = "a caller which never reads the state of foundation-vault-bastion must not be forced to read ~/.terraform.d/credentials.tfrc.json"
   }
 }
 

@@ -6,3 +6,9 @@ description = "JDBC connection URLs carry host, port and database name only. Cre
 targetRules = ["generic-api-key"]
 paths = ['''ansible/roles/(shared|platform)_keycloak/templates/keycloak\.env\.j2$''']
 regexes = ['''jdbc:postgresql://[^\s"']+''']
+
+[[allowlists]]
+description = "Fixed test fixture value asserting the ci_remote_state_read_token override path. Not a real credential."
+targetRules = ["hashicorp-tf-password"]
+paths = ['''terraform/modules/contexts-local-credential/tests/basic\.tftest\.hcl$''']
+regexes = ['''fake-ci-read-token''']
