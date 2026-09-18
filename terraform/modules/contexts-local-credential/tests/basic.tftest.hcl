@@ -45,7 +45,7 @@ run "state_auth_unused_when_ca_cert_path_overridden" {
   }
 
   assert {
-    condition     = output._state_auth_gitlab_saas.password == ""
+    condition     = output.state_auth_gitlab_saas.password == ""
     error_message = "a caller which never reads the state of foundation-vault-bastion must not be forced to read ~/.terraform.d/credentials.tfrc.json"
   }
 }

@@ -9,22 +9,6 @@ networks:
     driver: bridge
 
 services:
-  commitlint:
-    image: registry.gitlab.com/csning1998-lab/gitlab-ci-with-code-reviewer/reviewer:edge
-    working_dir: /repo
-    volumes:
-      - ${REPO_GIT_DIR}:/repo/.git:ro
-      - ${MSG_FILE}:/repo/.git/COMMIT_EDITMSG_HOOK:ro
-    command: commitlint --config /etc/commitlint/commitlint.config.cjs --cwd /repo --edit .git/COMMIT_EDITMSG_HOOK
-
-  gitleaks:
-    image: docker.io/zricethezav/gitleaks:v8.30.1
-    working_dir: /repo
-    volumes:
-      - ${REPO_GIT_DIR}:/repo/.git
-      - ./.gitleaks.toml:/repo/.gitleaks.toml:ro
-    command: protect --staged --redact -v
-
   gitlab-runner:
     image: docker.io/gitlab/gitlab-runner:v19.0.1
     container_name: parent-group-governance-gitlab-runner

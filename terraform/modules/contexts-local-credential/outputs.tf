@@ -1,6 +1,6 @@
 
 locals {
-  _state_auth_gitlab_saas = {
+  state_auth_gitlab_saas = {
     username = "oauth2"
     password = local.read_bastion_ca_from_state ? (
       var.gitlab_ci_remote_state_read_token != null ? var.gitlab_ci_remote_state_read_token : jsondecode(file(pathexpand("~/.terraform.d/credentials.tfrc.json"))).credentials["gitlab.com"].token
@@ -20,7 +20,7 @@ output "bastion_vault_config" {
 
 # terraform_remote_state HTTP backend auth. Uses read_api CLI credentials to avoid
 # persisting a higher-privilege token in the state of a consuming layer.
-output "_state_auth_gitlab_saas" {
-  value     = local._state_auth_gitlab_saas
+output "state_auth_gitlab_saas" {
+  value     = local.state_auth_gitlab_saas
   sensitive = true
 }

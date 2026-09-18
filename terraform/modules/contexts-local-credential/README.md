@@ -27,7 +27,7 @@ A caller inside `parent-group-governance` MAY reference the module through the r
 
 ### Item B. Inputs
 
-#### Item B.1. Variable bastion_vault_config
+#### Item B.1. Variable `bastion_vault_config`
 
 The variable `bastion_vault_config` defines the connection attributes for the Bastion Vault endpoint.
 
@@ -39,7 +39,7 @@ The variable `bastion_vault_config` defines the connection attributes for the Ba
 
 A `null` value in `ca_cert_path` activates the dynamic certificate generation path described in Section 3 Item B. An explicit file path in `ca_cert_path` overrides dynamic certificate generation. A `null` value in `token_path` instructs the module to read the token file at `~/.vault-token`.
 
-#### Item B.2. Variable bastion_vault_state
+#### Item B.2. Variable `bastion_vault_state`
 
 The variable `bastion_vault_state` defines the remote state coordinates for retrieving the live Bastion Vault CA certificate. A caller MUST override the default values when accessing a Bastion Vault managed by an external project.
 
@@ -55,7 +55,7 @@ Upon initial execution by each consumer, the following command MUST be executed 
 terraform apply -target=module.local_credential_contexts.local_file.bastion_ca_cert
 ```
 
-#### Item B.3. Variable gitlab_ci_remote_state_read_token
+#### Item B.3. Variable `gitlab_ci_remote_state_read_token`
 
 The variable `gitlab_ci_remote_state_read_token` supplies a GitLab Personal Access Token with `read_api` scope for CI pipeline execution. A CI runner MUST NOT use `CI_JOB_TOKEN` for state retrieval because the GitLab Terraform State API rejects `CI_JOB_TOKEN`.
 
@@ -63,13 +63,13 @@ A `null` value in `gitlab_ci_remote_state_read_token` instructs the module to re
 
 ### Item C. Outputs
 
-#### Item C.1. Output bastion_vault_config
+#### Item C.1. Output `bastion_vault_config`
 
 The output `bastion_vault_config` exposes an object which contains the resolved endpoint address, CA certificate file path, and token file path.
 
-#### Item C.2. Output \_state_auth_gitlab_saas
+#### Item C.2. Output `state_auth_gitlab_saas`
 
-The output `_state_auth_gitlab_saas` exposes a sensitive object which contains authentication credentials for the GitLab HTTP state backend. Consuming layers MUST pass this object to the `config` argument of `data "terraform_remote_state"` blocks.
+The output `state_auth_gitlab_saas` exposes a sensitive object which contains authentication credentials for the GitLab HTTP state backend. Consuming layers MUST pass this object to the `config` argument of `data "terraform_remote_state"` blocks.
 
 ## Section 3. Dynamic CA Certificate Architecture
 

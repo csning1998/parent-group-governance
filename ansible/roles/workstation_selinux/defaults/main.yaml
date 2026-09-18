@@ -7,7 +7,10 @@ workstation_selinux_gitlab_root: "{{ workstation_selinux_home }}/GitLab"
 workstation_selinux_lab_root: "{{ workstation_selinux_gitlab_root }}/csning1998-lab"
 workstation_selinux_user_uid: "{{ ansible_facts['user_uid'] }}"
 workstation_selinux_local_dir: "/etc/selinux/local"
-workstation_selinux_policy_module: workstation_nnp_container_runtime
+workstation_selinux_policy_modules:
+  - workstation_nnp_container_runtime
+  - gitlab_runner_podman
+  - buildah_vfs_mounton
 # become: true gathers facts as root. A numeric-UID regex labels every
 # user-session Podman API directory. gitlab-runner dials that tree as
 # unix:///run/podman/podman.sock after a bind mount.
@@ -20,10 +23,12 @@ workstation_selinux_on_premise_agent_names:
   - pipelines
   - openclaw
   - openclaw_data
+
 workstation_selinux_on_premise_agent_rel: >-
   {{ '/platform-engineering-lab/on-premise-agent/('
   ~ (workstation_selinux_on_premise_agent_names | join('|'))
   ~ ')(/.*)?' }}
+
 # Superseded /personal/on-premise-agent path, kept in the absent list for cleanup.
 workstation_selinux_personal_on_premise_agent_rel: >-
   {{ '/personal/on-premise-agent/('
@@ -35,6 +40,8 @@ workstation_selinux_fcontext_present:
     ftype: a
   - target: "{{ workstation_selinux_lab_root }}/parent-group-governance/.git(/.*)?"
     ftype: a
+  - target: "{{ workstation_selinux_lab_root }}/parent-group-governance/.gitleaks.toml"
+    ftype: f
   - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/(vault|sonarqube|runner-config)(/.*)?"
     ftype: a
   - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/.git(/.*)?"
@@ -63,9 +70,7 @@ workstation_selinux_fcontext_present:
     ftype: a
   - target: "{{ workstation_selinux_lab_root }}/template/template-project-fullstack/.git(/.*)?"
     ftype: a
-  - target: "{{ workstation_selinux_gitlab_root }}/gitlab-ci-with-code-reviewer/runner-config(/.*)?"
-    ftype: a
-  - target: "{{ workstation_selinux_gitlab_root }}/gitlab-ci-with-code-reviewer/.git(/.*)?"
+  - target: "{{ workstation_selinux_lab_root }}/gitlab-ci-with-code-reviewer/.git(/.*)?"
     ftype: a
   - target: "{{ workstation_selinux_podman_sock }}"
     ftype: a
@@ -97,7 +102,6 @@ workstation_selinux_fcontext_absent:
   - target: "{{ workstation_selinux_gitlab_root }}/template/template-project-fullstack/.git(/.*)?"
   - target: "/root/GitLab/meta-platform/(vault|sonarqube|runner-config)(/.*)?"
   - target: "/root/GitLab/meta-platform/.git(/.*)?"
-  - target: "/root/GitLab/gitlab-ci-with-code-reviewer/runner-config(/.*)?"
   - target: "/root/GitLab/gitlab-ci-with-code-reviewer/.git(/.*)?"
   - target: "/root/GitLab{{ workstation_selinux_personal_on_premise_agent_rel }}"
   - target: "/root/GitLab/personal/on-premise-agent/.git(/.*)?"
@@ -119,6 +123,7 @@ workstation_selinux_restorecon_paths:
   - "{{ workstation_selinux_lab_root }}/parent-group-governance/vault"
   - "{{ workstation_selinux_lab_root }}/parent-group-governance/sonarqube"
   - "{{ workstation_selinux_lab_root }}/parent-group-governance/.git"
+  - "{{ workstation_selinux_lab_root }}/parent-group-governance/.gitleaks.toml"
   - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/vault"
   - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/sonarqube"
   - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/runner-config"
@@ -135,5 +140,8 @@ workstation_selinux_restorecon_paths:
   - "{{ workstation_selinux_lab_root }}/personal/monte-carlo-portfolio-trader/.git"
   - "{{ workstation_selinux_lab_root }}/template/template-project/.git"
   - "{{ workstation_selinux_lab_root }}/template/template-project-fullstack/.git"
-  - "{{ workstation_selinux_gitlab_root }}/gitlab-ci-with-code-reviewer/runner-config"
-  - "{{ workstation_selinux_gitlab_root }}/gitlab-ci-with-code-reviewer/.git"
+  - "{{ workstation_selinux_lab_root }}/gitlab-ci-with-code-reviewer/.git"
+
+# A custom fcontext on these paths would replace the targeted policy type.
+workstation_selinux_system_restorecon_paths:
+  - "/etc/fstab"

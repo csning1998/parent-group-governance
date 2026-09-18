@@ -96,7 +96,7 @@ ansible-galaxy collection install -r ansible/requirements.yaml
 The CLI injects `workstation_selinux_home` from the operator home directory, because `become: true` gathers facts as root and resolves `ansible_facts.user_dir` to `/root`. The role asserts the injected value before any task runs. The role then executes three stages.
 
 1.  Stage A installs the local policy module described in Item C. Compilation is skipped when the module is already present at the current version.
-2.  Stage B registers every anchored file context specification, then restores drifted labels. A dry run of `restorecon -RFn` is executed first on each target, and `restorecon -RFv` is applied only where the dry run reports a difference. A third block restores the label of every user session Podman API socket directory.
+2.  Stage B registers every anchored file context specification, then restores drifted labels. A dry run of `restorecon -RFnv` is executed first on each target, and `restorecon -RFv` is applied only where the dry run reports a difference. A third block restores the label of every user session Podman API socket directory. A fourth block restores the targeted policy default on `/etc/fstab` without directory recursion.
 3.  Stage C removes unanchored specifications. An unanchored specification such as `vault(/.*)?` matches every basename on the filesystem during a full relabel, which labels unrelated directories as `container_file_t`.
 
 The `-F` flag is mandatory, because the type `container_file_t` appears in `/etc/selinux/targeted/contexts/customizable_types`, whose entries `restorecon` leaves untouched without the flag. Omitting the flag produces `not reset as customized by admin` for each path.
@@ -119,7 +119,7 @@ The authoritative registry is `workstation_selinux_fcontext_present` in `ansible
 
 | Repository                              | Registered Path Pattern                                                                                          | Consumed By                                |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `parent-group-governance`               | `(vault\|sonarqube)(/.*)?` and `.git(/.*)?`                                                                      | Bastion Vault, SonarQube, the commit hooks |
+| `parent-group-governance`               | `(vault\|sonarqube)(/.*)?`, `.git(/.*)?`, and `.gitleaks.toml`                                                   | Bastion Vault, SonarQube, the commit hooks |
 | `meta-platform`                         | `(vault\|sonarqube\|runner-config)(/.*)?` and `.git(/.*)?`                                                       | Downstream platform services and hooks     |
 | `generic-agent-criteria-source`         | `.git(/.*)?`                                                                                                     | The commit hooks                           |
 | `terraform-provider-sshclient`          | `.git(/.*)?`                                                                                                     | The commit hooks                           |
@@ -135,6 +135,8 @@ The authoritative registry is `workstation_selinux_fcontext_present` in `ansible
 | System wide                             | `/run/user/[0-9]+/podman(/.*)?`                                                                                  | The rootless Podman API socket             |
 
 A repository without a `compose.yml` file registers `.git(/.*)?` alone, which limits container execution scope to the short lived Git lifecycle hooks.
+
+The list `workstation_selinux_system_restorecon_paths` restores `/etc/fstab` to the targeted policy default `etc_t`. A custom file context specification is not registered for `/etc/fstab`.
 
 The service `iac-runner` inside `on-premise-gitlab-deployment` is exempt from the conventions in Item A. Arbitrary Infrastructure as Code execution requires a bind mount of the entire project root, which makes a path restricted registration unworkable. The named service retains `security_opt: label=disable`.
 
@@ -153,7 +155,7 @@ The service `iac-runner` inside `on-premise-gitlab-deployment` is exempt from th
 2.  The following command reports the distinct label set carried by every file beneath the registered mount sources. The reported set MUST contain the single entry `container_file_t:s0` without a category suffix.
 
     ```bash
-    ls -RZ vault sonarqube | grep -o 'container_file_t:s0[^ ]*' | sort -u
+    ls -RZ .gitleaks.toml vault sonarqube | grep -o 'container_file_t:s0[^ ]*' | sort -u
     ```
 
 3.  The runner MUST establish a connection to the Podman socket. The following request confirms access through an HTTP status of 200.
@@ -167,7 +169,13 @@ The service `iac-runner` inside `on-premise-gitlab-deployment` is exempt from th
 4.  The policy default of any path is retrieved through `matchpathcon`, which MUST report `container_file_t:s0` for every registered mount source.
 
     ```bash
-    matchpathcon vault/data sonarqube/data
+    matchpathcon .gitleaks.toml vault/data sonarqube/data
+    ```
+
+5.  The file `/etc/fstab` MUST carry `etc_t:s0`. The command `ls -Z /etc/fstab` reports the label.
+
+    ```bash
+    ls -Z /etc/fstab
     ```
 
 ### Item F. Diagnosing a Denial
@@ -180,15 +188,17 @@ The service `iac-runner` inside `on-premise-gitlab-deployment` is exempt from th
 
 2.  A denial raised by `pasta_t` against `config_home_t` or `data_home_t` is unrelated to the services declared here. Such a denial originates from a file descriptor inherited by the rootless network backend from the process launching Podman.
 
-3.  A denial whose `tcontext` carries a non-empty MCS category on a path beneath `vault/` or `sonarqube/` indicates category drift. Item B restores the baseline, and Item G identifies the class of tooling causing the drift.
+3.  A denial whose `tcontext` carries a non-empty MCS category on a registered mount source indicates category drift. Item B restores the baseline, and Item G identifies the class of tooling causing the drift.
 
 4.  A denial whose `tcontext` names `container_runtime_t` with class `unix_stream_socket` and permission `connectto` indicates an absent policy module, or a service declaration missing the `container_engine_t` type.
+
+5.  A denial whose `tcontext` names `unlabeled_t` on `/etc/fstab` indicates a missing system label. Stage B restores the policy default `etc_t`. A local allow module MUST NOT be generated for the `getattr` denial.
 
 ### Item G. Recursive Relabeling from Local Tooling
 
 The Podman relabel flags `:z` and `:Z` each rewrite the MCS category of every file beneath the mounted path at container start. A tool mounting the repository root therefore rewrites `vault/` and `sonarqube/` as a side effect, even where the tool does not relate to the services declared in `compose.yml`. The resulting category matches neither the short lived container nor any running service. A denial on the raft storage path can fail a Vault write, which panics the process and loses the unseal state.
 
-Both hooks under `.githooks/` read the repository without writing to the repository. Each hook mounts `.git` read only without declaring a relabel flag. Any future local tool mounting the repository root, or mounting any ancestor of `vault/` and `sonarqube/`, MUST avoid `:z` and `:Z` for the same reason.
+Both hooks under `.githooks/` read the repository without writing to the repository. The hook `.githooks/pre-commit` mounts `.git` and `.gitleaks.toml` read only without a relabel flag. The hook `.githooks/commit-msg` mounts `.git` read only without a relabel flag. Any future local tool mounting the repository root, or mounting any ancestor of `vault/` and `sonarqube/`, MUST avoid `:z` and `:Z` for the same reason.
 
 ### Item H. Relabeling After Repository Relocation
 

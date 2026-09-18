@@ -8,7 +8,7 @@ locals {
 data "terraform_remote_state" "foundation_vault_bastion" {
   count   = local.read_bastion_ca_from_state ? 1 : 0
   backend = "http"
-  config = merge(local._state_auth_gitlab_saas, {
+  config = merge(local.state_auth_gitlab_saas, {
     address = "https://gitlab.com/api/v4/projects/${var.bastion_vault_state.project_id}/terraform/state/${var.bastion_vault_state.state_name}"
   })
 }

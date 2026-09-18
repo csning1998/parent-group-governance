@@ -1,0 +1,12 @@
+module buildah_vfs_mounton 1.0;
+
+require {
+    type container_t;
+    type user_tmp_t;
+    class dir mounton;
+}
+
+# The VFS storage driver assembles the build root under /var/tmp and binds
+# host tmpfs entries such as /sys/devices/system/cpu/cpuN/thermal_throttle
+# into the build root during buildah build.
+allow container_t user_tmp_t:dir mounton;

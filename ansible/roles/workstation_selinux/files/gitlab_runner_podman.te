@@ -1,0 +1,11 @@
+module gitlab_runner_podman 1.0;
+
+require {
+    type container_engine_t;
+    type container_runtime_t;
+    class unix_stream_socket connectto;
+}
+
+# The rule is bound to container_engine_t rather than container_t,
+# confining the added privilege to containers that declare the type explicitly.
+allow container_engine_t container_runtime_t:unix_stream_socket connectto;

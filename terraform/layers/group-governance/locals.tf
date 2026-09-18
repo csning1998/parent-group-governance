@@ -6,7 +6,7 @@ module "local_credential_contexts" {
 locals {
   # Target: group-topology and group-sonarqube state, hosted under this GitLab project.
   _state_base = "https://gitlab.com/api/v4/projects/86417732/terraform/state"
-  _state_auth = module.local_credential_contexts._state_auth_gitlab_saas
+  _state_auth = module.local_credential_contexts.state_auth_gitlab_saas
 
   # Populates CLAUDE_MR_REVIEWER and GEMINI_MR_REVIEWER with a Personal Access Token dedicated to the review bot.
   # Project Access Token creation is unavailable within namespaces operating under the GitLab Free tier subscription model.
