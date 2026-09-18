@@ -33,7 +33,8 @@ locals {
     "type::documentation" = { color = "#06b6d4", description = "Denotes additions or updates to technical documentation." }
     "type::test"          = { color = "#059669", description = "Denotes creation or modification of automated test suites." }
     "type::question"      = { color = "#ec4899", description = "Identifies technical inquiries or operational requests." }
-    "type::ad-hoc"        = { color = "#78716c", description = "Identifies commit types without a direct type label mapping (build, chore, ci, revert, style)." }
+    "type::adhoc"         = { color = "#78716c", description = "Denotes a temporary, non-releasable change exempt from semantic version bump determination." }
+    "type::chore"         = { color = "#a8a29e", description = "Denotes routine maintenance changes without releasable functional impact (build, chore, ci, revert, style)." }
 
     # Scoped labels under the 'area::' prefix MUST specify the functional domain or component impacted. These labels are mutually exclusive within an Issue or Merge Request scope.
     "area::CI"             = { color = "#2563eb", description = "Designates configurations or merge requests related to Continuous Integration." }
