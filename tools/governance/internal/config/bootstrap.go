@@ -113,8 +113,8 @@ func populateNewEnv(e *Env, root string, facts HostFacts) error {
 	}
 	for _, kv := range [][2]string{
 		{KeyProjectRoot, root},
-		{KeyDevVaultAddr, "https://172.16.0.1:8200"},
-		{KeyDevVaultCACert, "${PROJECT_ROOT}/vault/tls/ca.pem"},
+		{KeyBastionVaultAddr, "https://172.16.0.1:8200"},
+		{KeyBastionVaultCACert, "${PROJECT_ROOT}/vault/tls/ca.pem"},
 		{KeyVaultToken, ""},
 		{KeyHostUID, strconv.Itoa(facts.CurrentUID)},
 		{KeyHostGID, strconv.Itoa(facts.CurrentGID)},
@@ -133,11 +133,11 @@ func patchExistingEnv(e *Env, root string, facts HostFacts, out *ui.Printer) err
 	e.Set(KeyHostUID, strconv.Itoa(facts.CurrentUID))
 	e.Set(KeyHostGID, strconv.Itoa(facts.CurrentGID))
 	e.Set(KeyProjectRoot, root)
-	if e.Get(KeyDevVaultAddr) == "" {
-		e.Set(KeyDevVaultAddr, "https://172.16.0.1:8200")
+	if e.Get(KeyBastionVaultAddr) == "" {
+		e.Set(KeyBastionVaultAddr, "https://172.16.0.1:8200")
 	}
-	if e.Get(KeyDevVaultCACert) == "" {
-		e.Set(KeyDevVaultCACert, "${PROJECT_ROOT}/vault/tls/ca.pem")
+	if e.Get(KeyBastionVaultCACert) == "" {
+		e.Set(KeyBastionVaultCACert, "${PROJECT_ROOT}/vault/tls/ca.pem")
 	}
 	if e.Get(KeySonarQubeDBPassword) == "" {
 		sonarDBPassword, err := generateRandomHexToken(24)

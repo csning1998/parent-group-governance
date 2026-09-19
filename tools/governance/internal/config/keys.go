@@ -2,8 +2,8 @@ package config
 
 const (
 	KeyProjectRoot         = "PROJECT_ROOT"
-	KeyDevVaultAddr        = "BASTION_VAULT_ADDR"
-	KeyDevVaultCACert      = "BASTION_VAULT_CACERT"
+	KeyBastionVaultAddr    = "BASTION_VAULT_ADDR"
+	KeyBastionVaultCACert  = "BASTION_VAULT_CACERT"
 	KeyVaultToken          = "VAULT_TOKEN"
 	KeyHostUID             = "HOST_UID"
 	KeyHostGID             = "HOST_GID"

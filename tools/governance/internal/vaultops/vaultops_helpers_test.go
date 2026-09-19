@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"io"
 	"os"
+	"sync"
 	"testing"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
@@ -38,10 +39,23 @@ func assertMode(t *testing.T, path string, want os.FileMode) {
 	}
 }
 
-type fakeEnv struct{ kv map[string]string }
+type fakeEnv struct {
+	mu sync.Mutex
+	kv map[string]string
+}
 
 func newFakeEnv() *fakeEnv { return &fakeEnv{kv: map[string]string{}} }
 
-func (e *fakeEnv) Set(k, v string) { e.kv[k] = v }
+func (e *fakeEnv) Set(k, v string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.kv[k] = v
+}
+
+func (e *fakeEnv) get(k string) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.kv[k]
+}
 
 func discardOut() *ui.Printer { return ui.New(io.Discard, io.Discard) }

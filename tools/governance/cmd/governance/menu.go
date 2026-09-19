@@ -144,14 +144,13 @@ func (a *app) runReconcileCredentialMenu(ctx context.Context) error {
 }
 
 func (a *app) printVaultStatusBanner(ctx context.Context) {
-	a.out.PrintDivider("")
-
 	if len(a.credentials) > 0 {
 		keys := make([]string, len(a.credentials))
 		for i, cred := range a.credentials {
 			keys[i] = cred.Key
 		}
 		a.out.Print(ui.Info, "Declared credentials: "+strings.Join(keys, ", "))
+		a.out.PrintDivider("")
 	}
 
 	bastion := vaultops.InspectBastionStatus(ctx, a.newVaultPaths())

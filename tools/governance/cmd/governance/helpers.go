@@ -18,7 +18,7 @@ func (a *app) resolveBastionVaultAddr() string {
 		return a.bastionVaultAddr
 	}
 	if a.env != nil {
-		return a.env.Get(config.KeyDevVaultAddr)
+		return a.env.Get(config.KeyBastionVaultAddr)
 	}
 	return ""
 }

@@ -131,6 +131,6 @@ func (a *app) applyEnvPaths() {
 		return
 	}
 	if a.bastionVaultAddr == "" {
-		a.bastionVaultAddr = a.env.Get(config.KeyDevVaultAddr)
+		a.bastionVaultAddr = a.env.Get(config.KeyBastionVaultAddr)
 	}
 }
