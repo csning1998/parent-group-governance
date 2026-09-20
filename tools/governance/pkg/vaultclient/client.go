@@ -37,30 +37,41 @@ func (a TokenAuth) Login(ctx context.Context, client *vaultapi.Client) (string, 
 	return a.Token, nil
 }
 
-// JWTAuth defines parameters for Vault JWT/OIDC authentication methods (e.g. SPIRE SVID or GitLab CI ID tokens).
-// type JWTAuth struct {
-// 	Token string // Raw JWT / SPIFFE SVID string
-// 	Role  string // Vault JWT auth role name
-// 	Mount string // Auth method mount path (defaults to "jwt" if empty)
-// }
-//
-// func (j JWTAuth) Login(ctx context.Context, client *vaultapi.Client) (string, error) {
-// 	mount := j.Mount
-// 	if mount == "" {
-// 		mount = "jwt"
-// 	}
-// 	secret, err := client.Logical().WriteWithContext(ctx, "auth/"+mount+"/login", map[string]interface{}{
-// 		"role": j.Role,
-// 		"jwt":  j.Token,
-// 	})
-// 	if err != nil {
-// 		return "", fmt.Errorf("vaultclient: jwt login: %w", err)
-// 	}
-// 	if secret == nil || secret.Auth == nil || secret.Auth.ClientToken == "" {
-// 		return "", fmt.Errorf("vaultclient: empty client token in auth response")
-// 	}
-// 	return secret.Auth.ClientToken, nil
-// }
+// JWTAuth defines parameters for Vault JWT/OIDC authentication methods.
+type JWTAuth struct {
+	Token string // Raw JWT / SPIFFE SVID string
+	Role  string // Vault JWT auth role name
+	Mount string // Auth method mount path (defaults to "jwt" if empty)
+}
+
+// Login authenticates against Vault using JWT/OIDC credentials.
+func (j JWTAuth) Login(ctx context.Context, client *vaultapi.Client) (string, error) {
+	if client == nil {
+		return "", fmt.Errorf("vaultclient: nil client provided")
+	}
+	if j.Token == "" {
+		return "", fmt.Errorf("vaultclient: empty jwt token provided")
+	}
+	if j.Role == "" {
+		return "", fmt.Errorf("vaultclient: empty role provided")
+	}
+
+	mount := j.Mount
+	if mount == "" {
+		mount = "jwt"
+	}
+	secret, err := client.Logical().WriteWithContext(ctx, "auth/"+mount+"/login", map[string]interface{}{
+		"role": j.Role,
+		"jwt":  j.Token,
+	})
+	if err != nil {
+		return "", fmt.Errorf("vaultclient: jwt login: %w", err)
+	}
+	if secret == nil || secret.Auth == nil || secret.Auth.ClientToken == "" {
+		return "", fmt.Errorf("vaultclient: empty client token in auth response")
+	}
+	return secret.Auth.ClientToken, nil
+}
 
 // SealStatus records reachability, initialization, and seal state for a target Vault instance.
 type SealStatus struct {

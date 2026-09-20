@@ -55,3 +55,9 @@ resource "gitlab_project_variable" "review_api_key" {
   raw       = true
   protected = false
 }
+
+resource "gitlab_project_job_token_scope" "this" {
+  for_each          = toset([for id in var.inbound_job_token_scope_project_ids : tostring(id)])
+  project           = gitlab_project.this.id
+  target_project_id = tonumber(each.value)
+}
