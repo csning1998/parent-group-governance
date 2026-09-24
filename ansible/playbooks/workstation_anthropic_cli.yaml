@@ -1,0 +1,6 @@
+---
+- name: "Play [Anthropic CLI]: Install the ant command line tool on the workstation"
+  hosts: workstation
+  gather_facts: true
+  roles:
+    - workstation_anthropic_cli

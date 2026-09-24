@@ -1,0 +1,10 @@
+---
+# Public contract. The version MUST match a release tag of anthropics/anthropic-cli.
+workstation_anthropic_cli_version: "1.35.0"
+workstation_anthropic_cli_install_dir: "/usr/local/bin"
+workstation_anthropic_cli_release_url: "https://github.com/anthropics/anthropic-cli/releases/download"
+
+# Maps ansible_facts.architecture to the architecture suffix of the release archive.
+workstation_anthropic_cli_arch_suffix:
+  x86_64: "amd64"
+  aarch64: "arm64"

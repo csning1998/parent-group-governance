@@ -1,0 +1,31 @@
+---
+- name: "Section 0. Require a supported architecture"
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.architecture in workstation_anthropic_cli_arch_suffix
+    fail_msg: >-
+      The release archive exists only for the architectures listed in
+      workstation_anthropic_cli_arch_suffix.
+
+# A missing binary yields empty output, which never contains the target version.
+- name: "Task 1. Read the installed ant version"
+  ansible.builtin.command:
+    cmd: "{{ workstation_anthropic_cli_install_dir }}/ant --version"
+  register: workstation_anthropic_cli_probe
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# The official installation guide publishes no checksum. The downloaded archive is not verified.
+- name: "Task 2. Unpack the ant binary from the release archive"
+  ansible.builtin.unarchive:
+    src:
+      "{{ workstation_anthropic_cli_release_url ~ '/v' ~ workstation_anthropic_cli_version ~ '/ant_'
+      ~ workstation_anthropic_cli_version ~ '_' ~ (ansible_facts.system | lower) ~ '_'
+      ~ workstation_anthropic_cli_arch_suffix[ansible_facts.architecture] ~ '.tar.gz' }}"
+    dest: "{{ workstation_anthropic_cli_install_dir }}"
+    include:
+      - ant
+    remote_src: true
+  become: true
+  when: workstation_anthropic_cli_version not in workstation_anthropic_cli_probe.stdout
