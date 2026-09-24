@@ -33,6 +33,7 @@ func (a *app) runMenu(ctx context.Context) error {
 	}
 	options = append(options,
 		menuOption{"[Hypervisor] Apply workstation SELinux policy and file contexts", func(ctx context.Context) error { return a.runHostSELinuxPlaybook(ctx) }},
+		menuOption{"[Hypervisor] Apply workstation Libvirt network and Bastion Vault host prerequisites", func(ctx context.Context) error { return a.runHostLibvirtPlaybook(ctx) }},
 		menuOption{"[Hypervisor] Verify host IaC tools", func(ctx context.Context) error { return a.verifyEnvironment() }},
 		menuOption{"Quit", nil},
 	)

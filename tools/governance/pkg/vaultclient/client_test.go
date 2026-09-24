@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
@@ -170,6 +172,80 @@ func TestProbeStateUnreachableReturnsNotRunning(t *testing.T) {
 	}
 	if running || sealed {
 		t.Errorf("ProbeState unreachable = (%v, %v), want (false, false)", running, sealed)
+	}
+}
+
+// hangUntilCanceled holds every request open until the client gives up.
+func hangUntilCanceled(w http.ResponseWriter, r *http.Request) {
+	select {
+	case <-r.Context().Done():
+	case <-time.After(30 * time.Second):
+	}
+}
+
+func TestInspectStatusReturnsBeforeDefaultClientTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(hangUntilCanceled))
+	t.Cleanup(server.Close)
+
+	start := time.Now()
+	status := vaultclient.InspectStatus(context.Background(), vaultclient.Config{Address: server.URL})
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("InspectStatus took %v against a hung server, want under 5s", elapsed)
+	}
+	if status.Reachable {
+		t.Error("InspectStatus Reachable = true against a hung server, want false")
+	}
+}
+
+func TestInspectStatusDoesNotRetryServerErrors(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		http.Error(w, "server error", http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+
+	vaultclient.InspectStatus(context.Background(), vaultclient.Config{Address: server.URL})
+	if got := requests.Load(); got != 1 {
+		t.Errorf("InspectStatus issued %d requests, want 1", got)
+	}
+}
+
+func TestProbeStateReturnsBeforeDefaultClientTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(hangUntilCanceled))
+	t.Cleanup(server.Close)
+	client, err := vaultclient.NewClient(vaultclient.Config{Address: server.URL})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	start := time.Now()
+	running, _, err := vaultclient.ProbeState(context.Background(), client)
+	if err != nil {
+		t.Fatalf("ProbeState: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("ProbeState took %v against a hung server, want under 5s", elapsed)
+	}
+	if running {
+		t.Error("ProbeState running = true against a hung server, want false")
+	}
+}
+
+func TestProbeStateLeavesCallerClientRetriesUnchanged(t *testing.T) {
+	server := httptest.NewServer(sealStatusJSON(true, false))
+	t.Cleanup(server.Close)
+	client, err := vaultclient.NewClient(vaultclient.Config{Address: server.URL})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	wantRetries := client.MaxRetries()
+
+	if _, _, err := vaultclient.ProbeState(context.Background(), client); err != nil {
+		t.Fatalf("ProbeState: %v", err)
+	}
+	if got := client.MaxRetries(); got != wantRetries {
+		t.Errorf("caller client MaxRetries = %d after ProbeState, want %d", got, wantRetries)
 	}
 }
 

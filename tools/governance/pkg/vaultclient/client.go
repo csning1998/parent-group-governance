@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
 )
@@ -106,13 +107,33 @@ func NewClient(cfg Config) (*vaultapi.Client, error) {
 	return client, nil
 }
 
+// probeTimeout bounds a status probe, since the Vault API defaults of 60 seconds and two retries
+// stall the interactive banner for minutes against an unreachable address.
+const probeTimeout = 3 * time.Second
+
+// probeSealStatus clones the target client, disables retries, applies probeTimeout,
+// and queries the Vault seal status endpoint defensively.
+func probeSealStatus(ctx context.Context, client *vaultapi.Client) (*vaultapi.SealStatusResponse, error) {
+	if client == nil {
+		return nil, fmt.Errorf("vaultclient: nil client provided")
+	}
+	probe, err := client.Clone()
+	if err != nil {
+		return nil, fmt.Errorf("vaultclient: clone client for probe: %w", err)
+	}
+	probe.SetMaxRetries(0)
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	return probe.Sys().SealStatusWithContext(ctx)
+}
+
 // InspectStatus queries the Vault instance defined by cfg, reporting reachability, initialization, and seal status.
 func InspectStatus(ctx context.Context, cfg Config) SealStatus {
 	client, err := NewClient(cfg)
 	if err != nil {
 		return SealStatus{}
 	}
-	st, err := client.Sys().SealStatusWithContext(ctx)
+	st, err := probeSealStatus(ctx, client)
 	if err != nil {
 		return SealStatus{}
 	}
@@ -128,7 +149,7 @@ func ProbeState(ctx context.Context, client *vaultapi.Client) (running, sealed b
 	if client == nil {
 		return false, false, fmt.Errorf("vaultclient: nil client provided")
 	}
-	st, err := client.Sys().SealStatusWithContext(ctx)
+	st, err := probeSealStatus(ctx, client)
 	if err != nil {
 		return false, false, nil
 	}

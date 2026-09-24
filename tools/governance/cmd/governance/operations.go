@@ -104,6 +104,24 @@ func (a *app) verifyEnvironment() error {
 }
 
 func (a *app) runHostSELinuxPlaybook(ctx context.Context) error {
+	return a.runHostPlaybook(ctx, "playbooks/workstation_selinux.yaml", map[string]interface{}{
+		"workstation_selinux_home": a.home,
+	}, "Workstation SELinux policy and file contexts applied.")
+}
+
+func (a *app) runHostLibvirtPlaybook(ctx context.Context) error {
+	facts, err := config.DetectHostFacts()
+	if err != nil {
+		return err
+	}
+	return a.runHostPlaybook(ctx, "playbooks/workstation_libvirt.yaml", map[string]interface{}{
+		"workstation_libvirt_operator_user": facts.CurrentUname,
+	}, "Workstation libvirt prerequisites for Bastion Vault applied.")
+}
+
+// runHostPlaybook prompts for the privilege escalation password, where a blank answer cancels,
+// and runs playbookFile against the local inventory with extraVars.
+func (a *app) runHostPlaybook(ctx context.Context, playbookFile string, extraVars map[string]interface{}, doneMsg string) error {
 	becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
 	if err != nil {
 		return fmt.Errorf("read ANSIBLE_BECOME_PASS: %w", err)
@@ -116,16 +134,14 @@ func (a *app) runHostSELinuxPlaybook(ctx context.Context) error {
 	ansibleDir := a.resolveHostAnsibleDir()
 	opts := &playbook.AnsiblePlaybookOptions{
 		Inventory: "inventory/localhost.yaml",
-		ExtraVars: map[string]interface{}{
-			"workstation_selinux_home": a.home,
-		},
+		ExtraVars: extraVars,
 	}
 	extraEnv := map[string]string{
 		"ANSIBLE_BECOME_PASS": becomePass,
 	}
-	if err := ansibleops.RunPlaybook(ctx, ansibleDir, ansibleDir, "playbooks/workstation_selinux.yaml", opts, extraEnv); err != nil {
+	if err := ansibleops.RunPlaybook(ctx, ansibleDir, ansibleDir, playbookFile, opts, extraEnv); err != nil {
 		return fmt.Errorf("ansible-playbook: %w", err)
 	}
-	a.out.Print(ui.OK, "Workstation SELinux policy and file contexts applied.")
+	a.out.Print(ui.OK, doneMsg)
 	return nil
 }

@@ -1,0 +1,11 @@
+---
+# Requires a new login session to take effect across PAM sessions.
+- name: "D1. Grant unlimited memlock to the operator user (rootless Podman / Vault mlock)"
+  community.general.pam_limits:
+    domain: "{{ workstation_libvirt_operator_user }}"
+    limit_type: "{{ item }}"
+    limit_item: memlock
+    value: unlimited
+  loop:
+    - soft
+    - hard

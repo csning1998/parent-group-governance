@@ -1,0 +1,24 @@
+---
+- name: "Section 0. Require operator user extra var"
+  ansible.builtin.assert:
+    that:
+      - workstation_libvirt_operator_user is string
+      - workstation_libvirt_operator_user | length > 0
+      - workstation_libvirt_operator_user != "root"
+    fail_msg: >-
+      workstation_libvirt_operator_user must be the operator account name.
+      become: true gathers facts as root. The CLI injects this extra var.
+
+# The publish network requires a running virtnetworkd. A host which enables only
+# the socket unit never starts the daemon at boot, which skips libvirt autostart.
+- name: "Section A. Enable the libvirt network daemon"
+  ansible.builtin.include_tasks: A-virtnetworkd.yaml
+
+- name: "Section B. Define the Bastion Vault publish network"
+  ansible.builtin.include_tasks: B-publish-network.yaml
+
+- name: "Section C. Open the Bastion Vault port for the publish network"
+  ansible.builtin.include_tasks: C-firewalld.yaml
+
+- name: "Section D. Grant memlock to the operator user"
+  ansible.builtin.include_tasks: D-memlock.yaml

@@ -1,0 +1,16 @@
+---
+# Relies on kernel parameters configured by the meta-platform hypervisor_baseline role
+# (rp_filter=2 loose mode and ip_forward=1) to accommodate asymmetric return path
+# routing across this network segment.
+- name: "C1. Open Bastion Vault HTTPS port in the libvirt-routed zone, restricted to this host address"
+  ansible.posix.firewalld:
+    zone: libvirt-routed
+    rich_rule: >-
+      rule family="ipv4"
+      source address="{{ workstation_libvirt_publish_source_cidr }}"
+      destination address="{{ workstation_libvirt_publish_network_address }}"
+      port protocol="tcp" port="{{ workstation_libvirt_vault_port }}"
+      accept
+    permanent: true
+    state: enabled
+  notify: Reload firewalld

@@ -1,0 +1,22 @@
+---
+# Defines a dedicated internal network segment for Bastion Vault guest reachability using
+# the 172.16.0.0/24 subnet, which remains unallocated by service_catalog due to the
+# cidr_index > cidr_nat_offset (124) boundary constraint.
+- name: "B1. Define Bastion Vault publish network"
+  community.libvirt.virt_net:
+    uri: qemu:///system
+    command: define
+    name: "{{ workstation_libvirt_publish_network_name }}"
+    xml: "{{ lookup('template', 'publish-network.xml.j2') }}"
+
+- name: "B2. Ensure Bastion Vault publish network is active"
+  community.libvirt.virt_net:
+    uri: qemu:///system
+    state: active
+    name: "{{ workstation_libvirt_publish_network_name }}"
+
+- name: "B3. Ensure Bastion Vault publish network autostarts"
+  community.libvirt.virt_net:
+    uri: qemu:///system
+    autostart: true
+    name: "{{ workstation_libvirt_publish_network_name }}"

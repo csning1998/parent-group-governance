@@ -6,10 +6,11 @@ This repository is the upstream governance root of a single developer workstatio
 
 ### Item A. Ownership Boundary
 
-Four assets are owned here:
+Five assets are owned here:
 
 - The workstation SELinux policy module, together with the persistent file context registry covering every local repository on the host.
 - The Bastion Vault instance acting as the trust root for every downstream platform repository.
+- The host prerequisites of the Bastion Vault container, comprising the `vault-bastion-publish` libvirt network, the `virtnetworkd.service` unit, the firewalld rule for the Vault port, and the memlock limits of the operator user.
 - The GitLab group topology under the `csning1998-lab` namespace, including group labels, group CI variables, the shared runner, and the SonarQube analysis token.
 - The `governance` CLI, whose source resides under `tools/governance`.
 
@@ -19,7 +20,7 @@ A downstream platform repository consumes the Bastion Vault instance and the Git
 
 | Path                 | Contents                                                                                 |
 | -------------------- | ---------------------------------------------------------------------------------------- |
-| `ansible/`           | The `workstation_selinux` role, the local inventory, and the host playbook               |
+| `ansible/`           | Two `workstation_*` roles, the local inventory, and the host playbooks                   |
 | `terraform/layers/`  | Eight independently applied Terraform layers, each holding its own remote state          |
 | `terraform/modules/` | Three shared modules consumed by the layers                                              |
 | `tools/governance/`  | Go source of the `governance` CLI, with its own design document                          |
@@ -37,7 +38,8 @@ The dependency chain begins at the SELinux registration and ends at the group la
 
 ```mermaid
 flowchart LR
-    SELinux["Workstation SELinux registration"] --> Compose["podman compose up"]
+    SELinux["Workstation SELinux registration"] --> Libvirt["Workstation libvirt prerequisites"]
+    Libvirt --> Compose["podman compose up"]
     Compose --> VaultLifecycle["governance vault tls-generate, init, unseal, enable-kv"]
     VaultLifecycle --> Foundation["terraform foundation-vault-bastion"]
     Foundation --> GroupFoundation["terraform group-foundation"]
@@ -239,6 +241,26 @@ The file `vault/vault.hcl` declares two TLS listeners. The first listener binds 
 
 Vault exits when any declared TCP listener fails to bind. The host network namespace can present the address `172.16.0.1` later than the start of PID 1, which makes an unconditional start unreliable. The entrypoint therefore polls the host namespace for the address at 0.2 second intervals up to 150 attempts before executing the server.
 
+### Item C. Host Prerequisites of the Vault Container
+
+A host prerequisite is a host setting which the Vault container requires before the container starts. The role `workstation_libvirt` declares four host prerequisites.
+
+1.  The libvirt network `vault-bastion-publish` provides the address `172.16.0.1` on the bridge of the network.
+2.  The unit `virtnetworkd.service` is enabled and running.
+3.  A firewalld rich rule in the zone `libvirt-routed` admits TCP port 8200 from `172.16.0.0/12` to `172.16.0.1`.
+4.  The memlock limits of the operator user are unlimited, because Vault locks memory under rootless Podman.
+
+The unit `virtnetworkd.service` MUST be enabled. A host which enables only `virtnetworkd.socket` never starts the daemon at boot. The daemon executes the autostart of every libvirt network at startup alone. The network `vault-bastion-publish` therefore does not exist until a client connects to the socket.
+
+The entrypoint of Item B exits after the polling attempts are exhausted. The restart policy `restart: always` then starts the container again. A missing prerequisite consequently produces a restart loop instead of a single failure.
+
+```bash
+ansible-galaxy collection install -r ansible/requirements.yaml
+./governance ansible libvirt
+```
+
+The CLI injects `workstation_libvirt_operator_user` from the operator account, because `become: true` gathers facts as root. The role asserts the injected value before any task runs. The firewalld rule relies on the sysctl parameters `rp_filter=2` and `ip_forward=1`, which the role `hypervisor_baseline` of `meta-platform` declares.
+
 ## Section 5. The Governance CLI
 
 The `governance` binary is built from `tools/governance`. The full design of the rotation state machine resides in `tools/governance/README.md`. This section covers the operator surface alone.
@@ -253,16 +275,17 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 
 ### Item B. Operation Inventory
 
-| Menu Entry                                                        | Subcommand                         | Effect                                                                     |
-| ----------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------- |
-| `[Vault] Set up TLS for Bastion Vault`                            | `vault tls-generate`               | Clears `vault/tls` and issues a fresh CA with a server certificate         |
-| `[Vault] Initialize Bastion Vault`                                | `vault init`                       | Initializes raft storage and records the unseal key with the root token    |
-| `[Vault] Enable KV-v2 Engine`                                     | `vault enable-kv`                  | Mounts the KV version 2 engine at the path `secret`                        |
-| `[Vault] Unseal Bastion Vault`                                    | `vault unseal`                     | Submits the recorded unseal key                                            |
-| `[Credentials] Rotate Credentials`                                | `vault <credential-key>`           | Generates a password, deploys the password, and commits the value to Vault |
-| `[Credentials] Reconcile Credentials with Live Service`           | `vault reconcile <credential-key>` | Pushes the value held by Vault out to a drifted live service               |
-| `[Hypervisor] Apply workstation SELinux policy and file contexts` | `ansible selinux`                  | Runs the playbook described in Section 3 Item B                            |
-| `[Hypervisor] Verify host IaC tools`                              | `env verify`                       | Reports the presence of Terraform, Vault, and Ansible on `PATH`            |
+| Menu Entry                                                                            | Subcommand                         | Effect                                                                     |
+| ------------------------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------- |
+| `[Vault] Set up TLS for Bastion Vault`                                                | `vault tls-generate`               | Clears `vault/tls` and issues a fresh CA with a server certificate         |
+| `[Vault] Initialize Bastion Vault`                                                    | `vault init`                       | Initializes raft storage and records the unseal key with the root token    |
+| `[Vault] Enable KV-v2 Engine`                                                         | `vault enable-kv`                  | Mounts the KV version 2 engine at the path `secret`                        |
+| `[Vault] Unseal Bastion Vault`                                                        | `vault unseal`                     | Submits the recorded unseal key                                            |
+| `[Credentials] Rotate Credentials`                                                    | `vault <credential-key>`           | Generates a password, deploys the password, and commits the value to Vault |
+| `[Credentials] Reconcile Credentials with Live Service`                               | `vault reconcile <credential-key>` | Pushes the value held by Vault out to a drifted live service               |
+| `[Hypervisor] Apply workstation SELinux policy and file contexts`                     | `ansible selinux`                  | Runs the playbook described in Section 3 Item B                            |
+| `[Hypervisor] Apply workstation Libvirt network and Bastion Vault host prerequisites` | `ansible libvirt`                  | Runs the playbook described in Section 4 Item C                            |
+| `[Hypervisor] Verify host IaC tools`                                                  | `env verify`                       | Reports the presence of Terraform, Vault, and Ansible on `PATH`            |
 
 Each credential key listed in `credentials.yaml` becomes one subcommand under `vault`, and one more under `vault reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already holds a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears.
 

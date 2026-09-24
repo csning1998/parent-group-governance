@@ -1,0 +1,6 @@
+---
+- name: "A1. Enable and start virtnetworkd.service"
+  ansible.builtin.systemd_service:
+    name: virtnetworkd.service
+    enabled: true
+    state: started

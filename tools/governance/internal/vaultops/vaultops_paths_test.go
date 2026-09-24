@@ -36,6 +36,14 @@ func TestPathsHelpers(t *testing.T) {
 	}
 }
 
+func TestResolveBastionAddrDefaultsToLoopback(t *testing.T) {
+	got := (Paths{}).resolveBastionAddr()
+	want := "https://127.0.0.1:8200"
+	if got != want {
+		t.Errorf("resolveBastionAddr() = %q, want %q", got, want)
+	}
+}
+
 func TestGenerateCertificateSerialProducesDistinctInRangeValues(t *testing.T) {
 	a, err := generateCertificateSerial()
 	if err != nil {

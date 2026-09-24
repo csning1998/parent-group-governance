@@ -1983,7 +1983,7 @@ if len(missing) > 0 {
 
 逐項印出讓操作者看到完整狀態，彙整的錯誤則讓缺工具這件事同時反映在結束碼上，供腳本判斷。
 
-SELinux playbook 的執行則先取得提權密碼，留白視為取消：
+兩支 host playbook（SELinux 與 libvirt）共用 `runHostPlaybook`，它先取得提權密碼，留白視為取消：
 
 ```go
 becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
@@ -1997,6 +1997,8 @@ if becomePass == "" {
 ```
 
 留白等同取消，而不是帶著空密碼去跑 playbook，因為空密碼一定會在第一個提權任務失敗，屆時錯誤訊息出現在 Ansible 的輸出裡，遠不如在這裡直接停下來清楚。
+
+兩個呼叫端只差三樣東西：playbook 檔名、注入的 extra var、完成訊息。`runHostSELinuxPlaybook` 注入 `workstation_selinux_home`，值取自 `a.home`。`runHostLibvirtPlaybook` 注入 `workstation_libvirt_operator_user`，值取自 `config.DetectHostFacts()` 回傳的使用者名稱。`.env` 的 `UNAME` 不作為來源，因為 `patchExistingEnv` 不會回補既有 `.env` 缺少的 `UNAME`。
 
 ### Item D. 終端機輸出與互動輸入
 

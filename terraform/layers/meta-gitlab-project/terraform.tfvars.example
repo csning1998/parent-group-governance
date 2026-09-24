@@ -1,0 +1,5 @@
+
+inbound_job_token_scope_project_ids = [
+  12345678, # allowed repo
+  23456789, # another allowed repo
+]

@@ -38,7 +38,7 @@ func (p Paths) resolveBastionAddr() string {
 	if p.bastionVaultAddr != "" {
 		return p.bastionVaultAddr
 	}
-	return "https://172.16.0.1:8200"
+	return "https://127.0.0.1:8200"
 }
 
 func (p Paths) resolveKeysDir() string       { return filepath.Join(p.ProjectRoot, "vault", "keys") }

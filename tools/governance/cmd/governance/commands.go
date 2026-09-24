@@ -55,6 +55,11 @@ func (a *app) newAnsibleCmd() *cobra.Command {
 		Short: "[Hypervisor] Apply workstation SELinux policy and file contexts",
 		RunE:  func(cmd *cobra.Command, args []string) error { return a.runHostSELinuxPlaybook(cmd.Context()) },
 	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "libvirt",
+		Short: "[Hypervisor] Apply workstation Libvirt network and Bastion Vault host prerequisites",
+		RunE:  func(cmd *cobra.Command, args []string) error { return a.runHostLibvirtPlaybook(cmd.Context()) },
+	})
 	return cmd
 }
 

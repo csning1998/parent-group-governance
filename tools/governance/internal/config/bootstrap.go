@@ -113,7 +113,7 @@ func populateNewEnv(e *Env, root string, facts HostFacts) error {
 	}
 	for _, kv := range [][2]string{
 		{KeyProjectRoot, root},
-		{KeyBastionVaultAddr, "https://172.16.0.1:8200"},
+		{KeyBastionVaultAddr, "https://127.0.0.1:8200"},
 		{KeyBastionVaultCACert, "${PROJECT_ROOT}/vault/tls/ca.pem"},
 		{KeyVaultToken, ""},
 		{KeyHostUID, strconv.Itoa(facts.CurrentUID)},
@@ -134,7 +134,7 @@ func patchExistingEnv(e *Env, root string, facts HostFacts, out *ui.Printer) err
 	e.Set(KeyHostGID, strconv.Itoa(facts.CurrentGID))
 	e.Set(KeyProjectRoot, root)
 	if e.Get(KeyBastionVaultAddr) == "" {
-		e.Set(KeyBastionVaultAddr, "https://172.16.0.1:8200")
+		e.Set(KeyBastionVaultAddr, "https://127.0.0.1:8200")
 	}
 	if e.Get(KeyBastionVaultCACert) == "" {
 		e.Set(KeyBastionVaultCACert, "${PROJECT_ROOT}/vault/tls/ca.pem")

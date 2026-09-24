@@ -1,0 +1,17 @@
+---
+# Public contract. Callers MUST inject workstation_libvirt_operator_user from
+# the operator account. become: true gathers facts as root, and ansible_facts
+# cannot supply the operator name. A hardcoded account name is forbidden.
+workstation_libvirt_operator_user: ""
+
+# Bastion Vault guest-reachability segment. Lives outside service_catalog:
+# cidr_index must exceed cidr_nat_offset (124), leaving octet 0 of
+# 172.16.0.0/24 outside the expressible range of the catalog.
+workstation_libvirt_publish_network_name: "vault-bastion-publish"
+workstation_libvirt_publish_network_address: "172.16.0.1"
+workstation_libvirt_publish_network_netmask: "255.255.255.0"
+
+# The full RFC 1918 class B private address space. Guests on any service
+# segment reach Bastion Vault through the routed publish network.
+workstation_libvirt_publish_source_cidr: "172.16.0.0/12"
+workstation_libvirt_vault_port: 8200

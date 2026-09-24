@@ -30,8 +30,5 @@ module "baseline" {
   namespace_id = data.terraform_remote_state.foundation_group.outputs.group_id
 
   only_allow_merge_if_pipeline_succeeds = false
-
-  inbound_job_token_scope_project_ids = [
-    84608830, # platform-engineering-lab/meta-platform
-  ]
+  inbound_job_token_scope_project_ids   = var.inbound_job_token_scope_project_ids
 }

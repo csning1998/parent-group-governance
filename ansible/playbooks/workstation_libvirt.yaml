@@ -1,0 +1,7 @@
+---
+- name: "Play [Libvirt]: Apply workstation Bastion Vault host prerequisites"
+  hosts: workstation
+  become: true
+  gather_facts: true
+  roles:
+    - workstation_libvirt
