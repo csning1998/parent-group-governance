@@ -6,6 +6,10 @@ terraform {
       source  = "ippontech/anthropic"
       version = "1.43.5"
     }
+    vault = {
+      source  = "hashicorp/vault"
+      version = "5.5.0"
+    }
   }
 
   backend "http" {
@@ -19,3 +23,9 @@ terraform {
 }
 
 provider "anthropic" {}
+
+provider "vault" {
+  alias        = "bastion"
+  address      = module.local_credential_contexts.bastion_vault_config.endpoint
+  ca_cert_file = module.local_credential_contexts.bastion_vault_config.ca_cert_path
+}
