@@ -23,6 +23,6 @@ locals {
 check "claude_api_keys_complete" {
   assert {
     condition     = alltrue([for repo in local.ai_review_repos : contains(keys(local.claude_api_keys), repo) && local.claude_api_keys[repo] != ""])
-    error_message = "secret/gitlab-ci-with-code-reviewer/review-bot-api-keys/claude must contain a non-empty entry for every repository in local.ai_review_repos."
+    error_message = "secret/gitlab-ci-with-code-reviewer/api-key/provider-anthropic must contain a non-empty entry for every repository in local.ai_review_repos."
   }
 }

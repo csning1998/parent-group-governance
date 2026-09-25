@@ -8,10 +8,10 @@ resource "sonarqube_user_token" "ci_analysis" {
   type = "GLOBAL_ANALYSIS_TOKEN"
 }
 
-# infrastructure/token/* belongs to this layer. infrastructure/credentials/* belongs to governance.
+# sonarqube/ci-analysis-bot belongs to this layer. sonarqube/admin-account belongs to governance.
 resource "vault_kv_secret_v2" "sonar_token" {
   provider  = vault.bastion
   mount     = "secret"
-  name      = "parent-group-governance/infrastructure/token/sonarqube"
+  name      = "parent-group-governance/sonarqube/ci-analysis-bot"
   data_json = jsonencode({ sonarqube_ci_token = sonarqube_user_token.ci_analysis.token })
 }

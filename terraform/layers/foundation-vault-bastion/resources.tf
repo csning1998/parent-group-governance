@@ -114,7 +114,7 @@ resource "vault_approle_auth_backend_role_secret_id" "terraform_admin" {
 resource "vault_kv_secret_v2" "terraform_admin_auth" {
   provider = vault.bastion
   mount    = "secret"
-  name     = "parent-group-governance/credentials"
+  name     = "parent-group-governance/terraform/approle"
   data_json = jsonencode({
     role_id   = vault_approle_auth_backend_role.terraform_admin.role_id
     secret_id = vault_approle_auth_backend_role_secret_id.terraform_admin.secret_id

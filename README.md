@@ -336,7 +336,7 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 
 - The HTTP backend and every `terraform_remote_state` block authenticate through the `read_api` token in `~/.terraform.d/credentials.tfrc.json`.
 - The Vault provider connects to `https://172.16.0.1:8200` with the CA at `vault/tls/ca.pem`, authenticating through the token helper file `~/.vault-token`. Reading the token from the helper file breaks the cyclic authentication dependency present during initialization.
-- The GitLab provider reads a token from the ephemeral Vault secret `secret/parent-group-governance/state-backend`. An ephemeral read keeps the token out of the persisted state of the consuming layer.
+- The GitLab provider reads a token from the ephemeral Vault secret `secret/parent-group-governance/terraform/state-backend`. An ephemeral read keeps the token out of the persisted state of the consuming layer.
 
 ### Item B. Layer Inventory
 
@@ -356,7 +356,7 @@ The layer `foundation-vault-bastion` issues the credentials consumed by every la
 
 The layer `group-governance` publishes four masked group variables read out of Vault: `CLAUDE_MR_REVIEWER`, `GEMINI_MR_REVIEWER`, `SONAR_TOKEN`, and `TAG_PUSH_TOKEN`. A Personal Access Token supplies the reviewer variables, because Project Access Token creation is unavailable under the GitLab Free tier.
 
-The layer `group-sonarqube` owns the path prefix `infrastructure/token/`, and the CLI owns the path prefix `infrastructure/credentials/`. The separation keeps one writer per Vault path.
+The layer `group-sonarqube` owns the document `sonarqube/ci-analysis-bot`, and the CLI owns the document `sonarqube/admin-account`. The separation keeps one writer per Vault document.
 
 ### Item C. Apply Order
 
