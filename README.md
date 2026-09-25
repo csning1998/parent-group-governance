@@ -73,6 +73,25 @@ Three binaries MUST resolve on `PATH` before any Terraform layer is applied: `te
 
 Rootless Podman MUST be running under the operator account, because the Podman API socket beneath `/run/user/<uid>/podman/` is the transport used by the GitLab runner.
 
+### Item C. Optional Host Tools
+
+The Anthropic CLI `ant` is an optional host tool required solely by the `group-federation-anthropic` layer when managing the Anthropic federation issuer. The `./governance env verify` command does not validate the presence of `ant`.
+
+The operator MAY install `ant` using the supported Ansible role `workstation_anthropic_cli`, which downloads a pinned binary release into `/usr/local/bin`. Any alternative installation method which places `ant` on `PATH` is equally valid.
+
+```bash
+cd ansible && ansible-playbook playbooks/workstation_anthropic_cli.yaml --ask-become-pass && cd -
+```
+
+Authentication is an interactive manual step. The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to running `terraform apply`, the operator MUST log in and export the temporary access token to `ANTHROPIC_AUTH_TOKEN`.
+
+```bash
+ant auth login --profile <profile> --scope "org:admin"
+export ANTHROPIC_AUTH_TOKEN="$(ant auth print-credentials --profile <profile> --access-token)"
+```
+
+The profile is set to `wif-gitlab-saas-host-admin` as default. Because the exported token expires within minutes, the operator MUST refresh the token prior to each apply.
+
 ## Section 3. SELinux Configuration
 
 Every service declared in `compose.yml` runs under rootless Podman on a host with SELinux in enforcing mode. Each bind mount originates from a path beneath the user home directory, whose policy default type is `user_home_t`. A process confined as `container_t` does not hold access to `user_home_t`, which makes an explicit `container_file_t` label mandatory on every mount source.
@@ -321,16 +340,17 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 
 ### Item B. Layer Inventory
 
-| Layer                      | Responsibility                                                                                    | Upstream State     |
-| -------------------------- | ------------------------------------------------------------------------------------------------- | ------------------ |
-| `foundation-vault-bastion` | The PKI root, the issuing intermediate, the `terraform-admin` policy, and the AppRole credentials | None               |
-| `group-foundation`         | The top level group `Personal Lab` at path `csning1998-lab`                                       | None               |
-| `meta-gitlab-project`      | The GitLab project hosting this repository and every Terraform state                              | `group-foundation` |
-| `group-topology`           | Every subgroup and nested subgroup beneath the top level group                                    | `group-foundation` |
-| `group-governance`         | Group labels and the group CI variables sourced from Vault                                        | `group-topology`   |
-| `group-gitlab-runner`      | The group runner registration and the rendered `gitlab-runner-configs/config.toml`                | `group-topology`   |
-| `group-sonarqube`          | The SonarQube global analysis token, written into Vault                                           | None               |
-| `group-api-keys`           | One Google Gemini API key per repository with AI review enabled                                   | None               |
+| Layer                        | Responsibility                                                                                    | Upstream State     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------- | ------------------ |
+| `foundation-vault-bastion`   | The PKI root, the issuing intermediate, the `terraform-admin` policy, and the AppRole credentials | None               |
+| `group-foundation`           | The top level group `Personal Lab` at path `csning1998-lab`                                       | None               |
+| `meta-gitlab-project`        | The GitLab project hosting this repository and every Terraform state                              | `group-foundation` |
+| `group-topology`             | Every subgroup and nested subgroup beneath the top level group                                    | `group-foundation` |
+| `group-governance`           | Group labels and the group CI variables sourced from Vault                                        | `group-topology`   |
+| `group-gitlab-runner`        | The group runner registration and the rendered `gitlab-runner-configs/config.toml`                | `group-topology`   |
+| `group-sonarqube`            | The SonarQube global analysis token, written into Vault                                           | None               |
+| `group-api-keys`             | One Google Gemini API key per repository with AI review enabled                                   | None               |
+| `group-federation-anthropic` | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`                   | None               |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing the Bootstrap Issuing Intermediate alone, and the intermediate issues every leaf certificate. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
@@ -349,6 +369,7 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 5.  Apply `group-sonarqube` once the SonarQube service becomes ready.
 6.  Apply `group-governance`, which reads the token written by `group-sonarqube`.
 7.  Apply `group-api-keys` at any point after `group-foundation`.
+8.  Apply `group-federation-anthropic` at any point, provided the operator holds an `org:admin` token described in Section 2 Item C.
 
 ### Item D. Shared Modules
 
