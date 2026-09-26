@@ -8,13 +8,8 @@ locals {
   _state_base = "https://gitlab.com/api/v4/projects/86417732/terraform/state"
   _state_auth = module.local_credential_contexts.state_auth_gitlab_saas
 
-  # Populates CLAUDE_MR_REVIEWER and GEMINI_MR_REVIEWER with a Personal Access Token dedicated to the review bot.
-  # Project Access Token creation is unavailable within namespaces operating under the GitLab Free tier subscription model.
   group_variables_secret = {
-    CLAUDE_MR_REVIEWER = data.vault_kv_secret_v2.code_reviewer_bot.data["token"]
-    GEMINI_MR_REVIEWER = data.vault_kv_secret_v2.code_reviewer_bot.data["token"]
-    SONAR_TOKEN        = data.vault_kv_secret_v2.sonar_token.data["sonarqube_ci_token"]
-    TAG_PUSH_TOKEN     = data.vault_kv_secret_v2.version_tag_bot.data["token"]
+    SONAR_TOKEN = data.vault_kv_secret_v2.sonar_token.data["sonarqube_ci_token"]
   }
 
   # Job containers connect to SonarQube through the sonarqube compose service endpoint

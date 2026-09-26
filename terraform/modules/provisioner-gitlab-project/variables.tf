@@ -38,17 +38,10 @@ variable "squash_commit_template" {
   default     = "%%{title}"
 }
 
-variable "claude_api_key" {
-  description = "Specifies the per-project Anthropic API key consumed by the claude-code-review CI job. An empty string omits creation of the CLAUDE_API_KEY project variable, leaving the job disabled for this project."
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "gemini_api_key" {
-  description = "Specifies the per-project Google AI Studio API key consumed by the gemini-code-review CI job. An empty string omits creation of the GEMINI_API_KEY project variable, leaving the job disabled for this project."
-  type        = string
-  default     = ""
+variable "extra_variables" {
+  description = "Specifies a map of extra CI/CD variables to configure on the GitLab project. Values are masked and hidden."
+  type        = map(string)
+  default     = {}
   sensitive   = true
 }
 

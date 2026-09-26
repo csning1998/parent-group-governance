@@ -43,12 +43,14 @@ flowchart LR
     Compose --> VaultLifecycle["governance vault tls-generate, init, unseal, enable-kv"]
     VaultLifecycle --> Foundation["terraform foundation-vault-bastion"]
     Foundation --> GroupFoundation["terraform group-foundation"]
+    Foundation --> Federation["terraform group-federation-* (WIF)"]
     GroupFoundation --> Project["terraform meta-gitlab-project"]
+    Federation --> Project
     GroupFoundation --> Topology["terraform group-topology"]
     Topology --> Runner["terraform group-gitlab-runner"]
     Topology --> Sonar["terraform group-sonarqube"]
     Sonar --> Governance["terraform group-governance"]
-    Topology --> ApiKeys["terraform group-api-keys"]
+    Topology --> ApiKeys["terraform group-api-keys [Deprecated]"]
     VaultLifecycle --> Rotate["governance credential rotation"]
 ```
 
@@ -72,6 +74,44 @@ Three binaries MUST resolve on `PATH` before any Terraform layer is applied: `te
 ```
 
 Rootless Podman MUST be running under the operator account, because the Podman API socket beneath `/run/user/<uid>/podman/` is the transport used by the GitLab runner.
+
+### Item C. Optional Host Tools
+
+The Anthropic CLI `ant` is an optional host tool required solely by the `group-federation-anthropic` layer when managing the Anthropic federation issuer. The `./governance env verify` command does not validate the presence of `ant`.
+
+The operator MAY install `ant` using the supported Ansible role `workstation_anthropic_cli`, which downloads a pinned binary release into `/usr/local/bin`. Any alternative installation method which places `ant` on `PATH` is equally valid.
+
+```bash
+cd ansible && ansible-playbook playbooks/workstation_anthropic_cli.yaml --ask-become-pass && cd -
+```
+
+Authentication is an interactive manual step. The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to running `terraform apply` across `group-federation-anthropic` or `meta-gitlab-project`, the operator MUST log in, extract the temporary access token, and record the credential into Bastion Vault at `parent-group-governance/ai-provider-console/anthropic`.
+
+```bash
+ant auth login --profile <profile> --scope "org:admin"
+export ANTHROPIC_AUTH_TOKEN="$(ant auth print-credentials --profile <profile> --access-token)"
+vault kv put -mount=secret parent-group-governance/ai-provider-console/anthropic \
+    anthropic_admin_api_key="$ANTHROPIC_AUTH_TOKEN"
+```
+
+The profile defaults to `issuer-gitlab-saas`. Because the exported token expires within minutes, the operator MUST refresh the token and re-commit the value to Bastion Vault prior to each apply.
+
+### Item D. Anthropic WIF Multi-Tenancy Architecture
+
+The platform architecture implements a multi-tenant Workload Identity Federation pattern to govern AI provider access across consumer projects:
+
+1.  **Global Governance Layer (`group-federation-anthropic`)**:
+    - Manages the single OIDC Issuer (`issuer-gitlab-saas` pointing to `https://gitlab.com`) at the Anthropic organization level.
+    - Publishes the root trust contract (`organization` and `issuers`) via Terraform Remote State Outputs.
+    - Remains strictly decoupled from individual downstream workspaces and projects.
+
+2.  **Downstream Multi-Tenant Projects (`provisioner-workload-identity-federation`)**:
+    - Each consuming project (e.g., `gitlab-ci-with-code-reviewer`) invokes the provisioner module with its project code and path.
+    - The module automatically provisions a dedicated project workspace (`ws-<project_code>`), a project service account (`sa-project-<project_code>`), and a matching federation rule (`rule-project-<project_code>`).
+    - Guarantees strict multi-tenant isolation:
+        - **Cost and Usage Isolation**: Monthly inference costs and token usage are isolated to the project workspace.
+        - **Rate Limit Separation**: Request (RPM) and token (TPM) limits are partitioned per project.
+        - **Safe Lifecycle & Pruning**: Downstream projects can be instantiated, modified, or destroyed (pruned) without modifying or disrupting the root organization federation.
 
 ## Section 3. SELinux Configuration
 
@@ -321,20 +361,21 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 
 ### Item B. Layer Inventory
 
-| Layer                      | Responsibility                                                                                    | Upstream State     |
-| -------------------------- | ------------------------------------------------------------------------------------------------- | ------------------ |
-| `foundation-vault-bastion` | The PKI root, the issuing intermediate, the `terraform-admin` policy, and the AppRole credentials | None               |
-| `group-foundation`         | The top level group `Personal Lab` at path `csning1998-lab`                                       | None               |
-| `meta-gitlab-project`      | The GitLab project hosting this repository and every Terraform state                              | `group-foundation` |
-| `group-topology`           | Every subgroup and nested subgroup beneath the top level group                                    | `group-foundation` |
-| `group-governance`         | Group labels and the group CI variables sourced from Vault                                        | `group-topology`   |
-| `group-gitlab-runner`      | The group runner registration and the rendered `gitlab-runner-configs/config.toml`                | `group-topology`   |
-| `group-sonarqube`          | The SonarQube global analysis token, written into Vault                                           | None               |
-| `group-api-keys`           | One Google Gemini API key per repository with AI review enabled                                   | None               |
+| Layer                         | Responsibility                                                                                    | Upstream State                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `foundation-vault-bastion`    | The PKI root, the issuing intermediate, the `terraform-admin` policy, and the AppRole credentials | None                                             |
+| `group-foundation`            | The top level group `Personal Lab` at path `csning1998-lab`                                       | None                                             |
+| `meta-gitlab-project`         | The GitLab project hosting this repository and every Terraform state                              | `group-foundation`, `group-federation-anthropic` |
+| `group-topology`              | Every subgroup and nested subgroup beneath the top level group                                    | `group-foundation`                               |
+| `group-governance`            | Group labels and the group CI variables sourced from Vault                                        | `group-topology`                                 |
+| `group-gitlab-runner`         | The group runner registration and the rendered `gitlab-runner-configs/config.toml`                | `group-topology`                                 |
+| `group-sonarqube`             | The SonarQube global analysis token, written into Vault                                           | None                                             |
+| `group-api-keys [Deprecated]` | Legacy static review bot API keys across target repositories                                      | None                                             |
+| `group-federation-anthropic`  | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`                   | None                                             |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing the Bootstrap Issuing Intermediate alone, and the intermediate issues every leaf certificate. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
-The layer `group-governance` publishes four masked group variables read out of Vault: `CLAUDE_MR_REVIEWER`, `GEMINI_MR_REVIEWER`, `SONAR_TOKEN`, and `TAG_PUSH_TOKEN`. A Personal Access Token supplies the reviewer variables, because Project Access Token creation is unavailable under the GitLab Free tier.
+The layer `group-governance` publishes the masked group variable `SONAR_TOKEN` read out of Vault. Reviewer bot credentials have migrated to the project layer (`meta-gitlab-project`) via `provisioner-code-reviewer`.
 
 The layer `group-sonarqube` owns the path prefix `infrastructure/token/`, and the CLI owns the path prefix `infrastructure/credentials/`. The separation keeps one writer per Vault path.
 
@@ -344,21 +385,22 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 
 1.  Apply `foundation-vault-bastion`.
 2.  Apply `group-foundation`.
-3.  Apply `meta-gitlab-project` and `group-topology` in either order.
-4.  Apply `group-gitlab-runner`, then start the runner service declared in `compose.yml`.
-5.  Apply `group-sonarqube` once the SonarQube service becomes ready.
-6.  Apply `group-governance`, which reads the token written by `group-sonarqube`.
-7.  Apply `group-api-keys` at any point after `group-foundation`.
+3.  Apply `group-federation-*` (for example `group-federation-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
+4.  Apply `meta-gitlab-project` and `group-topology` in either order.
+5.  Apply `group-gitlab-runner`, then start the runner service declared in `compose.yml`.
+6.  Apply `group-sonarqube` once the SonarQube service becomes ready.
+7.  Apply `group-governance`, which reads the token written by `group-sonarqube`.
+8.  Apply `group-api-keys [Deprecated]` at any point after `group-foundation`.
 
 ### Item D. Shared Modules
 
 - `contexts-local-credential` does not declare any resource. The module exposes the Bastion Vault endpoint, the CA path, the Vault token, and the GitLab state authentication block as outputs. Every layer reads the endpoint from the module instead of redeclaring a default.
-- `provisioner-gitlab-project` creates one GitLab project with a fixed merge policy, branch protection on `main`, and the optional AI review variables. The caller supplies every environment specific value.
+- `provisioner-gitlab-project` creates one GitLab project with a fixed merge policy, branch protection on `main`, and generic `extra_variables`. The caller supplies every environment specific value.
 - `provisioner-vault-credential` generates a set of random passwords and writes one KV version 2 secret. The module is the single generation point for the secrets under its control.
 
 ## Section 7. Continuous Integration
 
-The pipeline includes five components published by the `gitlab-ci-with-code-reviewer` project at version 1.5.1.
+The pipeline includes five components published by the `gitlab-ci-with-code-reviewer` project at version 1.6.7.
 
 - The `core` component runs the AI merge request reviewer and the SonarQube analysis.
 - The `iac-terraform` component runs Checkov across the Terraform tree. Four checks are skipped: three GitLab checks require a paid subscription tier, and `CKV_TF_1` demands commit pinned Git URLs, which conflicts with the immutable semantic versions already used from the GitLab Terraform Registry.

@@ -2,19 +2,7 @@
 ephemeral "vault_kv_secret_v2" "state_backend" {
   provider = vault.bastion
   mount    = "secret"
-  name     = "parent-group-governance/state-backend"
-}
-
-data "vault_kv_secret_v2" "code_reviewer_bot" {
-  provider = vault.bastion
-  mount    = "secret"
-  name     = "parent-group-governance/bots/code-reviewer-bot"
-}
-
-data "vault_kv_secret_v2" "version_tag_bot" {
-  provider = vault.bastion
-  mount    = "secret"
-  name     = "parent-group-governance/bots/version-tag-bot"
+  name     = "parent-group-governance/terraform/state-backend"
 }
 
 data "terraform_remote_state" "group_topology" {

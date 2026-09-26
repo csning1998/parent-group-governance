@@ -1,5 +1,6 @@
 
+# Downstream project IDs MUST be listed here to permit their CI_JOB_TOKEN to access this private repository's packages and modules.
 inbound_job_token_scope_project_ids = [
-  12345678, # allowed repo
-  23456789, # another allowed repo
+  12345678, # example downstream project ID
+  23456789, # another downstream project ID
 ]

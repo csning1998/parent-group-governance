@@ -6,11 +6,13 @@ run "meta_platform_project" {
   command = plan
 
   variables {
-    name           = "meta-platform"
-    description    = "Shared platform infrastructure and GitLab group governance for the csning1998-lab group."
-    visibility     = "public"
-    namespace_id   = 142251633
-    claude_api_key = "fake-claude-key"
+    name         = "meta-platform"
+    description  = "Shared platform infrastructure and GitLab group governance for the csning1998-lab group."
+    visibility   = "public"
+    namespace_id = 142251633
+    extra_variables = {
+      CLAUDE_API_KEY = "fake-claude-key"
+    }
   }
 
   assert {
@@ -29,17 +31,17 @@ run "meta_platform_project" {
   }
 
   assert {
-    condition     = length(gitlab_project_variable.review_api_key) == 1
-    error_message = "a non-empty claude_api_key must create exactly one project variable"
+    condition     = length(gitlab_project_variable.extra) == 1
+    error_message = "a non-empty extra_variables map must create exactly one project variable"
   }
 
   assert {
-    condition     = gitlab_project_variable.review_api_key["CLAUDE_API_KEY"].masked == true && gitlab_project_variable.review_api_key["CLAUDE_API_KEY"].hidden == true
-    error_message = "a review API key variable must stay masked and hidden"
+    condition     = gitlab_project_variable.extra["CLAUDE_API_KEY"].masked == true && gitlab_project_variable.extra["CLAUDE_API_KEY"].hidden == true
+    error_message = "a project variable must stay masked and hidden"
   }
 }
 
-run "no_review_api_keys" {
+run "no_extra_variables" {
   command = plan
 
   variables {
@@ -48,8 +50,8 @@ run "no_review_api_keys" {
   }
 
   assert {
-    condition     = length(gitlab_project_variable.review_api_key) == 0
-    error_message = "omitting both api keys must create zero project variables"
+    condition     = length(gitlab_project_variable.extra) == 0
+    error_message = "omitting extra_variables must create zero project variables"
   }
 
   assert {
@@ -63,39 +65,26 @@ run "no_review_api_keys" {
   }
 }
 
-run "gemini_key_only" {
+run "multiple_extra_variables" {
   command = plan
 
   variables {
-    name           = "meta-platform"
-    namespace_id   = 142251633
-    gemini_api_key = "fake-gemini-key"
+    name         = "meta-platform"
+    namespace_id = 142251633
+    extra_variables = {
+      CLAUDE_API_KEY = "fake-claude-key"
+      GEMINI_API_KEY = "fake-gemini-key"
+    }
   }
 
   assert {
-    condition     = length(gitlab_project_variable.review_api_key) == 1
-    error_message = "a non-empty gemini_api_key alone must create exactly one project variable"
+    condition     = length(gitlab_project_variable.extra) == 2
+    error_message = "setting two extra_variables must create exactly two project variables"
   }
 
   assert {
-    condition     = contains(keys(gitlab_project_variable.review_api_key), "GEMINI_API_KEY")
-    error_message = "the created variable must be keyed GEMINI_API_KEY"
-  }
-}
-
-run "both_review_api_keys" {
-  command = plan
-
-  variables {
-    name           = "meta-platform"
-    namespace_id   = 142251633
-    claude_api_key = "fake-claude-key"
-    gemini_api_key = "fake-gemini-key"
-  }
-
-  assert {
-    condition     = length(gitlab_project_variable.review_api_key) == 2
-    error_message = "setting both keys must create exactly two project variables"
+    condition     = contains(keys(gitlab_project_variable.extra), "GEMINI_API_KEY")
+    error_message = "the created variable must contain GEMINI_API_KEY"
   }
 }
 

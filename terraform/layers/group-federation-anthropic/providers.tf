@@ -6,10 +6,6 @@ terraform {
       source  = "ippontech/anthropic"
       version = "1.43.5"
     }
-    gitlab = {
-      source  = "gitlabhq/gitlab"
-      version = "19.2.0"
-    }
     vault = {
       source  = "hashicorp/vault"
       version = "5.5.0"
@@ -17,9 +13,9 @@ terraform {
   }
 
   backend "http" {
-    address        = "https://gitlab.com/api/v4/projects/86417732/terraform/state/meta-gitlab-project"
-    lock_address   = "https://gitlab.com/api/v4/projects/86417732/terraform/state/meta-gitlab-project/lock"
-    unlock_address = "https://gitlab.com/api/v4/projects/86417732/terraform/state/meta-gitlab-project/lock"
+    address        = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-federation-anthropic"
+    lock_address   = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-federation-anthropic/lock"
+    unlock_address = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-federation-anthropic/lock"
     lock_method    = "POST"
     unlock_method  = "DELETE"
     retry_wait_min = 5
@@ -28,10 +24,6 @@ terraform {
 
 provider "anthropic" {
   admin_api_key = ephemeral.vault_kv_secret_v2.anthropic_admin_key.data["anthropic_admin_api_key"]
-}
-
-provider "gitlab" {
-  token = ephemeral.vault_kv_secret_v2.state_backend.data["token"]
 }
 
 provider "vault" {
