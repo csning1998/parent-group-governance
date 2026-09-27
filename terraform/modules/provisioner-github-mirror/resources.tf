@@ -9,6 +9,8 @@ data "gitlab_project_mirror_public_key" "this" {
 }
 
 resource "github_repository" "this" {
+  #checkov:skip=CKV_GIT_1: Repository visibility dynamically reflects the source GitLab project visibility.
+  #checkov:skip=CKV2_GIT_1: Branch protection is governed upstream on GitLab while GitHub acts as a push mirror.
   name        = var.github_repository.name
   description = coalesce(var.github_repository.description, data.gitlab_project.this.description, "")
   visibility  = local.github_visibility[coalesce(var.github_repository.visibility, data.gitlab_project.this.visibility)]
