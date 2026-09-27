@@ -13,7 +13,7 @@ This module provides the single source of truth for the local credential context
 ```hcl
 module "local_credential_contexts" {
   source  = "gitlab.com/csning1998-lab/contexts-local-credential/gitlab"
-  version = "~> 0.1"
+  version = "~> 0.3.0"
 }
 
 provider "vault" {
