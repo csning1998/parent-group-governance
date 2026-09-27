@@ -55,16 +55,16 @@ models:
     max_tokens: 32768
     # (Requires REVIEW_BASE_URL and REVIEW_API_VERSION provided via CI/CD inputs or environment variables)
 
-# xAI Grok configuration example (Grok 4.x flagship series)
-# grok-4-7:
-#   provider: grok
-#   model: grok-4.7
-#   reasoning_level: high
-#   temperature: 0.0
-#   prompt_file: .gitlab/code_review_guidelines/generic_rules.md
-#   # Optional tuning parameters:
-#   # max_tokens: 16384
-#   # top_p: 0.95
+  # xAI Grok configuration example (Grok 4.x flagship series)
+  # grok-4-7:
+  #   provider: grok
+  #   model: grok-4.7
+  #   reasoning_level: high
+  #   temperature: 0.0
+  #   prompt_file: .gitlab/code_review_guidelines/generic_rules.md
+  #   # Optional tuning parameters:
+  #   # max_tokens: 16384
+  #   # top_p: 0.95
 
 slots:
   primary: claude-sonnet-5
