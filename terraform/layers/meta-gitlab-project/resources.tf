@@ -61,3 +61,14 @@ module "code_reviewer" {
   gitlab_project_id    = module.baseline.project_id
   legacy_alias_enabled = true
 }
+
+module "github_mirror" {
+  source = "../../modules/provisioner-github-mirror"
+
+  gitlab_project_id = module.baseline.project_id
+
+  github_repository = {
+    name  = "parent-group-governance"
+    owner = var.github_owner
+  }
+}

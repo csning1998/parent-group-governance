@@ -35,3 +35,9 @@ ephemeral "vault_kv_secret_v2" "anthropic_admin_key" {
   mount    = "secret"
   name     = "parent-group-governance/ai-provider-console/anthropic"
 }
+
+ephemeral "vault_kv_secret_v2" "github_publication" {
+  provider = vault.bastion
+  mount    = "secret"
+  name     = "parent-group-governance/github/publication"
+}
