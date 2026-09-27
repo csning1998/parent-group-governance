@@ -4,3 +4,5 @@ inbound_job_token_scope_project_ids = [
   12345678, # example downstream project ID
   23456789, # another downstream project ID
 ]
+
+github_owner = "example-org"

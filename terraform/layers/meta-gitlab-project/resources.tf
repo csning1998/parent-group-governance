@@ -55,9 +55,21 @@ module "workload_identity_federation" {
 }
 
 module "code_reviewer" {
-  source    = "../../../../gitlab-ci-with-code-reviewer/terraform/modules/provisioner-code-reviewer"
+  source    = "gitlab.com/csning1998-lab/provisioner-code-reviewer/gitlab"
+  version   = "~> 1.7.0"
   providers = { vault = vault.bastion }
 
   gitlab_project_id    = module.baseline.project_id
   legacy_alias_enabled = true
+}
+
+module "github_mirror" {
+  source = "../../modules/provisioner-github-mirror"
+
+  gitlab_project_id = module.baseline.project_id
+
+  github_repository = {
+    name  = "parent-group-governance"
+    owner = var.github_owner
+  }
 }

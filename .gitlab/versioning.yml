@@ -11,3 +11,5 @@ modules:
     dir: "terraform/modules/contexts-local-credential"
   - name: "provisioner-workload-identity-federation"
     dir: "terraform/modules/provisioner-workload-identity-federation"
+  - name: "provisioner-github-mirror"
+    dir: "terraform/modules/provisioner-github-mirror"
