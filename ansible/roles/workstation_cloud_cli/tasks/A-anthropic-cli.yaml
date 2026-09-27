@@ -1,0 +1,49 @@
+---
+- name: "Block A: Install and verify Anthropic CLI (ant)"
+  block:
+    - name: "Task A1. Check if ant CLI binary exists"
+      ansible.builtin.stat:
+        path: "{{ workstation_cloud_cli_ant_install_dir }}/ant"
+      register: workstation_cloud_cli_ant_stat
+
+    - name: "Task A2. Verify or ensure ant CLI binary is executable"
+      ansible.builtin.file:
+        path: "{{ workstation_cloud_cli_ant_install_dir }}/ant"
+        mode: "0755"
+        owner: root
+        group: root
+        state: file
+      when: workstation_cloud_cli_ant_stat.stat.exists
+
+    - name: "Task A3. Ensure install directory exists"
+      ansible.builtin.file:
+        path: "{{ workstation_cloud_cli_ant_install_dir }}"
+        state: directory
+        mode: "0755"
+        owner: root
+        group: root
+      when: not workstation_cloud_cli_ant_stat.stat.exists
+
+    - name: "Task A3b. Download ant CLI binary"
+      ansible.builtin.get_url:
+        url: "{{ workstation_cloud_cli_ant_download_url }}"
+        dest: "{{ workstation_cloud_cli_ant_install_dir }}/ant"
+        mode: "0755"
+        owner: root
+        group: root
+      when: not workstation_cloud_cli_ant_stat.stat.exists
+
+    - name: "Task A4. Verify ant CLI execution"
+      ansible.builtin.command:
+        cmd: "{{ workstation_cloud_cli_ant_install_dir }}/ant --version"
+      register: workstation_cloud_cli_ant_version_result
+      changed_when: false
+
+    - name: "Task A5. Print ant CLI verification result"
+      ansible.builtin.debug:
+        msg: "Anthropic CLI verified successfully: {{ workstation_cloud_cli_ant_version_result.stdout }}"
+
+  rescue:
+    - name: "Block A: Anthropic CLI installation and verification failed"
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"

@@ -10,3 +10,13 @@ output "anthropic_federation" {
   description = "Publishes Anthropic federation identifiers when enabled."
   value       = try(local.bindings.anthropic.document, null)
 }
+
+output "azure_federation" {
+  description = "Publishes Microsoft Azure federation identifiers when enabled."
+  value       = try(local.bindings.azure.document, null)
+}
+
+output "google_federation" {
+  description = "Publishes Google Cloud federation identifiers when enabled."
+  value       = try(local.bindings.google.document, null)
+}

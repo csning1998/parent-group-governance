@@ -1,0 +1,39 @@
+---
+- name: "Block C: Install and verify Azure CLI (az)"
+  block:
+    - name: "Task C1. Configure Microsoft Azure CLI repository"
+      ansible.builtin.yum_repository:
+        name: azure-cli
+        description: "Azure CLI"
+        baseurl: "{{ workstation_cloud_cli_azure_repo_url }}"
+        enabled: true
+        gpgcheck: true
+        repo_gpgcheck: false
+        gpgkey: "{{ workstation_cloud_cli_azure_gpg_key }}"
+        state: present
+      when: workstation_cloud_cli_azure_repo_url | length > 0
+
+    - name: "Task C2. Install pinned azure-cli package"
+      ansible.builtin.dnf:
+        name: "{{ workstation_cloud_cli_azure_package }}"
+        state: "{{ workstation_cloud_cli_azure_state }}"
+
+    - name: "Task C3. Verify az CLI execution"
+      ansible.builtin.command:
+        cmd: "az version --output json"
+      register: workstation_cloud_cli_az_version_result
+      changed_when: false
+
+    - name: "Task C4. Print az CLI verification result"
+      ansible.builtin.debug:
+        msg: >-
+          Azure CLI verified successfully:
+          {{
+            (workstation_cloud_cli_az_version_result.stdout | from_json)['azure-cli'] |
+            default(workstation_cloud_cli_az_version_result.stdout)
+          }}
+
+  rescue:
+    - name: "Block C: Azure CLI installation and verification failed"
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"

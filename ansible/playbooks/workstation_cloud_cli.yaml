@@ -1,0 +1,7 @@
+---
+- name: "Play [Workstation CLI]: Install AI and Cloud Provider CLIs (ant, gcloud, az)"
+  hosts: workstation
+  become: true
+  gather_facts: true
+  roles:
+    - workstation_cloud_cli

@@ -1,0 +1,33 @@
+---
+- name: "Block B: Install and verify Google Cloud CLI (gcloud)"
+  block:
+    - name: "Task B1. Configure Google Cloud SDK repository"
+      ansible.builtin.yum_repository:
+        name: google-cloud-cli
+        description: "Google Cloud CLI"
+        baseurl: "{{ workstation_cloud_cli_gcloud_repo_url }}"
+        enabled: true
+        gpgcheck: true
+        repo_gpgcheck: false
+        gpgkey: "{{ workstation_cloud_cli_gcloud_gpg_key }}"
+        state: present
+
+    - name: "Task B2. Install pinned google-cloud-cli package"
+      ansible.builtin.dnf:
+        name: "{{ workstation_cloud_cli_gcloud_package }}"
+        state: "{{ workstation_cloud_cli_gcloud_state }}"
+
+    - name: "Task B3. Verify gcloud CLI execution"
+      ansible.builtin.command:
+        cmd: "gcloud version"
+      register: workstation_cloud_cli_gcloud_version_result
+      changed_when: false
+
+    - name: "Task B4. Print gcloud CLI verification result"
+      ansible.builtin.debug:
+        msg: "Google Cloud CLI verified successfully: {{ workstation_cloud_cli_gcloud_version_result.stdout_lines[0] }}"
+
+  rescue:
+    - name: "Block B: Google Cloud CLI installation and verification failed"
+      ansible.builtin.fail:
+        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"

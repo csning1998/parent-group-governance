@@ -77,12 +77,12 @@ Rootless Podman MUST be running under the operator account, because the Podman A
 
 ### Item C. Optional Host Tools
 
-The Anthropic CLI `ant` is an optional host tool required solely by the `group-federation-anthropic` layer when managing the Anthropic federation issuer. The `./governance env verify` command does not validate the presence of `ant`.
+The Anthropic CLI `ant`, Google Cloud CLI `gcloud`, and Azure CLI `az` are host tools used when managing Workload Identity Federation across AI and cloud providers. The `./governance env verify` command does not validate the presence of these tools.
 
-The operator MAY install `ant` using the supported Ansible role `workstation_anthropic_cli`, which downloads a pinned binary release into `/usr/local/bin`. Any alternative installation method which places `ant` on `PATH` is equally valid.
+The operator can install these CLIs using the supported Ansible role `workstation_cloud_cli`:
 
 ```bash
-cd ansible && ansible-playbook playbooks/workstation_anthropic_cli.yaml --ask-become-pass && cd -
+cd ansible && ansible-playbook playbooks/workstation_cloud_cli.yaml --ask-become-pass && cd -
 ```
 
 Authentication is an interactive manual step. The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to running `terraform apply` across `group-federation-anthropic` or `meta-gitlab-project`, the operator MUST log in, extract the temporary access token, and record the credential into Bastion Vault at `parent-group-governance/ai-provider-console/anthropic`.

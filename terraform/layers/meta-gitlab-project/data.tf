@@ -14,6 +14,16 @@ data "terraform_remote_state" "group_federation_anthropic" {
   config  = merge(local._state_auth, { address = "${local._state_base}/group-federation-anthropic" })
 }
 
+data "terraform_remote_state" "group_federation_gcp" {
+  backend = "http"
+  config  = merge(local._state_auth, { address = "${local._state_base}/group-federation-gcp" })
+}
+
+data "terraform_remote_state" "group_federation_azure" {
+  backend = "http"
+  config  = merge(local._state_auth, { address = "${local._state_base}/group-federation-azure" })
+}
+
 ephemeral "vault_kv_secret_v2" "state_backend" {
   provider = vault.bastion
   mount    = "secret"

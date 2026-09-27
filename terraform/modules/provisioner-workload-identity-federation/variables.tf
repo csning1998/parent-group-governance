@@ -38,6 +38,74 @@ variable "anthropic_federation" {
   }
 }
 
+variable "google_federation" {
+  description = "Specifies configuration for Google Cloud Workload Identity Federation."
+  type = object({
+    project_id         = string
+    project_number     = string
+    pool_id            = string
+    provider_id        = string
+    service_account_id = optional(string)
+    roles              = optional(list(string), ["roles/aiplatform.user", "roles/serviceusage.serviceUsageConsumer"])
+  })
+  default = null
+
+  validation {
+    condition     = var.google_federation == null ? true : can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.google_federation.project_id))
+    error_message = "google_federation.project_id must be a valid GCP project ID (6 to 30 characters, lowercase letters, digits, hyphens)."
+  }
+
+  validation {
+    condition     = var.google_federation == null ? true : can(regex("^[0-9]+$", var.google_federation.project_number))
+    error_message = "google_federation.project_number must be numeric."
+  }
+
+  validation {
+    condition     = var.google_federation == null ? true : can(regex("^[a-z0-9-]+$", var.google_federation.pool_id))
+    error_message = "google_federation.pool_id must contain only lowercase letters, digits, and hyphens."
+  }
+
+  validation {
+    condition     = var.google_federation == null ? true : can(regex("^[a-z0-9-]+$", var.google_federation.provider_id))
+    error_message = "google_federation.provider_id must contain only lowercase letters, digits, and hyphens."
+  }
+
+  validation {
+    condition     = var.google_federation == null ? true : (var.google_federation.service_account_id == null || can(regex("^[a-z](?:[-a-z0-9]{4,28}[a-z0-9])$", var.google_federation.service_account_id)))
+    error_message = "google_federation.service_account_id must be null or 6 to 30 characters matching ^[a-z](?:[-a-z0-9]{4,28}[a-z0-9])$."
+  }
+}
+
+variable "azure_federation" {
+  description = "Specifies configuration for Microsoft Azure Workload Identity Federation."
+  type = object({
+    tenant_id            = string
+    subscription_id      = string
+    cognitive_account_id = string
+    openai_endpoint      = string
+    application_name     = optional(string)
+    audiences            = optional(list(string), ["https://gitlab.com"])
+    subjects             = optional(list(string))
+    roles                = optional(list(string), ["Cognitive Services OpenAI User"])
+  })
+  default = null
+
+  validation {
+    condition     = var.azure_federation == null ? true : can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.azure_federation.tenant_id))
+    error_message = "azure_federation.tenant_id must be a lowercase UUID."
+  }
+
+  validation {
+    condition     = var.azure_federation == null ? true : can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.azure_federation.subscription_id))
+    error_message = "azure_federation.subscription_id must be a lowercase UUID."
+  }
+
+  validation {
+    condition     = var.azure_federation == null ? true : can(regex("^https://", var.azure_federation.openai_endpoint))
+    error_message = "azure_federation.openai_endpoint must be an HTTPS URL."
+  }
+}
+
 variable "vault_kv_mount_path" {
   description = "Specifies the Vault KV-v2 engine mount path."
   type        = string

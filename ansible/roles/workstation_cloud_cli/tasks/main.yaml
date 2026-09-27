@@ -1,0 +1,27 @@
+---
+- name: "Section 0. Require root privilege"
+  ansible.builtin.assert:
+    that:
+      - ansible_effective_user_id == 0
+    fail_msg: "This role requires become: true to install system packages and binaries."
+
+- name: "Section A. Install Anthropic CLI (ant)"
+  ansible.builtin.include_tasks: A-anthropic-cli.yaml
+  when: workstation_cloud_cli_enable_ant | bool
+  tags:
+    - ant
+    - anthropic
+
+- name: "Section B. Install Google Cloud CLI (gcloud)"
+  ansible.builtin.include_tasks: B-gcloud-cli.yaml
+  when: workstation_cloud_cli_enable_gcloud | bool
+  tags:
+    - gcloud
+    - google
+
+- name: "Section C. Install Azure CLI (az)"
+  ansible.builtin.include_tasks: C-azure-cli.yaml
+  when: workstation_cloud_cli_enable_azure | bool
+  tags:
+    - az
+    - azure

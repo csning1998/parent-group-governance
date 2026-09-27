@@ -1,0 +1,25 @@
+---
+# Global enable flags
+workstation_cloud_cli_enable_ant: true
+workstation_cloud_cli_enable_gcloud: true
+workstation_cloud_cli_enable_azure: true
+
+# Anthropic CLI configuration
+workstation_cloud_cli_ant_version: "1.35.0"
+workstation_cloud_cli_ant_install_dir: "/usr/local/bin"
+workstation_cloud_cli_ant_download_url: >-
+  https://storage.googleapis.com/anthropic-cli/{{ workstation_cloud_cli_ant_version }}/linux-amd64/ant
+
+# Google Cloud CLI configuration (pinned to latest verified release)
+workstation_cloud_cli_gcloud_version: "586.0.0-1"
+workstation_cloud_cli_gcloud_package: "google-cloud-cli-{{ workstation_cloud_cli_gcloud_version }}"
+workstation_cloud_cli_gcloud_repo_url: "https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64"
+workstation_cloud_cli_gcloud_gpg_key: "https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg"
+workstation_cloud_cli_gcloud_state: "present"
+
+# Azure CLI configuration (pinned to latest verified release)
+workstation_cloud_cli_azure_version: "2.83.0"
+workstation_cloud_cli_azure_package: "azure-cli-{{ workstation_cloud_cli_azure_version }}*"
+workstation_cloud_cli_azure_repo_url: "https://packages.microsoft.com/yumrepos/azure-cli"
+workstation_cloud_cli_azure_gpg_key: "https://packages.microsoft.com/keys/microsoft.asc"
+workstation_cloud_cli_azure_state: "present"
