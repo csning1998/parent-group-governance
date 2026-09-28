@@ -35,7 +35,8 @@ func (s Static) Token(context.Context) (string, error) {
 }
 
 // DefaultAuthMountPath specifies the default Vault JWT auth backend mount path.
-const DefaultAuthMountPath = "gitlab-saas-jwt"
+// Refer to: terraform/layers/foundation-vault-bastion/locals.tf
+const DefaultAuthMountPath = "gitlab-saas-ci-job-jwt-provider"
 
 // VaultKVConfig specifies parameters for exchanging a JWT for a secret from Vault.
 type VaultKVConfig struct {

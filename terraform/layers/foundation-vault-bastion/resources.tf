@@ -124,7 +124,7 @@ resource "vault_kv_secret_v2" "terraform_admin_auth" {
 # GitLab SaaS JWT Auth Backend.
 resource "vault_jwt_auth_backend" "gitlab_saas" {
   provider           = vault.bastion
-  path               = "gitlab-saas-jwt"
+  path               = local.gitlab_saas_jwt_mount_path
   type               = "jwt"
   oidc_discovery_url = "https://gitlab.com"
   bound_issuer       = "https://gitlab.com"

@@ -50,7 +50,6 @@ flowchart LR
     Topology --> Runner["terraform group-gitlab-runner"]
     Topology --> Sonar["terraform group-sonarqube"]
     Sonar --> Governance["terraform group-governance"]
-    Topology --> ApiKeys["terraform group-api-keys [Deprecated]"]
     VaultLifecycle --> Rotate["governance credential rotation"]
 ```
 
@@ -370,14 +369,13 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 | `group-governance`            | Group labels and the group CI variables sourced from Vault                                        | `group-topology`                                 |
 | `group-gitlab-runner`         | The group runner registration and the rendered `gitlab-runner-configs/config.toml`                | `group-topology`                                 |
 | `group-sonarqube`             | The SonarQube global analysis token, written into Vault                                           | None                                             |
-| `group-api-keys [Deprecated]` | Legacy static review bot API keys across target repositories                                      | None                                             |
 | `group-federation-anthropic`  | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`                   | None                                             |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing the Bootstrap Issuing Intermediate alone, and the intermediate issues every leaf certificate. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
 The layer `group-governance` publishes the masked group variable `SONAR_TOKEN` read out of Vault. Reviewer bot credentials have migrated to the project layer (`meta-gitlab-project`) via `provisioner-code-reviewer`.
 
-The layer `group-sonarqube` owns the path prefix `infrastructure/token/`, and the CLI owns the path prefix `infrastructure/credentials/`. The separation keeps one writer per Vault path.
+The layer `group-sonarqube` writes the path `sonarqube/ci-analysis-bot`. The path `sonarqube/admin-account` is written manually. The separation keeps one writer per Vault path.
 
 ### Item C. Apply Order
 
@@ -390,7 +388,6 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 5.  Apply `group-gitlab-runner`, then start the runner service declared in `compose.yml`.
 6.  Apply `group-sonarqube` once the SonarQube service becomes ready.
 7.  Apply `group-governance`, which reads the token written by `group-sonarqube`.
-8.  Apply `group-api-keys [Deprecated]` at any point after `group-foundation`.
 
 ### Item D. Shared Modules
 

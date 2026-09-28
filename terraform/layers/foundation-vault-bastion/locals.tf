@@ -20,8 +20,10 @@ data "local_file" "bastion_vault_ca" {
 # Documentation: documentation/architecture/platform-spire-parent-frontend.md Section 4 Item D, Item E.
 # JWT-backed auth mounts share an identical five-grant ACL template.
 locals {
+  gitlab_saas_jwt_mount_path = "gitlab-saas-ci-job-jwt-provider"
+
   jwt_auth_backends = [
-    { path_key = "gitlab-saas-jwt", label = "SaaS GitLab" },
+    { path_key = local.gitlab_saas_jwt_mount_path, label = "SaaS GitLab" },
   ]
 
   jwt_auth_backend_policy = join("\n\n", [

@@ -64,7 +64,7 @@ func newMockVaultHandler(p mockServerParams) http.Handler {
 func handleMockLogin(w http.ResponseWriter, r *http.Request, p mockServerParams) bool {
 	authMount := p.authMountPath
 	if authMount == "" {
-		authMount = "gitlab-saas-jwt"
+		authMount = tokensource.DefaultAuthMountPath
 	}
 	if r.URL.Path != fmt.Sprintf("/v1/auth/%s/login", authMount) {
 		return false
