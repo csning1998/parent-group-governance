@@ -8,10 +8,10 @@ resource "sonarqube_user_token" "ci_analysis" {
   type = "GLOBAL_ANALYSIS_TOKEN"
 }
 
-# infrastructure/token/* belongs to this layer. infrastructure/credentials/* belongs to governance.
+# The path sonarqube/ci-analysis-bot is written by this layer, while sonarqube/admin-account is written manually.
 resource "vault_kv_secret_v2" "sonar_token" {
   provider  = vault.bastion
   mount     = "secret"
-  name      = "parent-group-governance/infrastructure/token/sonarqube"
-  data_json = jsonencode({ sonarqube_ci_token = sonarqube_user_token.ci_analysis.token })
+  name      = "parent-group-governance/sonarqube/ci-analysis-bot"
+  data_json = jsonencode({ token = sonarqube_user_token.ci_analysis.token })
 }
