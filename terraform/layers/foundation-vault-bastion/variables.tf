@@ -14,7 +14,7 @@ variable "pki_intermediate_ca_common_name" {
 variable "pki_intermediate_mount_path" {
   description = "Mount path of the Bootstrap Issuing Intermediate PKI secrets engine"
   type        = string
-  default     = "pki_int"
+  default     = "pki-intermediate"
 
   validation {
     condition     = can(regex("^[a-zA-Z0-9_-]+$", var.pki_intermediate_mount_path))

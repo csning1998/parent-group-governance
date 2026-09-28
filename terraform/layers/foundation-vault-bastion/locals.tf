@@ -10,7 +10,7 @@ module "local_credential_contexts" {
 }
 
 locals {
-  bastion_pki_inter_mount_path = var.pki_intermediate_mount_path
+  bastion_pki_intermediate_mount_path = var.pki_intermediate_mount_path
 }
 
 data "local_file" "bastion_vault_ca" {

@@ -3,7 +3,7 @@
 # Root CA mount and certificate generation for the internal trust hierarchy.
 resource "vault_mount" "pki_root" {
   provider    = vault.bastion
-  path        = "pki"
+  path        = "pki-root"
   type        = "pki"
   description = "Infrastructure Root CA. Signs only the Bootstrap Issuing Intermediate."
 
@@ -31,9 +31,9 @@ resource "local_file" "bastion_vault_ca_copy" {
 }
 
 # 2. Bootstrap Issuing Intermediate.
-resource "vault_mount" "pki_inter" {
+resource "vault_mount" "pki_intermediate" {
   provider    = vault.bastion
-  path        = local.bastion_pki_inter_mount_path
+  path        = local.bastion_pki_intermediate_mount_path
   type        = "pki"
   description = "Bootstrap Issuing Intermediate. Issues pre-Production-Vault leaf certificates and signs the Production Vault intermediate."
 
@@ -41,9 +41,9 @@ resource "vault_mount" "pki_inter" {
   max_lease_ttl_seconds     = 60 * 60 * 24 * 365
 }
 
-resource "vault_pki_secret_backend_intermediate_cert_request" "pki_inter_csr" {
+resource "vault_pki_secret_backend_intermediate_cert_request" "pki_intermediate_csr" {
   provider = vault.bastion
-  backend  = vault_mount.pki_inter.path
+  backend  = vault_mount.pki_intermediate.path
 
   type        = "internal"
   common_name = var.pki_intermediate_ca_common_name
@@ -51,14 +51,14 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "pki_inter_csr" {
   key_bits    = 4096
 
   # Append mount accessor to force resource replacement and private key regeneration when the backend mount is recreated.
-  key_name = "inter-${vault_mount.pki_inter.accessor}"
+  key_name = "inter-${vault_mount.pki_intermediate.accessor}"
 }
 
-resource "vault_pki_secret_backend_root_sign_intermediate" "pki_inter_signed" {
+resource "vault_pki_secret_backend_root_sign_intermediate" "pki_intermediate_signed" {
   provider = vault.bastion
   backend  = vault_mount.pki_root.path
 
-  csr                  = vault_pki_secret_backend_intermediate_cert_request.pki_inter_csr.csr
+  csr                  = vault_pki_secret_backend_intermediate_cert_request.pki_intermediate_csr.csr
   common_name          = var.pki_intermediate_ca_common_name
   format               = "pem"
   ttl                  = 60 * 60 * 24 * 365 # 1 Year
@@ -69,24 +69,54 @@ resource "vault_pki_secret_backend_root_sign_intermediate" "pki_inter_signed" {
 }
 
 # Import intermediate certificate into backend to complete CSR registration.
-resource "vault_pki_secret_backend_intermediate_set_signed" "pki_inter_set" {
+resource "vault_pki_secret_backend_intermediate_set_signed" "pki_intermediate_set" {
   provider    = vault.bastion
-  backend     = vault_mount.pki_inter.path
-  certificate = vault_pki_secret_backend_root_sign_intermediate.pki_inter_signed.certificate
+  backend     = vault_mount.pki_intermediate.path
+  certificate = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
 }
 
-resource "vault_pki_secret_backend_config_urls" "pki_inter_urls" {
+resource "vault_pki_secret_backend_config_urls" "pki_intermediate_urls" {
   provider = vault.bastion
-  backend  = vault_mount.pki_inter.path
+  backend  = vault_mount.pki_intermediate.path
 
-  issuing_certificates    = ["${module.local_credential_contexts.bastion_vault_config.endpoint}/v1/${vault_mount.pki_inter.path}/ca"]
-  crl_distribution_points = ["${module.local_credential_contexts.bastion_vault_config.endpoint}/v1/${vault_mount.pki_inter.path}/crl"]
+  issuing_certificates    = ["${module.local_credential_contexts.bastion_vault_config.endpoint}/v1/${vault_mount.pki_intermediate.path}/ca"]
+  crl_distribution_points = ["${module.local_credential_contexts.bastion_vault_config.endpoint}/v1/${vault_mount.pki_intermediate.path}/crl"]
 }
 
 # Set default issuer explicitly for the intermediate PKI backend.
-resource "vault_pki_secret_backend_config_issuers" "pki_inter_default" {
+resource "vault_pki_secret_backend_config_issuers" "pki_intermediate_default" {
   provider                      = vault.bastion
-  backend                       = vault_mount.pki_inter.path
-  default                       = vault_pki_secret_backend_intermediate_set_signed.pki_inter_set.imported_issuers[0]
+  backend                       = vault_mount.pki_intermediate.path
+  default                       = vault_pki_secret_backend_intermediate_set_signed.pki_intermediate_set.imported_issuers[0]
   default_follows_latest_issuer = true
+}
+
+moved {
+  from = vault_mount.pki_inter
+  to   = vault_mount.pki_intermediate
+}
+
+moved {
+  from = vault_pki_secret_backend_intermediate_cert_request.pki_inter_csr
+  to   = vault_pki_secret_backend_intermediate_cert_request.pki_intermediate_csr
+}
+
+moved {
+  from = vault_pki_secret_backend_root_sign_intermediate.pki_inter_signed
+  to   = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed
+}
+
+moved {
+  from = vault_pki_secret_backend_intermediate_set_signed.pki_inter_set
+  to   = vault_pki_secret_backend_intermediate_set_signed.pki_intermediate_set
+}
+
+moved {
+  from = vault_pki_secret_backend_config_urls.pki_inter_urls
+  to   = vault_pki_secret_backend_config_urls.pki_intermediate_urls
+}
+
+moved {
+  from = vault_pki_secret_backend_config_issuers.pki_inter_default
+  to   = vault_pki_secret_backend_config_issuers.pki_intermediate_default
 }

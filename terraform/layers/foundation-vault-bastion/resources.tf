@@ -50,17 +50,17 @@ path "secret/destroy/parent-group-governance/*" {
 }
 
 # [5] Bootstrap Certificate Issuance.
-path "${local.bastion_pki_inter_mount_path}/issue/*" {
+path "${local.bastion_pki_intermediate_mount_path}/issue/*" {
   capabilities = ["create", "update"]
 }
 
 # [6] PKI Mount Configuration Read.
-path "sys/mounts/${local.bastion_pki_inter_mount_path}" {
+path "sys/mounts/${local.bastion_pki_intermediate_mount_path}" {
   capabilities = ["read"]
 }
 
 # [7] Intermediate CA Signing.
-path "${local.bastion_pki_inter_mount_path}/root/sign-intermediate" {
+path "${local.bastion_pki_intermediate_mount_path}/root/sign-intermediate" {
   capabilities = ["create", "update"]
 }
 
@@ -83,7 +83,7 @@ path "sys/policies/acl/*" {
 
 # [11] PKI Role Management: consumer-owned leaf certificate roles under the Bootstrap
 # Issuing Intermediate.
-path "${local.bastion_pki_inter_mount_path}/roles/*" {
+path "${local.bastion_pki_intermediate_mount_path}/roles/*" {
   capabilities = ["create", "read", "update", "delete"]
 }
 EOT

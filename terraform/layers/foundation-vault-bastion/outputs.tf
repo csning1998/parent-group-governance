@@ -42,10 +42,46 @@ output "bastion_pki_root_cert_pem" {
 
 output "bastion_pki_inter_cert_pem" {
   description = "Bootstrap Issuing Intermediate CA certificate (PEM), signed by the Infrastructure Root CA."
-  value       = vault_pki_secret_backend_root_sign_intermediate.pki_inter_signed.certificate
+  value       = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
 }
 
 output "bastion_pki_inter_mount_path" {
   description = "Mount path of the Bootstrap Issuing Intermediate PKI engine, used by downstream layers to request bootstrap leaf certificates."
-  value       = vault_mount.pki_inter.path
+  value       = vault_mount.pki_intermediate.path
+}
+
+output "tenant_owner_codes" {
+  description = "Owner codes registered as tenants of Bastion Vault."
+  value       = keys(local.tenants)
+}
+
+output "tenant_terraform_operator_role_names" {
+  description = "AppRole role name of the Terraform operator of each tenant, keyed by owner code."
+  value       = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_name }
+}
+
+output "tenant_terraform_operator_role_ids" {
+  description = "AppRole role ID of the Terraform operator of each tenant, keyed by owner code."
+  value       = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_id }
+}
+
+output "tenant_terraform_operator_secret_ids" {
+  description = "AppRole secret ID of the Terraform operator of each tenant, keyed by owner code."
+  value       = { for code, secret in vault_approle_auth_backend_role_secret_id.tenant_terraform_operator : code => secret.secret_id }
+  sensitive   = true
+}
+
+output "gitlab_saas_ci_job_jwt_provider_mount_path" {
+  description = "Mount path of the JWT auth backend which verifies GitLab.com CI job ID tokens."
+  value       = vault_jwt_auth_backend.gitlab_saas.path
+}
+
+output "bastion_pki_intermediate_cert_pem" {
+  description = "Bootstrap Issuing Intermediate CA certificate (PEM), signed by the Infrastructure Root CA."
+  value       = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
+}
+
+output "bastion_pki_intermediate_mount_path" {
+  description = "Mount path of the Bootstrap Issuing Intermediate PKI engine."
+  value       = vault_mount.pki_intermediate.path
 }
