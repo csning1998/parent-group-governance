@@ -1,7 +1,7 @@
 ---
 # Isolates module publication pipelines by module_name to prevent job name collisions across shared CI components.
 include:
-  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.0
+  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.1
     inputs:
       # Scopes publishing path to the module directory to isolate module artifacts
       # from repository-level governance configurations.
@@ -9,25 +9,25 @@ include:
       module_name: "provisioner-gitlab-project"
       module_system: "gitlab"
       tag_prefix: "provisioner-gitlab-project-"
-  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.0
+  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.1
     inputs:
       module_dir: "${CI_PROJECT_DIR}/terraform/modules/provisioner-vault-credential"
       module_name: "provisioner-vault-credential"
       module_system: "gitlab"
       tag_prefix: "provisioner-vault-credential-"
-  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.0
+  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.1
     inputs:
       module_dir: "${CI_PROJECT_DIR}/terraform/modules/contexts-local-credential"
       module_name: "contexts-local-credential"
       module_system: "gitlab"
       tag_prefix: "contexts-local-credential-"
-  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.0
+  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.1
     inputs:
       module_dir: "${CI_PROJECT_DIR}/terraform/modules/provisioner-workload-identity-federation"
       module_name: "provisioner-workload-identity-federation"
       module_system: "gitlab"
       tag_prefix: "provisioner-workload-identity-federation-"
-  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.0
+  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.1
     inputs:
       module_dir: "${CI_PROJECT_DIR}/terraform/modules/provisioner-github-mirror"
       module_name: "provisioner-github-mirror"

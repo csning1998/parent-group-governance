@@ -91,8 +91,8 @@ func TestJWTAuth_SuccessScenarios(t *testing.T) {
 			clientToken: "vault-token-default",
 		},
 		{
-			name:        "custom gitlab-saas-jwt mount path",
-			mount:       "gitlab-saas-jwt",
+			name:        "custom mount path",
+			mount:       "example-jwt-mount",
 			role:        "gitlab-ci-role",
 			jwt:         "valid-gitlab-ci-jwt",
 			clientToken: "vault-token-gitlab",
