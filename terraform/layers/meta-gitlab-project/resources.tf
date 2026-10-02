@@ -3,7 +3,7 @@ module "local_credential_contexts" {
   source = "../../modules/contexts-local-credential"
 }
 
-module "baseline" {
+module "provisioner_gitlab_project" {
   # Resolves relative to the directory containing this file (terraform/layers/<this layer>),
   # two levels up to terraform/, then into modules/provisioner-gitlab-project.
   source = "../../modules/provisioner-gitlab-project"
@@ -56,7 +56,7 @@ module "workload_identity_federation" {
 
 module "code_reviewer" {
   source    = "gitlab.com/csning1998-lab/provisioner-code-reviewer/gitlab"
-  version   = "~> 1.7.0"
+  version   = "~> 1.7.1"
   providers = { vault = vault.bastion }
 
   gitlab_project_id    = module.baseline.project_id
