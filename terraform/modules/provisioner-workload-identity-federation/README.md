@@ -20,8 +20,8 @@ module "workload_identity_federation" {
   }
 
   gitlab_project = {
-    id   = module.baseline.project_id
-    path = module.baseline.full_path
+    id   = module.provisioner_gitlab_project.project_id
+    path = module.provisioner_gitlab_project.full_path
     code = var.gitlab_project_name
   }
 
@@ -43,7 +43,7 @@ module "workload_identity_federation" {
     cognitive_account_id = data.terraform_remote_state.group_federation_azure.outputs.openai.id
     openai_endpoint      = data.terraform_remote_state.group_federation_azure.outputs.openai.endpoint
     subjects = [
-      "project_path:${module.baseline.full_path}:ref_type:branch:ref:main",
+      "project_path:${module.provisioner_gitlab_project.full_path}:ref_type:branch:ref:main",
     ]
   }
 }

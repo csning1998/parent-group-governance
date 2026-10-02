@@ -25,8 +25,8 @@ module "workload_identity_federation" {
   }
 
   gitlab_project = {
-    id   = module.baseline.project_id
-    path = module.baseline.full_path
+    id   = module.provisioner_gitlab_project.project_id
+    path = module.provisioner_gitlab_project.full_path
     code = "parent-group-governance"
   }
 
@@ -48,8 +48,8 @@ module "workload_identity_federation" {
     cognitive_account_id = data.terraform_remote_state.group_federation_azure.outputs.openai.id
     openai_endpoint      = data.terraform_remote_state.group_federation_azure.outputs.openai.endpoint
     subjects = [
-      "project_path:${module.baseline.full_path}:ref_type:branch:ref:main",
-      "project_path:${module.baseline.full_path}:ref_type:branch:ref:refactor/google-cloud-platform",
+      "project_path:${module.provisioner_gitlab_project.full_path}:ref_type:branch:ref:main",
+      "project_path:${module.provisioner_gitlab_project.full_path}:ref_type:branch:ref:refactor/google-cloud-platform",
     ]
   }
 }
@@ -59,14 +59,14 @@ module "code_reviewer" {
   version   = "~> 1.7.1"
   providers = { vault = vault.bastion }
 
-  gitlab_project_id    = module.baseline.project_id
+  gitlab_project_id    = module.provisioner_gitlab_project.project_id
   legacy_alias_enabled = true
 }
 
 module "github_mirror" {
   source = "../../modules/provisioner-github-mirror"
 
-  gitlab_project_id = module.baseline.project_id
+  gitlab_project_id = module.provisioner_gitlab_project.project_id
 
   github_repository = {
     name  = "parent-group-governance"
