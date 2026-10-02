@@ -76,3 +76,28 @@ run "fully_overridden_config" {
     error_message = "a fully overridden token_path must be honored, bypassing ~/.vault-token"
   }
 }
+
+run "bastion_ca_file_is_not_world_writable" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.foundation_vault_bastion[0]
+    values = {
+      outputs = {
+        bastion_vault = {
+          listener_ca_cert_pem = "-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local_file.bastion_ca_cert[0].file_permission == "0644"
+    error_message = "the CA certificate file must be readable by others and writable by the owner alone"
+  }
+
+  assert {
+    condition     = local_file.bastion_ca_cert[0].directory_permission == "0755"
+    error_message = "the tls directory must not be writable by group or others"
+  }
+}

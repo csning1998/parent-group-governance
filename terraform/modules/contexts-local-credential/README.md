@@ -47,7 +47,8 @@ The variable `bastion_vault_state` defines the remote state coordinates for retr
 | ------------- | -------- | ----------------------------- | ----------------------------------------------------------------- |
 | `project_id`  | `number` | `86417732`                    | GitLab project identifier hosting the remote state.               |
 | `state_name`  | `string` | `"foundation-vault-bastion"`  | Name of the Terraform state file in GitLab.                       |
-| `output_name` | `string` | `"bastion_vault_ca_cert_pem"` | Name of the state output containing the CA certificate PEM bytes. |
+| `output_name` | `string` | `"bastion_vault"` | Name of the state output object which holds the CA certificate PEM bytes. |
+| `attribute`   | `string` | `"listener_ca_cert_pem"` | Attribute of that output object which carries the CA certificate PEM bytes. |
 
 Upon initial execution by each consumer, the following command MUST be executed to bootstrap, as provider configurations cannot reliably depend on resources created during the same `apply` operation.
 
@@ -79,7 +80,7 @@ The `hashicorp/vault` Terraform provider requires a local file path for the `ca_
 
 A static certificate file MUST NOT be committed inside this module. A committed certificate becomes invalid when the Bastion Vault CA rotates. A caller pinned to a static module version continues trusting an expired certificate until an explicit version upgrade occurs.
 
-The chosen path extracts the certificate dynamically from remote state during `terraform apply`. The `foundation-vault-bastion` layer maintains the authoritative certificate file at `vault/tls/ca.pem`. The `foundation-vault-bastion` layer exports the certificate PEM bytes through the state output defined by `bastion_vault_state.output_name`. The `local_file.bastion_ca_cert` resource in consuming layers writes the PEM bytes to `${path.cwd}/tls/bastion-ca.pem` on each execution.
+The chosen path extracts the certificate dynamically from remote state during `terraform apply`. The `foundation-vault-bastion` layer maintains the authoritative certificate file at `vault/tls/ca.pem`. The `foundation-vault-bastion` layer exports the certificate PEM bytes through the attribute `bastion_vault_state.attribute` of the state output object defined by `bastion_vault_state.output_name`. The `local_file.bastion_ca_cert` resource in consuming layers writes the PEM bytes to `${path.cwd}/tls/bastion-ca.pem` on each execution.
 
 ### Item B. State Synchronization and Operational Cost
 
