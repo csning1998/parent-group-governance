@@ -1,5 +1,5 @@
-# Every output is a category object of the Bastion Vault. A consumer reads one attribute of an object.
 
+# Every output is a category object of the Bastion Vault. A consumer reads one attribute of an object.
 output "bastion_vault" {
   description = "Connection facts of the Bastion Vault instance."
   value = {
