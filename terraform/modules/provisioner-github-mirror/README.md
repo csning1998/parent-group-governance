@@ -15,7 +15,7 @@ module "github_mirror" {
     source  = "gitlab.com/csning1998-lab/provisioner-github-mirror/gitlab"
     version = "~> 0.1.0"
 
-    gitlab_project_id = module.baseline.project_id
+    gitlab_project_id = module.provisioner_gitlab_project.project_id
 
     github_repository = {
         name        = var.gitlab_project_name

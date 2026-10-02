@@ -14,7 +14,8 @@ variable "bastion_vault_state" {
   type = object({
     project_id  = optional(number, 86417732)
     state_name  = optional(string, "foundation-vault-bastion")
-    output_name = optional(string, "bastion_vault_ca_cert_pem")
+    output_name = optional(string, "bastion_vault")
+    attribute   = optional(string, "listener_ca_cert_pem")
   })
   default = {}
 }
