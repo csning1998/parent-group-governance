@@ -7,7 +7,7 @@ locals {
     manage       = ["create", "read", "update", "delete", "list"]
     manage_mount = ["create", "read", "update", "delete", "sudo"]
     kv_data      = ["create", "read", "update", "delete"]
-    kv_metadata  = ["read", "list", "delete"]
+    kv_metadata  = ["create", "read", "update", "list", "delete"]
     kv_version   = ["update"]
   }
 
