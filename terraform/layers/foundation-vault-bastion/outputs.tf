@@ -1,87 +1,59 @@
+# Every output is a category object of the Bastion Vault. A consumer reads one attribute of an object.
 
-output "role_id" {
-  description = "The RoleID of the Terraform admin AppRole"
-  value       = vault_approle_auth_backend_role.terraform_admin.role_id
+output "bastion_vault" {
+  description = "Connection facts of the Bastion Vault instance."
+  value = {
+    endpoint              = module.local_credential_contexts.bastion_vault_config.endpoint
+    listener_ca_cert_path = abspath(local_file.bastion_vault_ca_copy.filename)
+    listener_ca_cert_pem  = data.local_file.bastion_vault_ca.content
+  }
 }
 
-output "secret_id" {
-  description = "The SecretID of the Terraform admin AppRole"
-  value       = vault_approle_auth_backend_role_secret_id.terraform_admin.secret_id
-  sensitive   = true
+output "bastion_vault_pki" {
+  description = "Certificate chain and mount path of the Bastion Vault PKI hierarchy."
+  value = {
+    root_cert_pem           = vault_pki_secret_backend_root_cert.root.certificate
+    intermediate_cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
+    intermediate_mount_path = vault_mount.pki_intermediate.path
+  }
 }
 
-output "approle_path" {
-  description = "The path where AppRole auth is enabled"
-  value       = vault_auth_backend.approle.path
+output "bastion_vault_auth" {
+  description = "Mount paths of the auth backends of the Bastion Vault."
+  value = {
+    approle_mount_path                         = vault_auth_backend.approle.path
+    gitlab_saas_ci_job_jwt_provider_mount_path = vault_jwt_auth_backend.gitlab_saas.path
+  }
 }
 
-output "role_name" {
-  description = "The name of the AppRole"
-  value       = vault_approle_auth_backend_role.terraform_admin.role_name
+output "bastion_vault_tenant" {
+  description = "Owner codes of the tenants registered on the Bastion Vault, and the AppRole identity with which the Terraform operator of each tenant logs in to the Bastion Vault, keyed by owner code."
+  value = {
+    owner_codes = keys(local.tenants)
+    terraform_operator = {
+      role_names = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_name }
+      role_ids   = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_id }
+    }
+  }
 }
 
-output "bastion_vault_endpoint" {
-  description = "The address of the Vault server"
-  value       = module.local_credential_contexts.bastion_vault_config.endpoint
+output "bastion_vault_tenant_credential" {
+  description = "AppRole secret ID with which the Terraform operator of each Bastion Vault tenant logs in to the Bastion Vault, keyed by owner code."
+  value = {
+    terraform_operator = {
+      secret_ids = { for code, secret in vault_approle_auth_backend_role_secret_id.tenant_terraform_operator : code => secret.secret_id }
+    }
+  }
+  sensitive = true
 }
 
-output "bastion_vault_listener_ca_cert_path" {
-  description = "Path to the Bastion Vault server's own listener TLS CA, for downstream layers connecting to this same Vault instance"
-  value       = abspath(local_file.bastion_vault_ca_copy.filename)
-}
-
-output "bastion_vault_ca_cert_pem" {
-  description = "PEM content of the Bastion Vault listener CA certificate, for contexts-local-credential to regenerate its own local copy from live state"
-  value       = data.local_file.bastion_vault_ca.content
-}
-
-output "bastion_pki_root_cert_pem" {
-  description = "Infrastructure Root CA certificate (PEM). Signs only the Bootstrap Issuing Intermediate."
-  value       = vault_pki_secret_backend_root_cert.root.certificate
-}
-
-output "bastion_pki_inter_cert_pem" {
-  description = "Bootstrap Issuing Intermediate CA certificate (PEM), signed by the Infrastructure Root CA."
-  value       = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
-}
-
-output "bastion_pki_inter_mount_path" {
-  description = "Mount path of the Bootstrap Issuing Intermediate PKI engine, used by downstream layers to request bootstrap leaf certificates."
-  value       = vault_mount.pki_intermediate.path
-}
-
-output "tenant_owner_codes" {
-  description = "Owner codes registered as tenants of Bastion Vault."
-  value       = keys(local.tenants)
-}
-
-output "tenant_terraform_operator_role_names" {
-  description = "AppRole role name of the Terraform operator of each tenant, keyed by owner code."
-  value       = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_name }
-}
-
-output "tenant_terraform_operator_role_ids" {
-  description = "AppRole role ID of the Terraform operator of each tenant, keyed by owner code."
-  value       = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_id }
-}
-
-output "tenant_terraform_operator_secret_ids" {
-  description = "AppRole secret ID of the Terraform operator of each tenant, keyed by owner code."
-  value       = { for code, secret in vault_approle_auth_backend_role_secret_id.tenant_terraform_operator : code => secret.secret_id }
-  sensitive   = true
-}
-
-output "gitlab_saas_ci_job_jwt_provider_mount_path" {
-  description = "Mount path of the JWT auth backend which verifies GitLab.com CI job ID tokens."
-  value       = vault_jwt_auth_backend.gitlab_saas.path
-}
-
-output "bastion_pki_intermediate_cert_pem" {
-  description = "Bootstrap Issuing Intermediate CA certificate (PEM), signed by the Infrastructure Root CA."
-  value       = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
-}
-
-output "bastion_pki_intermediate_mount_path" {
-  description = "Mount path of the Bootstrap Issuing Intermediate PKI engine."
-  value       = vault_mount.pki_intermediate.path
+# Intentional: this object stays available for re-provisioning after the tenant model is in place.
+output "bastion_vault_terraform_admin" {
+  description = "AppRole identity with which the Terraform admin logs in to the Bastion Vault."
+  value = {
+    role_name = vault_approle_auth_backend_role.terraform_admin.role_name
+    role_id   = vault_approle_auth_backend_role.terraform_admin.role_id
+    secret_id = vault_approle_auth_backend_role_secret_id.terraform_admin.secret_id
+  }
+  sensitive = true
 }
