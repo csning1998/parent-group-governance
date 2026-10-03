@@ -360,16 +360,17 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 
 ### Item B. Layer Inventory
 
-| Layer                         | Responsibility                                                                                    | Upstream State                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `foundation-vault-bastion`    | The PKI root, the issuing intermediate, the `terraform-admin` policy, and the AppRole credentials | None                                             |
-| `group-foundation`            | The top level group `Personal Lab` at path `csning1998-lab`                                       | None                                             |
-| `meta-gitlab-project`         | The GitLab project hosting this repository and every Terraform state                              | `group-foundation`, `group-federation-anthropic` |
-| `group-topology`              | Every subgroup and nested subgroup beneath the top level group                                    | `group-foundation`                               |
-| `group-governance`            | Group labels and the group CI variables sourced from Vault                                        | `group-topology`                                 |
-| `group-gitlab-runner`         | The group runner registration and the rendered `gitlab-runner-configs/config.toml`                | `group-topology`                                 |
-| `group-sonarqube`             | The SonarQube global analysis token, written into Vault                                           | None                                             |
-| `group-federation-anthropic`  | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`                   | None                                             |
+| Layer                        | Responsibility                                                                                  | Upstream State                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `foundation-vault-bastion`   | The PKI root, the issuing intermediate, the tenant AppRoles, the transit unseal keys, and audit | None                                             |
+| `group-vault-policy-broker`  | The tenant ACL and every requested tenant policy, checked against the tenant scope              | `foundation-vault-bastion`                       |
+| `group-foundation`           | The top level group `Personal Lab` at path `csning1998-lab`                                     | None                                             |
+| `meta-gitlab-project`        | The GitLab project hosting this repository and every Terraform state                            | `group-foundation`, `group-federation-anthropic` |
+| `group-topology`             | Every subgroup and nested subgroup beneath the top level group                                  | `group-foundation`                               |
+| `group-governance`           | Group labels and the group CI variables sourced from Vault                                      | `group-topology`                                 |
+| `group-gitlab-runner`        | The group runner registration and the rendered `gitlab-runner-configs/config.toml`              | `group-topology`                                 |
+| `group-sonarqube`            | The SonarQube global analysis token, written into Vault                                         | None                                             |
+| `group-federation-anthropic` | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`                 | None                                             |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing the Bootstrap Issuing Intermediate alone, and the intermediate issues every leaf certificate. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
