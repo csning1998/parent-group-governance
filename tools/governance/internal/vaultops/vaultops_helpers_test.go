@@ -98,6 +98,8 @@ type fakeTenantVault struct {
 	emptyData map[string]bool
 	// unwrappedMint returns the secret ID in clear even when the request asks for response wrapping.
 	unwrappedMint bool
+	// roles answers the role LIST of the mount. A nil roles answers 404, as Vault does for a mount without roles.
+	roles []string
 }
 
 func (f *fakeTenantVault) injectFault(suffix string, status int) {
@@ -166,6 +168,8 @@ func (f *fakeTenantVault) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	rolePath := "/v1/auth/" + f.mount + "/role/" + fakeOperatorRole
 	switch c.path {
+	case "/v1/auth/" + f.mount + "/role":
+		f.serveRoleList(w, r)
 	case rolePath + "/role-id":
 		f.serveRoleID(w, c)
 	case rolePath + "/secret-id":
@@ -179,6 +183,18 @@ func (f *fakeTenantVault) serve(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeVaultErrors(w, http.StatusNotFound, "no handler for "+c.path)
 	}
+}
+
+func (f *fakeTenantVault) serveRoleList(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Vault-Token") != fakeAdminToken || r.URL.Query().Get("list") != "true" {
+		writeVaultErrors(w, http.StatusForbidden, "permission denied")
+		return
+	}
+	if f.roles == nil {
+		writeVaultErrors(w, http.StatusNotFound, "")
+		return
+	}
+	writeVaultJSON(w, map[string]interface{}{"data": map[string]interface{}{"keys": f.roles}})
 }
 
 func (f *fakeTenantVault) serveRoleID(w http.ResponseWriter, c tenantCall) {

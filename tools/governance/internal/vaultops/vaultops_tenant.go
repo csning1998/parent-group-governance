@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,6 +26,7 @@ var ErrWrapConsumed = errors.New("vaultops: wrapping token already consumed")
 const (
 	defaultTenantMount   = "approle"
 	defaultTenantWrapTTL = 60 * time.Second
+	tenantOperatorSuffix = "-terraform-operator"
 )
 
 // The pattern also rejects path separators and dot segments, since the code becomes a Vault path segment.
@@ -56,7 +58,7 @@ func OpenTenantSession(ctx context.Context, admin *vaultapi.Client, req TenantSe
 	}
 	mount := cmp.Or(req.Mount, defaultTenantMount)
 	ttl := formatVaultTTL(cmp.Or(req.WrapTTL, defaultTenantWrapTTL))
-	rolePath := "auth/" + mount + "/role/" + req.Tenant + "-terraform-operator"
+	rolePath := "auth/" + mount + "/role/" + req.Tenant + tenantOperatorSuffix
 
 	roleID, err := readRoleID(ctx, admin, rolePath)
 	if err != nil {
@@ -71,6 +73,33 @@ func OpenTenantSession(ctx context.Context, admin *vaultapi.Client, req TenantSe
 		return TenantSession{}, err
 	}
 	return loginTenant(ctx, admin, vaultclient.AppRoleAuth{Mount: mount, RoleID: roleID, SecretID: secretID})
+}
+
+// ListTenantCodes returns the sorted tenant codes whose Terraform operator role exists on the AppRole mount.
+// An empty mount selects approle.
+func ListTenantCodes(ctx context.Context, admin *vaultapi.Client, mount string) ([]string, error) {
+	if admin == nil {
+		return nil, errors.New("vaultops: nil admin client")
+	}
+	path := "auth/" + cmp.Or(mount, defaultTenantMount) + "/role"
+	secret, err := admin.Logical().ListWithContext(ctx, path)
+	if err != nil {
+		return nil, fmt.Errorf("vaultops: list tenant roles of %s: %w", path, err)
+	}
+	codes := []string{}
+	if secret == nil {
+		return codes, nil
+	}
+	keys, _ := secret.Data["keys"].([]interface{})
+	for _, key := range keys {
+		role, _ := key.(string)
+		code, isOperator := strings.CutSuffix(role, tenantOperatorSuffix)
+		if isOperator && tenantCodePattern.MatchString(code) {
+			codes = append(codes, code)
+		}
+	}
+	slices.Sort(codes)
+	return codes, nil
 }
 
 // TenantShell runs the session shell. Base is the environment which BuildTenantSessionEnv rewrites for the shell.

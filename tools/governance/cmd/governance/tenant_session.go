@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultops"
 )
 
@@ -19,6 +20,28 @@ func (a *app) runTenantSession(ctx context.Context, tenant string) error {
 	}
 	req := vaultops.TenantSessionRequest{Tenant: tenant}
 	return vaultops.RunTenantSession(ctx, p, admin, req, a.out, vaultops.TenantShell{Base: os.Environ(), Run: runInteractiveShell})
+}
+
+// runTenantSessionMenu lists the tenants of the Bastion Vault and opens a session for the chosen tenant.
+func (a *app) runTenantSessionMenu(ctx context.Context) error {
+	admin, err := vaultops.NewAuthenticatedBastionClient(a.newVaultPaths())
+	if err != nil {
+		return err
+	}
+	tenants, err := vaultops.ListTenantCodes(ctx, admin, "")
+	if err != nil {
+		return err
+	}
+	if len(tenants) == 0 {
+		a.out.Print(ui.Warn, "No tenant Terraform operator role exists on the Bastion Vault.")
+		return nil
+	}
+	index, ok := a.out.PromptSelect(a.in, "Select the tenant whose operator session to open:", tenants)
+	if !ok {
+		a.out.Print(ui.Error, msgInvalidOption)
+		return nil
+	}
+	return a.runTenantSession(ctx, tenants[index])
 }
 
 // resolveSessionShell returns $SHELL, or /bin/sh when $SHELL is empty.
