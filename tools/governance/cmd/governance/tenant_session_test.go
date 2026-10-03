@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -48,6 +49,47 @@ func TestRunInteractiveShell_ReturnsTheShellExitStatus(t *testing.T) {
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 3 {
 		t.Errorf("runInteractiveShell error = %v, want exit status 3", err)
+	}
+}
+
+// TestRunSessionShell_TreatsTheShellExitStatusAsInformation covers the exit status of the last command in the shell,
+// which says nothing about the session itself.
+func TestRunSessionShell_TreatsTheShellExitStatusAsInformation(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantOutput string
+	}{
+		{name: "non-zero exit", body: "exit 2", wantOutput: "Session shell exited with status 2."},
+		{name: "clean exit", body: "exit 0", wantOutput: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("SHELL", writeFakeShell(t, tt.body))
+			var buf bytes.Buffer
+			a := &app{out: ui.New(&buf, &buf)}
+
+			if err := a.runSessionShell(context.Background(), []string{"PATH=" + os.Getenv("PATH")}); err != nil {
+				t.Fatalf("runSessionShell error = %v, want nil", err)
+			}
+			if tt.wantOutput == "" && strings.Contains(buf.String(), "exited with status") {
+				t.Errorf("output = %q, want no exit status line", buf.String())
+			}
+			if tt.wantOutput != "" && !strings.Contains(buf.String(), tt.wantOutput) {
+				t.Errorf("output = %q, want %q", buf.String(), tt.wantOutput)
+			}
+		})
+	}
+}
+
+func TestRunSessionShell_ReturnsAStartFailure(t *testing.T) {
+	t.Setenv("SHELL", filepath.Join(t.TempDir(), "absent-shell"))
+	a := &app{out: ui.New(io.Discard, io.Discard)}
+
+	err := a.runSessionShell(context.Background(), []string{"PATH=" + os.Getenv("PATH")})
+	var exitErr *exec.ExitError
+	if err == nil || errors.As(err, &exitErr) {
+		t.Errorf("runSessionShell error = %v, want the start failure of an absent shell", err)
 	}
 }
 

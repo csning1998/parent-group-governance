@@ -3,6 +3,8 @@ package main
 import (
 	"cmp"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -19,7 +21,7 @@ func (a *app) runTenantSession(ctx context.Context, tenant string) error {
 		return err
 	}
 	req := vaultops.TenantSessionRequest{Tenant: tenant}
-	return vaultops.RunTenantSession(ctx, p, admin, req, a.out, vaultops.TenantShell{Base: os.Environ(), Run: runInteractiveShell})
+	return vaultops.RunTenantSession(ctx, p, admin, req, a.out, vaultops.TenantShell{Base: os.Environ(), Run: a.runSessionShell})
 }
 
 // runTenantSessionMenu lists the tenants of the Bastion Vault and opens a session for the chosen tenant.
@@ -42,6 +44,17 @@ func (a *app) runTenantSessionMenu(ctx context.Context) error {
 		return nil
 	}
 	return a.runTenantSession(ctx, tenants[index])
+}
+
+// runSessionShell runs the session shell and reports the exit status of the shell as information.
+func (a *app) runSessionShell(ctx context.Context, env []string) error {
+	err := runInteractiveShell(ctx, env)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		a.out.Print(ui.Info, fmt.Sprintf("Session shell exited with status %d.", exitErr.ExitCode()))
+		return nil
+	}
+	return err
 }
 
 // resolveSessionShell returns $SHELL, or /bin/sh when $SHELL is empty.
