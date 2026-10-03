@@ -376,7 +376,7 @@ The layer `foundation-vault-bastion` issues the credentials consumed by every la
 
 The layer `group-governance` publishes the masked group variable `SONAR_TOKEN` read out of Vault. Reviewer bot credentials have migrated to the project layer (`meta-gitlab-project`) via `provisioner-code-reviewer`.
 
-The layer `group-sonarqube` writes the path `sonarqube/ci-analysis-bot`. The path `sonarqube/admin-account` is written manually. The separation keeps one writer per Vault path.
+The layer `group-sonarqube` writes the path `sonarqube/ci-analysis-bot`. The `./governance` rotation of `sonarqube-admin-password` writes the path `sonarqube/admin-account`. The separation keeps one writer per Vault path.
 
 ### Item C. Apply Order
 

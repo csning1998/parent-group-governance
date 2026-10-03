@@ -9,7 +9,7 @@ locals {
   _state_auth = module.local_credential_contexts.state_auth_gitlab_saas
 
   group_variables_secret = {
-    SONAR_TOKEN = data.vault_kv_secret_v2.sonar_token.data["token"]
+    SONAR_TOKEN = data.vault_kv_secret_v2.sonar_token.data["sonarqube_ci_token"]
   }
 
   # Job containers connect to SonarQube through the sonarqube compose service endpoint
