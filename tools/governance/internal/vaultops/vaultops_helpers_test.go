@@ -174,8 +174,6 @@ func (f *fakeTenantVault) serve(w http.ResponseWriter, r *http.Request) {
 		f.serveUnwrap(w, c)
 	case "/v1/auth/" + f.mount + "/login":
 		f.serveLogin(w, c)
-	case "/v1/auth/token/lookup-self":
-		f.serveLookupSelf(w, c)
 	case "/v1/auth/token/revoke-self":
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -223,14 +221,6 @@ func (f *fakeTenantVault) serveLogin(w http.ResponseWriter, c tenantCall) {
 		return
 	}
 	writeVaultJSON(w, map[string]interface{}{"auth": map[string]interface{}{"client_token": fakeTenantToken, "accessor": fakeTenantAccess}})
-}
-
-func (f *fakeTenantVault) serveLookupSelf(w http.ResponseWriter, c tenantCall) {
-	if c.token != fakeTenantToken {
-		writeVaultErrors(w, http.StatusForbidden, "permission denied")
-		return
-	}
-	writeVaultJSON(w, map[string]interface{}{"data": map[string]interface{}{"accessor": fakeTenantAccess}})
 }
 
 func writeVaultJSON(w http.ResponseWriter, v interface{}) {

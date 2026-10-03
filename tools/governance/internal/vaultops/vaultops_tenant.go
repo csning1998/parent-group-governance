@@ -12,6 +12,7 @@ import (
 
 	vaultapi "github.com/hashicorp/vault/api"
 
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
 
@@ -41,8 +42,7 @@ type TenantSessionRequest struct {
 
 // TenantSession holds the tenant token which the session shell receives.
 type TenantSession struct {
-	Token    string
-	Accessor string
+	Token string
 }
 
 // OpenTenantSession mints a single-use wrapped secret ID with the operator client, unwraps the secret ID, and logs in
@@ -71,6 +71,30 @@ func OpenTenantSession(ctx context.Context, admin *vaultapi.Client, req TenantSe
 		return TenantSession{}, err
 	}
 	return loginTenant(ctx, admin, vaultclient.AppRoleAuth{Mount: mount, RoleID: roleID, SecretID: secretID})
+}
+
+// TenantShell runs the session shell. Base is the environment which BuildTenantSessionEnv rewrites for the shell.
+type TenantShell struct {
+	Base []string
+	Run  func(ctx context.Context, env []string) error
+}
+
+// RunTenantSession opens a tenant session, runs the shell with the session environment, and revokes the session token
+// after the shell exits, even when the shell fails or ctx is canceled.
+func RunTenantSession(ctx context.Context, p Paths, admin *vaultapi.Client, req TenantSessionRequest, out *ui.Printer, shell TenantShell) error {
+	session, err := OpenTenantSession(ctx, admin, req)
+	if err != nil {
+		return err
+	}
+	out.Print(ui.OK, fmt.Sprintf("Tenant session for %s opened. Exit the shell to revoke the token.", req.Tenant))
+
+	runErr := shell.Run(ctx, BuildTenantSessionEnv(shell.Base, session, p))
+	// The revoke outlives a canceled ctx, since an unrevoked token stays valid until its TTL ends.
+	revokeErr := RevokeTenantSession(context.WithoutCancel(ctx), admin, session)
+	if revokeErr == nil {
+		out.Print(ui.OK, "Tenant session token revoked.")
+	}
+	return errors.Join(runErr, revokeErr)
 }
 
 // RevokeTenantSession revokes the session token through revoke-self.
@@ -163,7 +187,7 @@ func unwrapSecretID(ctx context.Context, base *vaultapi.Client, wrappingToken st
 	return readDataString(secret, "secret_id", "sys/wrapping/unwrap")
 }
 
-// loginTenant logs in through a token-free client, then reads the accessor of the issued token.
+// loginTenant logs in through a token-free client.
 func loginTenant(ctx context.Context, base *vaultapi.Client, auth vaultclient.AppRoleAuth) (TenantSession, error) {
 	client, err := cloneWithToken(base, "")
 	if err != nil {
@@ -173,18 +197,7 @@ func loginTenant(ctx context.Context, base *vaultapi.Client, auth vaultclient.Ap
 	if err != nil {
 		return TenantSession{}, fmt.Errorf("vaultops: tenant login: %w", err)
 	}
-	session := TenantSession{Token: token}
-	client.SetToken(token)
-	secret, err := client.Auth().Token().LookupSelfWithContext(ctx)
-	if err == nil {
-		session.Accessor, err = readDataString(secret, "accessor", "auth/token/lookup-self")
-	}
-	if err != nil {
-		// The token is unusable to the caller, and a failed revoke leaves the token to expire at its TTL.
-		_ = RevokeTenantSession(ctx, base, session)
-		return TenantSession{}, fmt.Errorf("vaultops: look up tenant token: %w", err)
-	}
-	return session, nil
+	return TenantSession{Token: token}, nil
 }
 
 // cloneWithToken returns a copy of base which holds token alone, since Clone picks up the ambient VAULT_TOKEN.

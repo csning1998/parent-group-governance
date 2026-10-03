@@ -12,16 +12,19 @@ import (
 )
 
 func TestOpenTenantSession_ReturnsTenantSession(t *testing.T) {
-	_, srv := newFakeTenantVault(t, "approle")
+	fv, srv := newFakeTenantVault(t, "approle")
 	admin := newFakeAdminClient(t, srv.URL)
 
 	got, err := OpenTenantSession(context.Background(), admin, TenantSessionRequest{Tenant: "meta-platform"})
 	if err != nil {
 		t.Fatalf("OpenTenantSession: %v", err)
 	}
-	want := TenantSession{Token: fakeTenantToken, Accessor: fakeTenantAccess}
+	want := TenantSession{Token: fakeTenantToken}
 	if got != want {
 		t.Errorf("OpenTenantSession = %+v, want %+v", got, want)
+	}
+	if _, ok := findTenantCall(fv.snapshot(), "/lookup-self"); ok {
+		t.Error("OpenTenantSession sent lookup-self, which only reveals the token accessor")
 	}
 }
 
@@ -130,13 +133,12 @@ func TestOpenTenantSession_RejectsInvalidTenant(t *testing.T) {
 }
 
 // TestOpenTenantSession_FailsOnVaultFaults covers each Vault answer which MUST stop the session before the caller
-// receives a token, and the revoke of a token whose lookup fails.
+// receives a token.
 func TestOpenTenantSession_FailsOnVaultFaults(t *testing.T) {
 	tests := []struct {
-		name       string
-		inject     func(*fakeTenantVault)
-		wantErr    string
-		wantRevoke bool
+		name    string
+		inject  func(*fakeTenantVault)
+		wantErr string
 	}{
 		{name: "role id denied", inject: func(f *fakeTenantVault) { f.injectFault("/role-id", http.StatusForbidden) }, wantErr: "vaultops: read role id"},
 		{name: "role id absent", inject: func(f *fakeTenantVault) { f.injectEmptyData("/role-id") }, wantErr: "vaultops: role_id missing"},
@@ -145,8 +147,6 @@ func TestOpenTenantSession_FailsOnVaultFaults(t *testing.T) {
 		{name: "unwrap unavailable", inject: func(f *fakeTenantVault) { f.injectFault("/sys/wrapping/unwrap", http.StatusInternalServerError) }, wantErr: "vaultops: unwrap secret id"},
 		{name: "secret id absent", inject: func(f *fakeTenantVault) { f.injectEmptyData("/sys/wrapping/unwrap") }, wantErr: "vaultops: secret_id missing"},
 		{name: "login rejected", inject: func(f *fakeTenantVault) { f.injectFault("/login", http.StatusBadRequest) }, wantErr: "vaultops: tenant login"},
-		{name: "lookup denied", inject: func(f *fakeTenantVault) { f.injectFault("/lookup-self", http.StatusForbidden) }, wantErr: "vaultops: look up tenant token", wantRevoke: true},
-		{name: "accessor absent", inject: func(f *fakeTenantVault) { f.injectEmptyData("/lookup-self") }, wantErr: "vaultops: accessor missing", wantRevoke: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -156,9 +156,8 @@ func TestOpenTenantSession_FailsOnVaultFaults(t *testing.T) {
 
 			got, err := OpenTenantSession(context.Background(), admin, TenantSessionRequest{Tenant: "meta-platform"})
 			assertSessionFault(t, got, err, tt.wantErr)
-			_, revoked := findTenantCall(fv.snapshot(), "/revoke-self")
-			if revoked != tt.wantRevoke {
-				t.Errorf("revoke-self sent = %v, want %v", revoked, tt.wantRevoke)
+			if _, revoked := findTenantCall(fv.snapshot(), "/revoke-self"); revoked {
+				t.Error("revoke-self was sent although no tenant token was issued")
 			}
 		})
 	}
