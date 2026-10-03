@@ -17,16 +17,23 @@
 sonarqube/**/*
 coverage.out
 
+# Python
+__pycache__
+.coverage
+coverage.xml
+
 # HashiCorp Vault
 vault/data/*
 !vault/data/README.md
 vault/keys/
+vault/audit/
 tls/
 terraform/layers/foundation-vault-bastion/tls
 
 # Environment
 .env
 .env*.local
+stdout.txt
 
 # IDEs
 .vscode

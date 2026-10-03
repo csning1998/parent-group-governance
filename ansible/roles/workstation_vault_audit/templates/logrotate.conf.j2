@@ -1,0 +1,13 @@
+# Vault reopens the audit file on SIGHUP. The check reads the rest of audit.log.1 after a rotation.
+{{ workstation_vault_audit_log }} {
+    size {{ workstation_vault_audit_rotate_size }}
+    rotate {{ workstation_vault_audit_rotate_keep }}
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0600
+    postrotate
+        /usr/bin/podman kill --signal HUP {{ workstation_vault_audit_container }} >/dev/null 2>&1 || true
+    endscript
+}

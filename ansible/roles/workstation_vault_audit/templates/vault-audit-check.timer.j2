@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Bastion Vault audit check periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{ workstation_vault_audit_check_interval }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

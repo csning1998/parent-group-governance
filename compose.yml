@@ -46,6 +46,8 @@ services:
       - ./vault/vault.hcl:/opt/vault/vault.hcl
       - ./vault/data:/opt/vault/data
       - ./vault/tls:/opt/vault/tls
+      # foundation-vault-bastion writes the file audit device here. Vault refuses requests which no audit device records.
+      - ./vault/audit:/opt/vault/audit
     user: "${HOST_UID}:${HOST_GID}"
     cap_add:
       - IPC_LOCK

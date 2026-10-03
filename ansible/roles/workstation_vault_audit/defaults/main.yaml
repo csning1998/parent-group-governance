@@ -1,0 +1,23 @@
+---
+# Public contract. Callers MUST inject workstation_vault_audit_home from the operator account. The units run in the
+# user manager of the operator, the same account which runs the rootless Bastion Vault container.
+workstation_vault_audit_home: ""
+workstation_vault_audit_repository: "{{ workstation_vault_audit_home }}/GitLab/csning1998-lab/parent-group-governance"
+workstation_vault_audit_dir: "{{ workstation_vault_audit_repository }}/vault/audit"
+workstation_vault_audit_log: "{{ workstation_vault_audit_dir }}/audit.log"
+workstation_vault_audit_container: "parent-group-governance-vault-bastion"
+
+workstation_vault_audit_libexec_dir: "{{ workstation_vault_audit_home }}/.local/libexec/vault-audit"
+workstation_vault_audit_config_dir: "{{ workstation_vault_audit_home }}/.config/vault-audit"
+workstation_vault_audit_state_dir: "{{ workstation_vault_audit_home }}/.local/state/vault-audit"
+workstation_vault_audit_unit_dir: "{{ workstation_vault_audit_home }}/.config/systemd/user"
+
+# The check reads the new audit entries on every run and writes each finding to the journal at priority alert.
+workstation_vault_audit_check_interval: "5min"
+workstation_vault_audit_rotate_size: "100M"
+workstation_vault_audit_rotate_keep: 14
+
+# The transit mount of the auto-unseal keys. A decrypt from an address outside the source CIDRs raises a finding.
+# An empty list skips the source check, since the token_bound_cidrs of the role already rejects such a request.
+workstation_vault_audit_transit_mount: "transit-unseal"
+workstation_vault_audit_transit_source_cidrs: []

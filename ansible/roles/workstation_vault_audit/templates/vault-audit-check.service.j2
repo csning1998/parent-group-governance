@@ -1,0 +1,7 @@
+[Unit]
+Description=Check new Bastion Vault audit entries and alert through the journal
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/logrotate --state {{ workstation_vault_audit_state_dir }}/logrotate.status {{ workstation_vault_audit_config_dir }}/logrotate.conf
+ExecStart=/usr/bin/python3 {{ workstation_vault_audit_libexec_dir }}/vault_audit_check.py --config {{ workstation_vault_audit_config_dir }}/config.json

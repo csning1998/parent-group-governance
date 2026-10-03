@@ -1,0 +1,64 @@
+---
+- name: "Section 0. Require the operator home extra var"
+  ansible.builtin.assert:
+    that:
+      - workstation_vault_audit_home is string
+      - workstation_vault_audit_home | length > 0
+      - workstation_vault_audit_home != "/root"
+    fail_msg: >-
+      workstation_vault_audit_home must be the operator home directory. The CLI injects this extra var.
+
+# The parent vault/ directory carries container_file_t, and the audit directory inherits the label.
+- name: "Section A. Create the directories"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ workstation_vault_audit_dir }}"
+    - "{{ workstation_vault_audit_libexec_dir }}"
+    - "{{ workstation_vault_audit_config_dir }}"
+    - "{{ workstation_vault_audit_state_dir }}"
+    - "{{ workstation_vault_audit_unit_dir }}"
+
+- name: "Section B. Install the check and its configuration"
+  block:
+    - name: "B1. Install the check"
+      ansible.builtin.copy:
+        src: vault_audit_check.py
+        dest: "{{ workstation_vault_audit_libexec_dir }}/vault_audit_check.py"
+        mode: "0700"
+
+    - name: "B2. Render the check configuration"
+      ansible.builtin.template:
+        src: config.json.j2
+        dest: "{{ workstation_vault_audit_config_dir }}/config.json"
+        mode: "0600"
+
+    - name: "B3. Render the rotation configuration"
+      ansible.builtin.template:
+        src: logrotate.conf.j2
+        dest: "{{ workstation_vault_audit_config_dir }}/logrotate.conf"
+        mode: "0600"
+
+- name: "Section C. Install and start the timer"
+  block:
+    - name: "C1. Render the units"
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "{{ workstation_vault_audit_unit_dir }}/{{ item }}"
+        mode: "0644"
+      loop:
+        - vault-audit-check.service
+        - vault-audit-check.timer
+      notify: "Reload the user manager"
+
+    - name: "C2. Apply the unit changes"
+      ansible.builtin.meta: flush_handlers
+
+    - name: "C3. Enable the timer"
+      ansible.builtin.systemd_service:
+        name: vault-audit-check.timer
+        scope: user
+        enabled: true
+        state: started

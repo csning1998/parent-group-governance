@@ -1,0 +1,3 @@
+# Report paths MUST stay relative to the repository root, which the scanner container mounts at /usr/src.
+[run]
+relative_files = True
