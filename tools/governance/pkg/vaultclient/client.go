@@ -61,12 +61,45 @@ func (j JWTAuth) Login(ctx context.Context, client *vaultapi.Client) (string, er
 	if mount == "" {
 		mount = "jwt"
 	}
-	secret, err := client.Logical().WriteWithContext(ctx, "auth/"+mount+"/login", map[string]interface{}{
+	return submitLogin(ctx, client, "jwt", mount, map[string]interface{}{
 		"role": j.Role,
 		"jwt":  j.Token,
 	})
+}
+
+// AppRoleAuth defines parameters for Vault AppRole authentication.
+type AppRoleAuth struct {
+	Mount    string // Auth method mount path (defaults to "approle" if empty)
+	RoleID   string
+	SecretID string
+}
+
+// Login authenticates against Vault using an AppRole role ID and secret ID.
+func (a AppRoleAuth) Login(ctx context.Context, client *vaultapi.Client) (string, error) {
+	if client == nil {
+		return "", fmt.Errorf("vaultclient: nil client provided")
+	}
+	if a.RoleID == "" {
+		return "", fmt.Errorf("vaultclient: empty role id provided")
+	}
+	if a.SecretID == "" {
+		return "", fmt.Errorf("vaultclient: empty secret id provided")
+	}
+
+	mount := a.Mount
+	if mount == "" {
+		mount = "approle"
+	}
+	return submitLogin(ctx, client, "approle", mount, map[string]interface{}{
+		"role_id":   a.RoleID,
+		"secret_id": a.SecretID,
+	})
+}
+
+func submitLogin(ctx context.Context, client *vaultapi.Client, method, mount string, payload map[string]interface{}) (string, error) {
+	secret, err := client.Logical().WriteWithContext(ctx, "auth/"+mount+"/login", payload)
 	if err != nil {
-		return "", fmt.Errorf("vaultclient: jwt login: %w", err)
+		return "", fmt.Errorf("vaultclient: %s login: %w", method, err)
 	}
 	if secret == nil || secret.Auth == nil || secret.Auth.ClientToken == "" {
 		return "", fmt.Errorf("vaultclient: empty client token in auth response")
