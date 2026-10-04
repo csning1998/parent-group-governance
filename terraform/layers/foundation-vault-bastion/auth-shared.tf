@@ -1,4 +1,8 @@
 
+locals {
+  gitlab_saas_jwt_mount_path = "gitlab-saas-ci-job-jwt-provider"
+}
+
 # Enable AppRole auth backend
 resource "vault_auth_backend" "approle" {
   provider = vault.bastion

@@ -1,3 +1,4 @@
+
 # Each key is an owner code, and executing_repository names the repository running the Terraform of that tenant.
 locals {
   tenants = {
@@ -9,8 +10,8 @@ locals {
   tenant_operator_source_cidrs = ["127.0.0.1/32", "${cidrhost(local.platform_trust.bastion_publish_cidr, 1)}/32"]
 }
 
-# architecture-naming-standard.md Section 4 Item F: Vault ACL grants by prefix, hence no owner code followed by a
-# hyphen may prefix another owner code. A precondition stops the plan, while a failed check block only warns.
+# Vault ACL grants by prefix, hence no owner code followed by a hyphen may prefix another owner code.
+# A precondition stops the plan while a failed check block only warns.
 resource "terraform_data" "tenant_owner_codes_validation" {
   input = keys(local.tenants)
 

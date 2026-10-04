@@ -41,8 +41,6 @@ locals {
     ]
   }
 
-  acl_category_order = ["kv", "auth_mount", "auth_role", "pki", "cross_tenant"]
-
   # A rule with an assign scope writes auth roles, and the policy parameters of the rule stay within the scope ceiling.
   acl_rules = {
     for code in keys(local.tenants) : code => {
@@ -93,24 +91,32 @@ locals {
     }
   }
 
+  # A path declared twice fails the plan with a duplicate object key, instead of a silent override.
+  acl_entries = {
+    for code, categories in local.acl_rules : code => {
+      for rule in flatten(values(categories)) : rule.path => rule
+    }
+  }
+
+  acl_assign_parameters = {
+    for code, entries in local.acl_entries : code => {
+      for path, rule in entries : path => {
+        "token_policies" = local.tenant_assignable[code][rule.assign_scope]
+        "policies"       = local.tenant_assignable[code][rule.assign_scope]
+        "*"              = []
+      } if lookup(rule, "assign_scope", null) != null
+    }
+  }
+
+  # The inner filter yields zero or one entry, since a conditional cannot unify objects of different attributes.
   tenant_acl_document = {
-    for code in keys(local.tenants) : code => {
-      path = merge([
-        for category in local.acl_category_order : {
-          for rule in local.acl_rules[code][category] : rule.path => merge(
-            { capabilities = local.acl_capability[rule.capability] },
-            [
-              for scope in [lookup(rule, "assign_scope", null)] : {
-                allowed_parameters = {
-                  "token_policies" = local.tenant_assignable[code][scope]
-                  "policies"       = local.tenant_assignable[code][scope]
-                  "*"              = []
-                }
-              } if scope != null
-            ]...
-          )
-        }
-      ]...)
+    for code, entries in local.acl_entries : code => {
+      path = {
+        for path, rule in entries : path => merge(
+          { capabilities = local.acl_capability[rule.capability] },
+          { for scoped_path, parameters in local.acl_assign_parameters[code] : "allowed_parameters" => parameters if scoped_path == path },
+        )
+      }
     }
   }
 }

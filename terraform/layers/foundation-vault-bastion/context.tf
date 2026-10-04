@@ -9,14 +9,6 @@ module "local_credential_contexts" {
   }
 }
 
-locals {
-  bastion_pki_intermediate_mount_path = var.pki_intermediate_mount_path
-}
-
 data "local_file" "bastion_vault_ca" {
   filename = module.local_credential_contexts.bastion_vault_config.ca_cert_path
-}
-
-locals {
-  gitlab_saas_jwt_mount_path = "gitlab-saas-ci-job-jwt-provider"
 }

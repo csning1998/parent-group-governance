@@ -121,7 +121,7 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. The tenant A
 
 #### Item D.1 Declaration of Tenant AppRole
 
-`foundation-vault-bastion/resources-tenants.tf` declares one AppRole role for each tenant defined in the tenant registry `local.tenants`.
+`foundation-vault-bastion/tenants.tf` declares one AppRole role for each tenant defined in the tenant registry `local.tenants`.
 
 | Attribute               | Value                                                 | Rationale                                                                                                                                                                                            |
 | :---------------------- | :---------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -170,7 +170,7 @@ This section addresses T1, T2, T9, and T17 from Section 2 Item C. Vault OSS does
 
 #### Item E.1 Declaration
 
-1.  `foundation-vault-bastion/locals-tenant-acl.tf` declares the tenant ACL under the name `<code>-terraform-operator`.
+1.  `foundation-vault-bastion/tenants-acl.tf` declares the tenant ACL under the name `<code>-terraform-operator`.
 2.  The tenant ACL MUST NOT grant any write on `sys/policies/acl`.
 3.  Every rule which writes auth roles MUST restrict `token_policies` and `policies` through `allowed_parameters` to exact policy names.
 4.  A rule MUST NOT use a glob in `allowed_parameters`, because a glob admits a comma separated string which the auth method splits into two policies.
@@ -239,7 +239,7 @@ pgg declares four categories of policies. The tenant cannot rewrite these polici
 
 This section addresses T6 from Section 2 Item C. Platform trust facts govern the permitted and excluded scopes of Name Constraints. Any unreviewed modification is equivalent to relaxing certificate trust boundaries.
 
-`foundation-vault-bastion/locals-platform-trust.tf` reads the instance values from `secret/parent-group-governance/platform-trust` on the Bastion Vault. The instance values do not reside in the repository, since the repository is public and serves every deployment.
+`foundation-vault-bastion/platform-trust.tf` reads the instance values from `secret/parent-group-governance/platform-trust` on the Bastion Vault. The instance values do not reside in the repository, since the repository is public and serves every deployment.
 
 | Field                          | Source                | Example                                           | Purpose                                                                                                               |
 | :----------------------------- | :-------------------- | :------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------------- |

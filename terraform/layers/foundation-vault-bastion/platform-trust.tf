@@ -1,5 +1,5 @@
 
-# The instance values reside in the Bastion Vault, since this repository is public and serves every deployment.
+# The instance values reside in the Bastion Vault since this repository is public and serves every deployment.
 # Only the root token writes the path, and platform-trust.example.json documents the fields.
 data "vault_generic_secret" "platform_trust" {
   provider = vault.bastion
