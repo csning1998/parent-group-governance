@@ -2,8 +2,9 @@ package vaultops
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -27,7 +28,7 @@ func GenerateTLS(ctx context.Context, p Paths, out *ui.Printer) error {
 		return fmt.Errorf("vaultops: mkdir %s: %w", resolveTLSDir, err)
 	}
 
-	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return fmt.Errorf("vaultops: generate CA key: %w", err)
 	}
@@ -49,7 +50,7 @@ func GenerateTLS(ctx context.Context, p Paths, out *ui.Printer) error {
 		return fmt.Errorf("vaultops: create CA certificate: %w", err)
 	}
 
-	serverKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	serverKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return fmt.Errorf("vaultops: generate server key: %w", err)
 	}
@@ -62,7 +63,7 @@ func GenerateTLS(ctx context.Context, p Paths, out *ui.Printer) error {
 		Subject:      pkix.Name{CommonName: "localhost"},
 		NotBefore:    time.Now().Add(-5 * time.Minute),
 		NotAfter:     time.Now().AddDate(1, 0, 0),
-		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:     []string{"localhost"},
 		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("172.16.0.1")},
@@ -76,13 +77,13 @@ func GenerateTLS(ctx context.Context, p Paths, out *ui.Printer) error {
 		return fmt.Errorf("vaultops: create server certificate: %w", err)
 	}
 
-	if err := writePEMFile(filepath.Join(resolveTLSDir, "ca-key.pem"), "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(caKey), 0o600); err != nil {
+	if err := writePrivateKeyFile(filepath.Join(resolveTLSDir, "ca-key.pem"), caKey); err != nil {
 		return err
 	}
 	if err := writePEMFile(filepath.Join(resolveTLSDir, "ca.pem"), "CERTIFICATE", caDER, 0o644); err != nil {
 		return err
 	}
-	if err := writePEMFile(filepath.Join(resolveTLSDir, "vault-key.pem"), "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(serverKey), 0o600); err != nil {
+	if err := writePrivateKeyFile(filepath.Join(resolveTLSDir, "vault-key.pem"), serverKey); err != nil {
 		return err
 	}
 	if err := writePEMFile(filepath.Join(resolveTLSDir, "vault.pem"), "CERTIFICATE", serverDER, 0o644); err != nil {
@@ -100,6 +101,15 @@ func generateCertificateSerial() (*big.Int, error) {
 		return nil, fmt.Errorf("vaultops: generate certificate serial: %w", err)
 	}
 	return serial, nil
+}
+
+// writePrivateKeyFile stores the key as PKCS #8, which Vault and OpenSSL read for every key algorithm.
+func writePrivateKeyFile(path string, key *ecdsa.PrivateKey) error {
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return fmt.Errorf("vaultops: marshal %s: %w", path, err)
+	}
+	return writePEMFile(path, "PRIVATE KEY", der, 0o600)
 }
 
 func writePEMFile(path, blockType string, der []byte, mode os.FileMode) error {
