@@ -1,0 +1,7 @@
+---
+- name: "Play [Vault audit]: Rotate and check the Bastion Vault audit log"
+  hosts: workstation
+  become: false
+  gather_facts: false
+  roles:
+    - workstation_vault_audit

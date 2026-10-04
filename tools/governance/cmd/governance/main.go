@@ -12,6 +12,7 @@ import (
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultenv"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
 )
 
@@ -27,7 +28,7 @@ type app struct {
 }
 
 func main() {
-	os.Exit(execute())
+	os.Exit(execute(os.Args[1:]))
 }
 
 func resolveProjectRoot(start string) (string, error) {
@@ -48,8 +49,15 @@ func resolveProjectRoot(start string) (string, error) {
 	}
 }
 
-func execute() int {
+func execute(args []string) int {
 	out := ui.New(os.Stdout, os.Stderr)
+
+	// A stale VAULT_CACERT of a wiped TLS directory otherwise fails every client, and VAULT_SKIP_VERIFY disables verification.
+	err := vaultenv.Clear()
+	if err != nil {
+		out.Print(ui.Fatal, err.Error())
+		return 1
+	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -119,6 +127,7 @@ func execute() int {
 		a.newEnvCmd(),
 	)
 
+	rootCmd.SetArgs(args)
 	if err := rootCmd.Execute(); err != nil {
 		out.Print(ui.Error, err.Error())
 		return 1

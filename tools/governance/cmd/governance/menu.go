@@ -18,12 +18,14 @@ type menuOption struct {
 	run   func(ctx context.Context) error
 }
 
-func (a *app) runMenu(ctx context.Context) error {
+// buildMenuOptions returns the interactive menu entries, ending with Quit.
+func (a *app) buildMenuOptions() []menuOption {
 	options := []menuOption{
 		{"[Vault] Set up TLS for Bastion Vault", func(ctx context.Context) error { return a.generateVaultTLS(ctx) }},
 		{"[Vault] Initialize Bastion Vault", func(ctx context.Context) error { return a.initVault(ctx) }},
 		{"[Vault] Enable KV-v2 Engine", func(ctx context.Context) error { return a.enableVaultKV(ctx) }},
 		{"[Vault] Unseal Bastion Vault", func(ctx context.Context) error { return a.unsealVault(ctx) }},
+		{"[Vault] Open Tenant Operator Session", func(ctx context.Context) error { return a.runTenantSessionMenu(ctx) }},
 	}
 	if len(a.credentials) > 0 {
 		options = append(options,
@@ -37,6 +39,11 @@ func (a *app) runMenu(ctx context.Context) error {
 		menuOption{"[Hypervisor] Verify host IaC tools", func(ctx context.Context) error { return a.verifyEnvironment() }},
 		menuOption{"Quit", nil},
 	)
+	return options
+}
+
+func (a *app) runMenu(ctx context.Context) error {
+	options := a.buildMenuOptions()
 
 	a.out.Print(ui.Info, "======= Governance executor =======")
 	a.out.PrintDivider("")

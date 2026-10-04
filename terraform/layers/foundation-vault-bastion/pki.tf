@@ -16,7 +16,9 @@ resource "vault_pki_secret_backend_root_cert" "root" {
   backend     = vault_mount.pki_root.path
   common_name = var.pki_root_ca_common_name
   type        = "internal"
-  ttl         = "87600h" # 10 Years
+  key_type    = "ec"
+  key_bits    = 384
+  not_after   = "2035-12-31T23:59:59Z" # NIST IR 8547 disallows every quantum vulnerable signature after 2035.
 
   # Prevent resource destruction to avoid invalidating downstream certificates without a rotation handler.
   lifecycle {
@@ -33,7 +35,7 @@ resource "local_file" "bastion_vault_ca_copy" {
 # 2. Bootstrap Issuing Intermediate.
 resource "vault_mount" "pki_intermediate" {
   provider    = vault.bastion
-  path        = local.bastion_pki_intermediate_mount_path
+  path        = var.pki_intermediate_mount_path
   type        = "pki"
   description = "Bootstrap Issuing Intermediate. Issues pre-Production-Vault leaf certificates and signs the Production Vault intermediate."
 
@@ -47,11 +49,11 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "pki_intermediate_
 
   type        = "internal"
   common_name = var.pki_intermediate_ca_common_name
-  key_type    = "rsa"
-  key_bits    = 4096
+  key_type    = "ec"
+  key_bits    = 256
 
-  # Append mount accessor to force resource replacement and private key regeneration when the backend mount is recreated.
-  key_name = "inter-${vault_mount.pki_intermediate.accessor}"
+  # The key type and the mount accessor name the key, since Vault rejects a new key under an existing key name.
+  key_name = "inter-ec256-${vault_mount.pki_intermediate.accessor}"
 }
 
 resource "vault_pki_secret_backend_root_sign_intermediate" "pki_intermediate_signed" {
@@ -63,6 +65,7 @@ resource "vault_pki_secret_backend_root_sign_intermediate" "pki_intermediate_sig
   format               = "pem"
   ttl                  = 60 * 60 * 24 * 365 # 1 Year
   exclude_cn_from_sans = true
+  max_path_length      = 0 # The bootstrap intermediate lacks Name Constraints, hence a zero path length keeps the mount from signing a CA.
 
   # Pin issuer reference to trigger re-signing when the Root CA certificate is regenerated.
   issuer_ref = vault_pki_secret_backend_root_cert.root.issuer_id
@@ -89,34 +92,4 @@ resource "vault_pki_secret_backend_config_issuers" "pki_intermediate_default" {
   backend                       = vault_mount.pki_intermediate.path
   default                       = vault_pki_secret_backend_intermediate_set_signed.pki_intermediate_set.imported_issuers[0]
   default_follows_latest_issuer = true
-}
-
-moved {
-  from = vault_mount.pki_inter
-  to   = vault_mount.pki_intermediate
-}
-
-moved {
-  from = vault_pki_secret_backend_intermediate_cert_request.pki_inter_csr
-  to   = vault_pki_secret_backend_intermediate_cert_request.pki_intermediate_csr
-}
-
-moved {
-  from = vault_pki_secret_backend_root_sign_intermediate.pki_inter_signed
-  to   = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed
-}
-
-moved {
-  from = vault_pki_secret_backend_intermediate_set_signed.pki_inter_set
-  to   = vault_pki_secret_backend_intermediate_set_signed.pki_intermediate_set
-}
-
-moved {
-  from = vault_pki_secret_backend_config_urls.pki_inter_urls
-  to   = vault_pki_secret_backend_config_urls.pki_intermediate_urls
-}
-
-moved {
-  from = vault_pki_secret_backend_config_issuers.pki_inter_default
-  to   = vault_pki_secret_backend_config_issuers.pki_intermediate_default
 }

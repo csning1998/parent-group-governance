@@ -15,6 +15,13 @@ output "bastion_vault_pki" {
     root_cert_pem           = vault_pki_secret_backend_root_cert.root.certificate
     intermediate_cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
     intermediate_mount_path = vault_mount.pki_intermediate.path
+    constrained_intermediates = {
+      for name, mount in vault_mount.pki_constrained : name => {
+        owner      = local.constrained_intermediates[name].owner
+        mount_path = mount.path
+        cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed[name].certificate
+      }
+    }
   }
 }
 
@@ -27,7 +34,7 @@ output "bastion_vault_auth" {
 }
 
 output "bastion_vault_tenant" {
-  description = "Owner codes of the tenants registered on the Bastion Vault, and the AppRole identity with which the Terraform operator of each tenant logs in to the Bastion Vault, keyed by owner code."
+  description = "Owner codes of the tenants registered on the Bastion Vault, the KV v2 secret to which each tenant writes its policy requests, and the AppRole identity with which the Terraform operator of each tenant logs in to the Bastion Vault, keyed by owner code."
   value = {
     owner_codes = keys(local.tenants)
     terraform_operator = {
@@ -37,23 +44,24 @@ output "bastion_vault_tenant" {
   }
 }
 
-output "bastion_vault_tenant_credential" {
-  description = "AppRole secret ID with which the Terraform operator of each Bastion Vault tenant logs in to the Bastion Vault, keyed by owner code."
+output "bastion_vault_registry" {
+  description = "Mount of the registry which publishes tenant facts, and the read-only policy of each tenant, keyed by owner code. A tenant role references the policy and cannot rewrite the policy."
   value = {
-    terraform_operator = {
-      secret_ids = { for code, secret in vault_approle_auth_backend_role_secret_id.tenant_terraform_operator : code => secret.secret_id }
-    }
+    mount_path      = vault_mount.registry.path
+    reader_policies = { for code, policy in vault_policy.registry_reader : code => policy.name }
   }
-  sensitive = true
 }
 
-# Intentional: this object stays available for re-provisioning after the tenant model is in place.
-output "bastion_vault_terraform_admin" {
-  description = "AppRole identity with which the Terraform admin logs in to the Bastion Vault."
+output "bastion_vault_transit_unseal" {
+  description = "Transit mount, and the key and the policy of every auto-unsealing Vault cluster, keyed by consumer. A tenant role references the policy and cannot rewrite the policy."
   value = {
-    role_name = vault_approle_auth_backend_role.terraform_admin.role_name
-    role_id   = vault_approle_auth_backend_role.terraform_admin.role_id
-    secret_id = vault_approle_auth_backend_role_secret_id.terraform_admin.secret_id
+    mount_path = vault_mount.transit_unseal.path
+    consumers = {
+      for name, consumer in local.transit_unseal_consumers : name => {
+        owner       = consumer.owner
+        key_name    = vault_transit_secret_backend_key.transit_unseal[name].name
+        policy_name = vault_policy.transit_unseal[name].name
+      }
+    }
   }
-  sensitive = true
 }

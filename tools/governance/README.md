@@ -735,12 +735,14 @@ serverTemplate := &x509.Certificate{
     Subject:      pkix.Name{CommonName: "localhost"},
     NotBefore:    time.Now().Add(-5 * time.Minute),
     NotAfter:     time.Now().AddDate(1, 0, 0),
-    KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+    KeyUsage:     x509.KeyUsageDigitalSignature,
     ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
     DNSNames:     []string{"localhost"},
     IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("172.16.0.1")},
 }
 ```
+
+CA 與伺服器的金鑰都是 ECDSA P-256，由 `ecdsa.GenerateKey(elliptic.P256(), rand.Reader)` 產生。ECDSA 金鑰不做金鑰加密，因此伺服器憑證的 `KeyUsage` 只有 `DigitalSignature`。演算法的取捨與實測數據見 `documentation/architecture/bastion-vault-privilege-convergence.md` Section 7 Item H。
 
 `DNSNames` 與 `IPAddresses` 同時列出三個名稱，因為同一台 Vault 會被用不同的形式連上：容器內部走 `localhost`，主機透過迴環位址走 `127.0.0.1`，其他容器或虛擬機走橋接網段的 `172.16.0.1`。現行的 TLS 驗證只看主體替代名稱而不再參考 `CommonName`，任何一個沒有列進去的形式都會在握手時被判定為名稱不符。第三個位址與 Item A 的預設位址是同一個，兩者必須一起維護。
 
@@ -759,13 +761,13 @@ func generateCertificateSerial() (*big.Int, error) {
 四個檔案的權限分成兩級：
 
 ```go
-writePEMFile(filepath.Join(resolveTLSDir, "ca-key.pem"), "RSA PRIVATE KEY", ..., 0o600)
+writePrivateKeyFile(filepath.Join(resolveTLSDir, "ca-key.pem"), caKey)
 writePEMFile(filepath.Join(resolveTLSDir, "ca.pem"), "CERTIFICATE", ..., 0o644)
-writePEMFile(filepath.Join(resolveTLSDir, "vault-key.pem"), "RSA PRIVATE KEY", ..., 0o600)
+writePrivateKeyFile(filepath.Join(resolveTLSDir, "vault-key.pem"), serverKey)
 writePEMFile(filepath.Join(resolveTLSDir, "vault.pem"), "CERTIFICATE", ..., 0o644)
 ```
 
-兩把私鑰是 `0o600`，兩張憑證是 `0o644`。憑證本來就是要交給對方看的公開資料，而且 Vault 容器與客戶端都需要讀得到；私鑰一旦外流，持有者可以冒充這台 Vault，所以只有擁有者能讀。
+兩把私鑰由 `writePrivateKeyFile` 以 PKCS #8（`PRIVATE KEY`）寫成 `0o600`，兩張憑證是 `0o644`。憑證本來就是要交給對方看的公開資料，而且 Vault 容器與客戶端都需要讀得到；私鑰一旦外流，持有者可以冒充這台 Vault，所以只有擁有者能讀。
 
 ### Item C. 初始化與金鑰的持久化
 
