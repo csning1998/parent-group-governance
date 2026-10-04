@@ -16,7 +16,9 @@ resource "vault_pki_secret_backend_root_cert" "root" {
   backend     = vault_mount.pki_root.path
   common_name = var.pki_root_ca_common_name
   type        = "internal"
-  ttl         = "87600h" # 10 Years
+  key_type    = "ec"
+  key_bits    = 384
+  not_after   = "2035-12-31T23:59:59Z" # NIST IR 8547 disallows every quantum vulnerable signature after 2035.
 
   # Prevent resource destruction to avoid invalidating downstream certificates without a rotation handler.
   lifecycle {
@@ -47,11 +49,11 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "pki_intermediate_
 
   type        = "internal"
   common_name = var.pki_intermediate_ca_common_name
-  key_type    = "rsa"
-  key_bits    = 4096
+  key_type    = "ec"
+  key_bits    = 256
 
-  # Append mount accessor to force resource replacement and private key regeneration when the backend mount is recreated.
-  key_name = "inter-${vault_mount.pki_intermediate.accessor}"
+  # The key type and the mount accessor name the key, since Vault rejects a new key under an existing key name.
+  key_name = "inter-ec256-${vault_mount.pki_intermediate.accessor}"
 }
 
 resource "vault_pki_secret_backend_root_sign_intermediate" "pki_intermediate_signed" {

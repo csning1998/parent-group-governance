@@ -274,6 +274,8 @@ This section addresses T7, T8, and T16 from Section 2 Item C. The trust bundles 
 
 pgg embeds the Name Constraints of `pki-spire`, `pki-downstream`, and `pki-platform` into the intermediate CA certificates through `root/sign-intermediate` on `pki-root`. Subordinate callers cannot omit or loosen these restrictions.
 
+Every intermediate mount holds an ECDSA P-256 key. `pki-root` holds an ECDSA P-384 key and expires on 2035-12-31. Section 7 Item H records the measurements and the trade-offs of the key algorithms.
+
 #### Item B.2 Constraint Details
 
 | Mount            | Permitted                                                              | Excluded                                                              |
@@ -398,6 +400,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 7.  Signals intercepted by `signal.Notify` revert to default dispositions during exec, allowing commands in the sub-shell to be interrupted by Ctrl-C.
 8.  If the shell terminates with a non-zero exit status, `./governance` logs the status as INFO and does not treat the status as an execution failure.
 9.  If the shell fails to launch, `./governance` returns an error.
+10. `./governance` removes every Vault variable which the Vault API client reads, such as `VAULT_CACERT` and `VAULT_SKIP_VERIFY`, before any command runs. The Vault API client reads the process environment inside `NewClient`, and an ambient value therefore overrides or breaks an explicitly configured client. Without the removal, a stale `VAULT_CACERT` of a wiped TLS directory stops the CLI which regenerates the TLS directory. The sub-shell of a tenant session therefore receives only the three Vault variables of the session. Every test package which builds a Vault client clears the same variables in `TestMain`.
 
 ### Item D. Testing
 
@@ -500,6 +503,30 @@ For risks associated with rejecting this choice, refer to T11.
 
 1.  Accessors are omitted from output, as justified in Section 5 Item C.
 2.  The sub-shell exit status reflects only the last command executed within the shell, unrelated to whether the session was successful. `./governance` therefore outputs the exit status as INFO.
+
+### Item H. Key Algorithm of Intermediate CAs
+
+1.  Constraint: A mount generates the key of an intermediate CA once per rotation. The key signs only the certificates which the mount issues. The Bastion Vault signs at the rotation rate of the SPIRE Parent CA, the Downstream Vault CA, and a few listener certificates. The Downstream Vault and SPIRE sign at the request rate of tenants.
+2.  Decision: Every intermediate CA of the Bastion Vault holds an ECDSA P-256 key. The key name carries the key type, because Vault rejects a new key under an existing key name. The listener CA and the listener certificate which `./governance vault tls-generate` generates also hold ECDSA P-256 keys, stored as PKCS #8.
+3.  Cost: A change of the key type replaces each intermediate CA and every certificate below the intermediate CA.
+4.  Rejected alternative: Ed25519 provides the same security strength as P-256. Major browsers do not accept an Ed25519 signature in a TLS certificate chain, and the ecosystem support of Ed25519 is narrower than the support of P-256.
+
+The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 on one core of the operator workstation on 2026-10-04.
+
+| Algorithm   | Key Generation   | Signatures per Second | Verifications per Second |
+| :---------- | :--------------- | :-------------------- | :----------------------- |
+| RSA 2048    | 25 ms            | 2,765                 | 93,528                   |
+| RSA 4096    | 278 ms to 310 ms | 403                   | 24,849                   |
+| ECDSA P-256 | Not measured     | 77,360                | 23,170                   |
+| Ed25519     | Not measured     | 47,162                | 17,118                   |
+
+1.  The intermediate key algorithm does not limit the tenant count of the Bastion Vault. The Bastion Vault signs a few certificates per rotation, and one core signs 403 RSA 4096 signatures per second.
+2.  A TLS handshake verifies the chain. RSA verifies faster than ECDSA, and an RSA key in the chain therefore does not slow a handshake.
+3.  A Vault role which generates the leaf key through `issue` spends the key generation cost on every request. RSA 4096 limits one core to about three leaf keys per second. The roles of the Downstream Vault MUST therefore use ECDSA P-256. A `sign` request carries a key from the client, and the request does not spend the key generation cost in Vault.
+4.  NIST SP 800-57 Part 1 assigns 128 bits of security strength to both P-256 and RSA 3072. RSA 2048 provides 112 bits.
+5.  NIST IR 8547 initial public draft Table 2 deprecates digital signatures of 112 bits after 2030. Table 2 disallows every quantum vulnerable digital signature, ECDSA and EdDSA included, after 2035.
+6.  `pki-root` holds an ECDSA P-384 key at 192 bits of security strength, and `not_after` ends the root on 2035-12-31. The root therefore stays above the 112 bit level which item 5 deprecates, and the root expires before the disallowance date. The root replaced an RSA 2048 root with a TTL of 10 years, which would have served past both dates.
+7.  The root drops `prevent_destroy` for the one apply which replaces the root, and the layer restores `prevent_destroy` after the apply.
 
 ## Section 8. Deployment Order
 
@@ -664,6 +691,7 @@ Root token usage and rejected role writes MUST appear in the systemd journal.
 5.  `pki-intermediate` lacks Name Constraints. The zero path length keeps the mount from signing a CA, and tenants do not hold any grant on the mount.
 6.  `meta-gitlab-project` in mp still reads state from other pgg layers. mp therefore still requires a GitLab token with read privileges on the pgg project.
 7.  Ansible defaults in `workstation_libvirt` independently declare the Bastion publish address, which forms a second declaration source.
+8.  Every classical signature of the hierarchy, ECDSA P-384 included, is quantum vulnerable. NIST IR 8547 initial public draft disallows quantum vulnerable signatures after 2035, and the root therefore MUST be replaced by a root of a quantum resistant algorithm before 2035-12-31.
 
 ### Item B. Next Steps
 

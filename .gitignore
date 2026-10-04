@@ -39,5 +39,5 @@ stdout.txt
 # IDEs
 .vscode
 .idea
-merge-request.md
+merge-request*.md
 note.md

@@ -41,7 +41,8 @@ flowchart LR
     SELinux["Workstation SELinux registration"] --> Libvirt["Workstation libvirt prerequisites"]
     Libvirt --> Compose["podman compose up"]
     Compose --> VaultLifecycle["governance vault tls-generate, init, unseal, enable-kv"]
-    VaultLifecycle --> Foundation["terraform foundation-vault-bastion"]
+    VaultLifecycle --> PlatformTrust["vault kv put platform-trust"]
+    PlatformTrust --> Foundation["terraform foundation-vault-bastion"]
     Foundation --> GroupFoundation["terraform group-foundation"]
     Foundation --> Federation["terraform group-federation-* (WIF)"]
     GroupFoundation --> Project["terraform meta-gitlab-project"]
@@ -379,15 +380,28 @@ The layer `group-sonarqube` writes the path `sonarqube/ci-analysis-bot`. The `./
 
 ### Item C. Apply Order
 
-The order follows the upstream state column of Item B. The Bastion Vault instance MUST be unsealed with the KV version 2 engine mounted before the first layer is applied.
+The order follows the upstream state column of Item B. The Bastion Vault instance MUST be unsealed with the KV version 2 engine mounted before the first layer is applied. The platform trust facts MUST reside at `secret/parent-group-governance/platform-trust` before `foundation-vault-bastion` is planned. Every command below MUST run in a shell without `VAULT_TOKEN`, because the Vault provider prefers `VAULT_TOKEN` over `~/.vault-token`.
 
-1.  Apply `foundation-vault-bastion`.
-2.  Apply `group-foundation`.
-3.  Apply `group-federation-*` (for example `group-federation-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
-4.  Apply `meta-gitlab-project` and `group-topology` in either order.
-5.  Apply `group-gitlab-runner`, then start the runner service declared in `compose.yml`.
-6.  Apply `group-sonarqube` once the SonarQube service becomes ready.
-7.  Apply `group-governance`, which reads the token written by `group-sonarqube`.
+1.  Copy `terraform/layers/foundation-vault-bastion/platform-trust.example.json` to `platform-trust.json` in the same directory, and replace every example value with the value of the deployment. Git ignores `platform-trust.json`.
+2.  Write the facts from the repository root with the root token: `vault kv put secret/parent-group-governance/platform-trust @terraform/layers/foundation-vault-bastion/platform-trust.json`.
+3.  Apply `foundation-vault-bastion`.
+4.  Apply `group-foundation`.
+5.  Apply `group-federation-*` (for example `group-federation-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
+6.  Apply `meta-gitlab-project` and `group-topology` in either order.
+7.  Apply `group-gitlab-runner`, then start the runner service declared in `compose.yml`.
+8.  Apply `group-sonarqube` once the SonarQube service becomes ready.
+9.  Apply `group-governance`, which reads the token written by `group-sonarqube`.
+
+The platform trust facts hold four fields. Every field is a string, because KV version 2 stores flat string values.
+
+| Field                  | Content                                                                    | Example            |
+| ---------------------- | -------------------------------------------------------------------------- | ------------------ |
+| `domain_suffix`        | The DNS domain of the platform                                             | `example.internal` |
+| `stages`               | A JSON list of DNS labels, one SPIRE trust domain per stage                | `["production"]`   |
+| `network_cidr`         | The IPv4 network of the platform                                           | `10.20.0.0/16`     |
+| `bastion_publish_cidr` | The IPv4 network on which the Bastion Vault listens, inside `network_cidr` | `10.20.0.0/24`     |
+
+A precondition of `foundation-vault-bastion` stops the plan when a field is missing or malformed. The Name Constraints of the constrained intermediate CAs derive from these fields, and a changed value therefore reissues the constrained intermediate CAs on the next apply. Neither a tfvars file nor `TF_VAR_` overrides the facts. `documentation/architecture/bastion-vault-privilege-convergence.md` Section 4 Item A records the rationale.
 
 ### Item D. Shared Modules
 

@@ -105,11 +105,11 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "pki_constrained_c
 
   type        = "internal"
   common_name = each.value.common_name
-  key_type    = "rsa"
-  key_bits    = 4096
+  key_type    = "ec"
+  key_bits    = 256
 
-  # Append mount accessor to force resource replacement and private key regeneration when the backend mount is recreated.
-  key_name = "inter-${vault_mount.pki_constrained[each.key].accessor}"
+  # The key type and the mount accessor name the key, since Vault rejects a new key under an existing key name.
+  key_name = "inter-ec256-${vault_mount.pki_constrained[each.key].accessor}"
 }
 
 # The intermediate outlives the one-year CA certificates which the mount signs, since Vault rejects a TTL past the issuer expiry.
