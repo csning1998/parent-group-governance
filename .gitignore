@@ -33,6 +33,7 @@ terraform/layers/foundation-vault-bastion/tls
 # Environment
 .env
 .env*.local
+platform-trust.json
 stdout.txt
 
 # IDEs

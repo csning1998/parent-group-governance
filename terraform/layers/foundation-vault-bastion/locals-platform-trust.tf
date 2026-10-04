@@ -1,30 +1,56 @@
 
-# The single declaration of the platform names and ranges which the Bastion Vault trusts.
-# Locals stay beyond tfvars, -var, and TF_VAR_ overrides, hence every change of a trust boundary passes review.
+# The instance values reside in the Bastion Vault, since this repository is public and serves every deployment.
+# Only the root token writes the path, and platform-trust.example.json documents the fields.
+data "vault_generic_secret" "platform_trust" {
+  provider = vault.bastion
+  path     = "secret/parent-group-governance/platform-trust"
+}
+
 locals {
+  # The facts are not secret, while the provider marks every KV value as sensitive.
+  platform_trust_raw = nonsensitive(data.vault_generic_secret.platform_trust.data)
+
   platform_trust = {
-    domain_suffix        = "homelab-infra.dev"
-    stages               = ["production"]
-    network_cidr         = "172.16.0.0/16"
-    bastion_publish_cidr = "172.16.0.0/24"
+    domain_suffix        = lookup(local.platform_trust_raw, "domain_suffix", "")
+    stages               = try(tolist(jsondecode(local.platform_trust_raw["stages"])), [])
+    network_cidr         = lookup(local.platform_trust_raw, "network_cidr", "")
+    bastion_publish_cidr = lookup(local.platform_trust_raw, "bastion_publish_cidr", "")
     # Cilium names the Hubble mTLS peers under these fixed suffixes outside the platform domain.
     downstream_extra_dns_domains = ["hubble-grpc.cilium.io", "hubble-relay.cilium.io"]
+    # Raft peers of an in-cluster Vault join through the Service names under the cluster domain.
+    kubernetes_cluster_domain = "cluster.local"
   }
 
   spire_trust_domains = [for stage in local.platform_trust.stages : "${stage}.${local.platform_trust.domain_suffix}"]
 
+  dns_name_pattern  = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+  dns_label_pattern = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+
   # The Bastion publish network lies inside the platform network when both share the platform network address.
-  bastion_publish_prefix = tonumber(split("/", local.platform_trust.bastion_publish_cidr)[1])
-  network_prefix         = tonumber(split("/", local.platform_trust.network_cidr)[1])
-  bastion_publish_inside_network = (
-    local.bastion_publish_prefix >= local.network_prefix &&
-    cidrhost("${split("/", local.platform_trust.bastion_publish_cidr)[0]}/${local.network_prefix}", 0) == cidrhost(local.platform_trust.network_cidr, 0)
+  bastion_publish_inside_network = try(
+    tonumber(split("/", local.platform_trust.bastion_publish_cidr)[1]) >= tonumber(split("/", local.platform_trust.network_cidr)[1]) &&
+    cidrhost("${split("/", local.platform_trust.bastion_publish_cidr)[0]}/${split("/", local.platform_trust.network_cidr)[1]}", 0) == cidrhost(local.platform_trust.network_cidr, 0),
+    false,
   )
+
+  platform_trust_valid = alltrue([
+    can(regex(local.dns_name_pattern, local.platform_trust.domain_suffix)),
+    length(local.platform_trust.stages) > 0,
+    alltrue([for stage in local.platform_trust.stages : can(regex(local.dns_label_pattern, stage))]),
+    can(cidrnetmask(local.platform_trust.network_cidr)),
+    can(cidrnetmask(local.platform_trust.bastion_publish_cidr)),
+    local.bastion_publish_inside_network,
+  ])
 }
 
-check "platform_trust_consistent" {
-  assert {
-    condition     = length(local.platform_trust.stages) > 0 && local.bastion_publish_inside_network
-    error_message = "platform_trust MUST name a stage, and bastion_publish_cidr MUST lie inside network_cidr."
+# A precondition stops the plan, while a failed check block only warns.
+resource "terraform_data" "platform_trust_validation" {
+  input = local.platform_trust
+
+  lifecycle {
+    precondition {
+      condition     = local.platform_trust_valid
+      error_message = "secret/parent-group-governance/platform-trust MUST hold a DNS domain_suffix, a JSON list of DNS label stages, and IPv4 network_cidr and bastion_publish_cidr, with bastion_publish_cidr inside network_cidr."
+    }
   }
 }

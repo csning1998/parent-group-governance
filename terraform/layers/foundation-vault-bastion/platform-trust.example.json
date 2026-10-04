@@ -1,0 +1,6 @@
+{
+    "domain_suffix": "example.internal",
+    "stages": "[\"production\"]",
+    "network_cidr": "10.20.0.0/16",
+    "bastion_publish_cidr": "10.20.0.0/24"
+}

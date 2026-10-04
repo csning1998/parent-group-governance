@@ -1,5 +1,6 @@
 
 # Each key names a PKI mount whose RFC 5280 Name Constraints bind the whole subtree, whatever a caller of sign-intermediate passes.
+# An assignable entry declares the policy which the owner may assign on the listed auth scopes, and {owner} expands to the owner.
 locals {
   constrained_intermediates = {
     # The mount signs the SPIRE Parent CA, which signs the SPIRE Child CA.
@@ -13,6 +14,11 @@ locals {
       excluded_uri_domains  = []
       permitted_ip_ranges   = []
       excluded_ip_ranges    = ["0.0.0.0/0", "::/0"]
+      assignable = {
+        suffix = "signer"
+        scopes = ["approle"]
+        paths  = { "root/sign-intermediate" = ["create", "update"] }
+      }
     }
     # The subtree of the Downstream Vault CA excludes the Bastion listener names and the SPIFFE trust domain.
     "pki-downstream" = {
@@ -25,8 +31,58 @@ locals {
       excluded_uri_domains  = [local.platform_trust.domain_suffix, ".${local.platform_trust.domain_suffix}"]
       permitted_ip_ranges   = [local.platform_trust.network_cidr]
       excluded_ip_ranges    = [local.platform_trust.bastion_publish_cidr]
+      assignable            = null
+    }
+    # The mount issues leaf certificates alone, since the zero path length forbids a subordinate CA.
+    "pki-platform" = {
+      owner                 = "meta-platform"
+      common_name           = "On-prem Platform Leaf Intermediate CA"
+      max_path_length       = 0
+      permitted_dns_domains = [local.platform_trust.domain_suffix, local.platform_trust.kubernetes_cluster_domain]
+      excluded_dns_domains  = []
+      permitted_uri_domains = []
+      excluded_uri_domains  = [local.platform_trust.domain_suffix, ".${local.platform_trust.domain_suffix}"]
+      permitted_ip_ranges   = [local.platform_trust.network_cidr]
+      excluded_ip_ranges    = [local.platform_trust.bastion_publish_cidr]
+      assignable = {
+        suffix = "issuer"
+        scopes = ["owned"]
+        paths = {
+          "issue/{owner}-*" = ["create", "update"]
+          "sign/{owner}-*"  = ["create", "update"]
+        }
+      }
     }
   }
+
+  constrained_assignable = {
+    for mount, spec in local.constrained_intermediates : "${mount}-${spec.assignable.suffix}-${spec.owner}" => {
+      owner  = spec.owner
+      mount  = mount
+      scopes = spec.assignable.scopes
+      paths  = spec.assignable.paths
+    } if spec.assignable != null
+  }
+
+  # A mount without an assignable entry lacks a key, and lookup returns null for the mount alone.
+  constrained_assignable_by_mount = {
+    for name, policy in vault_policy.pki_constrained_assignable : local.constrained_assignable[name].mount => policy.name
+  }
+}
+
+# The tenant cannot rewrite the policy, because the tenant ACL does not grant any write on sys/policies/acl.
+resource "vault_policy" "pki_constrained_assignable" {
+  for_each = local.constrained_assignable
+
+  provider = vault.bastion
+  name     = each.key
+  policy = jsonencode({
+    path = {
+      for path, capabilities in each.value.paths : "${vault_mount.pki_constrained[each.value.mount].path}/${replace(path, "{owner}", each.value.owner)}" => {
+        capabilities = capabilities
+      }
+    }
+  })
 }
 
 resource "vault_mount" "pki_constrained" {

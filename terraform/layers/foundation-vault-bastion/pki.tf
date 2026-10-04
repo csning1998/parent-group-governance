@@ -63,6 +63,7 @@ resource "vault_pki_secret_backend_root_sign_intermediate" "pki_intermediate_sig
   format               = "pem"
   ttl                  = 60 * 60 * 24 * 365 # 1 Year
   exclude_cn_from_sans = true
+  max_path_length      = 0 # The bootstrap intermediate lacks Name Constraints, hence a zero path length keeps the mount from signing a CA.
 
   # Pin issuer reference to trigger re-signing when the Root CA certificate is regenerated.
   issuer_ref = vault_pki_secret_backend_root_cert.root.issuer_id

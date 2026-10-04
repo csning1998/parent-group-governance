@@ -34,13 +34,12 @@ resource "vault_kv_secret_v2" "registry_tenant_bastion" {
       listener_ca_cert_pem = data.local_file.bastion_vault_ca.content
     })
     pki = jsonencode({
-      root_cert_pem           = vault_pki_secret_backend_root_cert.root.certificate
-      intermediate_cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
-      intermediate_mount_path = vault_mount.pki_intermediate.path
+      root_cert_pem = vault_pki_secret_backend_root_cert.root.certificate
       constrained_intermediates = {
         for name, mount in vault_mount.pki_constrained : name => {
-          mount_path = mount.path
-          cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed[name].certificate
+          mount_path        = mount.path
+          cert_pem          = vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed[name].certificate
+          assignable_policy = lookup(local.constrained_assignable_by_mount, name, null)
         } if local.constrained_intermediates[name].owner == each.key
       }
     })
@@ -53,14 +52,12 @@ resource "vault_kv_secret_v2" "registry_tenant_bastion" {
         } if consumer.owner == each.key
       }
     })
-    policy_request = jsonencode({
-      mount = local.policy_request_mount
-      name  = local.policy_request_names[each.key]
-    })
+    # Each key names an auth scope: owned for auth/<code>-* mounts, approle and gitlab for the shared mounts.
+    assignable_policies = jsonencode(local.tenant_assignable[each.key])
   })
 }
 
-# The tenant ACL on sys/policies/acl/<code>-* cannot rewrite the policy, since the policy name lacks the tenant prefix.
+# The tenant cannot rewrite the policy, because the tenant ACL does not grant any write on sys/policies/acl.
 resource "vault_policy" "registry_reader" {
   for_each = local.tenants
 

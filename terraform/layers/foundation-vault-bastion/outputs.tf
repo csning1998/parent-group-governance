@@ -37,10 +37,6 @@ output "bastion_vault_tenant" {
   description = "Owner codes of the tenants registered on the Bastion Vault, the KV v2 secret to which each tenant writes its policy requests, and the AppRole identity with which the Terraform operator of each tenant logs in to the Bastion Vault, keyed by owner code."
   value = {
     owner_codes = keys(local.tenants)
-    policy_request = {
-      mount = local.policy_request_mount
-      names = local.policy_request_names
-    }
     terraform_operator = {
       role_names = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_name }
       role_ids   = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_id }
