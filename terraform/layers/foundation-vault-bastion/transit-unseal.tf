@@ -1,6 +1,6 @@
 
 # Each key names a Vault cluster which auto-unseals against the Bastion Vault, and owner names its tenant.
-# The policy carries no tenant prefix, so that the tenant ACL on sys/policies/acl/<code>-* cannot rewrite the policy.
+# The tenant cannot rewrite the policy, because the tenant ACL does not grant any write on sys/policies/acl.
 locals {
   transit_unseal_consumers = {
     "meta-platform-vault-downstream" = { owner = "meta-platform" }

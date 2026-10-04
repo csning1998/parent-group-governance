@@ -362,8 +362,7 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 
 | Layer                        | Responsibility                                                                                  | Upstream State                                   |
 | ---------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `foundation-vault-bastion`   | The PKI root, the issuing intermediate, the tenant AppRoles, the transit unseal keys, and audit | None                                             |
-| `group-vault-policy-broker`  | The tenant ACL and every requested tenant policy, checked against the tenant scope              | `foundation-vault-bastion`                       |
+| `foundation-vault-bastion`   | The PKI hierarchy, tenant AppRoles and ACLs, the registry, transit unseal keys, and audit       | None                                             |
 | `group-foundation`           | The top level group `Personal Lab` at path `csning1998-lab`                                     | None                                             |
 | `meta-gitlab-project`        | The GitLab project hosting this repository and every Terraform state                            | `group-foundation`, `group-federation-anthropic` |
 | `group-topology`             | Every subgroup and nested subgroup beneath the top level group                                  | `group-foundation`                               |
