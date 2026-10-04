@@ -12,7 +12,7 @@ locals {
 
   platform_trust = {
     domain_suffix        = lookup(local.platform_trust_raw, "domain_suffix", "")
-    stages               = try(tolist(jsondecode(local.platform_trust_raw["stages"])), [])
+    stages               = tolist(jsondecode(lookup(local.platform_trust_raw, "stages", "[]")))
     network_cidr         = lookup(local.platform_trust_raw, "network_cidr", "")
     bastion_publish_cidr = lookup(local.platform_trust_raw, "bastion_publish_cidr", "")
     # Cilium names the Hubble mTLS peers under these fixed suffixes outside the platform domain.
@@ -27,11 +27,11 @@ locals {
   dns_label_pattern = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
 
   # The Bastion publish network lies inside the platform network when both share the platform network address.
-  bastion_publish_inside_network = try(
+  # The conditional evaluates the comparison only for two valid CIDRs, hence a malformed value reaches the precondition.
+  bastion_publish_inside_network = can(cidrnetmask(local.platform_trust.network_cidr)) && can(cidrnetmask(local.platform_trust.bastion_publish_cidr)) ? (
     tonumber(split("/", local.platform_trust.bastion_publish_cidr)[1]) >= tonumber(split("/", local.platform_trust.network_cidr)[1]) &&
-    cidrhost("${split("/", local.platform_trust.bastion_publish_cidr)[0]}/${split("/", local.platform_trust.network_cidr)[1]}", 0) == cidrhost(local.platform_trust.network_cidr, 0),
-    false,
-  )
+    cidrhost("${split("/", local.platform_trust.bastion_publish_cidr)[0]}/${split("/", local.platform_trust.network_cidr)[1]}", 0) == cidrhost(local.platform_trust.network_cidr, 0)
+  ) : false
 
   platform_trust_valid = alltrue([
     can(regex(local.dns_name_pattern, local.platform_trust.domain_suffix)),
