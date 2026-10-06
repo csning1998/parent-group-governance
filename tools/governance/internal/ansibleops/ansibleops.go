@@ -3,6 +3,7 @@ package ansibleops
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 
 	"github.com/apenella/go-ansible/v2/pkg/execute"
@@ -34,5 +35,10 @@ func RunPlaybook(ctx context.Context, ansibleDir, runDir, playbookFile string, o
 		execOpts = append(execOpts, execute.WithCmdRunDir(runDir))
 	}
 
-	return execute.NewDefaultExecute(execOpts...).Execute(ctx)
+	// The go-ansible error lists every variable of extraEnv, including the become password, and wraps no cause.
+	// The playbook output already shows the failing task on the terminal.
+	if err := execute.NewDefaultExecute(execOpts...).Execute(ctx); err != nil {
+		return fmt.Errorf("%s failed, the task output above names the failing task", playbookFile)
+	}
+	return nil
 }
