@@ -76,7 +76,7 @@ func (a *app) reconcileCredential(ctx context.Context, key string) error {
 	if err := secretrotate.Reconcile(ctx, client, cred.Spec, previous); err != nil {
 		return err
 	}
-	a.out.Print(ui.OK, key+": reconciled with the live service.")
+	a.out.Print(ui.OK, key+": the live service holds the Vault value.")
 	return nil
 }
 

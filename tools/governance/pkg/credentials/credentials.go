@@ -33,9 +33,10 @@ type Config struct {
 }
 
 type serviceConfig struct {
-	Mechanism string `yaml:"mechanism"`
-	Endpoint  string `yaml:"endpoint"`
-	Login     string `yaml:"login"`
+	Mechanism      string `yaml:"mechanism"`
+	Endpoint       string `yaml:"endpoint"`
+	VerifyEndpoint string `yaml:"verify_endpoint"`
+	Login          string `yaml:"login"`
 
 	FactoryDefaultPassword string `yaml:"factory_default_password"`
 }
@@ -52,13 +53,17 @@ var fullComplexityClasses = []secretgen.CharClass{
 	secretgen.Upper, secretgen.Lower, secretgen.Digit, secretgen.Special,
 }
 
-func resolveDeployFunc(s serviceConfig) (secretrotate.DeployFunc, error) {
+// resolveServiceFuncs builds the change and the read only validation of one service mechanism.
+func resolveServiceFuncs(s serviceConfig) (secretrotate.DeployFunc, secretrotate.VerifyFunc, error) {
 	switch s.Mechanism {
 	case "http_form":
-		form := httprotate.FormSpec{URL: s.Endpoint, Login: s.Login}
-		return form.Deploy, nil
+		if s.VerifyEndpoint == "" {
+			return nil, nil, fmt.Errorf("http_form requires verify_endpoint, since rotation observes the live credential before any change")
+		}
+		form := httprotate.FormSpec{URL: s.Endpoint, VerifyURL: s.VerifyEndpoint, Login: s.Login}
+		return form.Deploy, form.Verify, nil
 	default:
-		return nil, fmt.Errorf("unknown service mechanism %q", s.Mechanism)
+		return nil, nil, fmt.Errorf("unknown service mechanism %q", s.Mechanism)
 	}
 }
 
@@ -67,7 +72,7 @@ func formatVaultFieldName(key string) string {
 }
 
 func (c credentialConfig) toCredential() (Credential, error) {
-	deploy, err := resolveDeployFunc(c.Service)
+	deploy, verify, err := resolveServiceFuncs(c.Service)
 	if err != nil {
 		return Credential{}, fmt.Errorf("credentials: %s: %w", c.Key, err)
 	}
@@ -80,6 +85,7 @@ func (c credentialConfig) toCredential() (Credential, error) {
 			Length:                 c.Length,
 			Classes:                fullComplexityClasses,
 			Deploy:                 deploy,
+			Verify:                 verify,
 			FactoryDefaultPassword: c.Service.FactoryDefaultPassword,
 		},
 	}, nil

@@ -36,6 +36,7 @@
 - `Rotate`：讀出舊密碼、產生新密碼、部署到外部服務、寫回 Vault 的完整流程
 - `Reconcile`：把 Vault 現有的密碼值單向推送到外部服務，讓外部服務追上 Vault
 - `Deploy`：對外部服務執行一次密碼變更，同時驗證舊密碼是否仍然有效
+- `Verify`（`secretrotate.VerifyFunc`）：以唯讀請求確認外部服務是否接受某個密碼，不改動服務
 - `Stage`：在正式提交前，把即將發生的變更先寫進附屬欄位當作復原依據
 - `Commit`：把已經驗證過的結果正式寫回 Vault 主要欄位
 - `Acquire`：透過 CAS 條件寫入以取得一把互斥鎖
@@ -52,7 +53,7 @@
 - `internal/ansibleops` 透過薄封裝的 `go-ansible` 執行 playbook 並注入 `ANSIBLE_CONFIG`。詳見 Section 9
 - `pkg/credentials` 負責解析 `credentials.yaml` 宣告檔，轉換為一組可執行的 `Credential`。詳見 Section 3
 - `pkg/secretgen` 會依照呼叫端指定的字元類別產生隨機密碼，保證每個要求的類別至少出現一次。詳見 Section 6
-- `pkg/httprotate` 是 `DeployFunc` 的其中一種實作，把外部服務的換密碼介面包成一個 Basic Auth 表單 POST。詳見 Section 6
+- `pkg/httprotate` 是 `DeployFunc` 與 `VerifyFunc` 的其中一種實作，把外部服務的換密碼介面包成一個 Basic Auth 表單 POST，把驗證介面包成一個 Basic Auth GET。詳見 Section 6
 - `pkg/secretrotate` 是整個工具的主軸，負責狀態機排程、雙重寫入防護、CAS 建議鎖與 reconcile 等。詳見 Section 5 到 Section 7 Item D
 
 ### Item C. Package Dependency Overview
@@ -70,15 +71,16 @@ flowchart TD
 
     CredPkg --> HTTPPkg["pkg/httprotate"]
     RotatePkg --> GenPkg["pkg/secretgen"]
-    HTTPPkg -.->|"DeployFunc 合約"| RotatePkg
+    HTTPPkg -.->|"DeployFunc 與 VerifyFunc 合約"| RotatePkg
 ```
 
 其中可以注意到 `pkg/httprotate` 跟 `pkg/secretrotate` 之間是介面合約關係，主要是
 
 - `httprotate.FormSpec.Deploy` 的簽章必須滿足 `secretrotate.DeployFunc`
+- `httprotate.FormSpec.Verify` 的簽章必須滿足 `secretrotate.VerifyFunc`
 - `pkg/secretrotate` 完全不需要 import `pkg/httprotate`
 
-兩者的耦合只在執行期由 `pkg/credentials` 的 `resolveDeployFunc` 進行組裝。詳情可參考 Section 3 Item A.3 的說明
+兩者的耦合只在執行期由 `pkg/credentials` 的 `resolveServiceFuncs` 進行組裝。詳情可參考 Section 3 Item A.3 的說明
 
 ## Section 2. 進入點與執行環境
 
@@ -437,8 +439,9 @@ func (a *app) resolveBastionVaultAddr() string {
     - `length`：產生密碼的長度，若小於字元類別數量會自動拉高到類別數量
     - `service.mechanism`：密碼更換的機制，目前只支援 `http_form`
     - `service.endpoint`：外部服務的變更密碼 API 位址
+    - `service.verify_endpoint`：外部服務的密碼驗證 API 位址，`http_form` 必填，以唯讀方式確認服務目前接受的密碼
     - `service.login`：外部服務的帳號名稱
-    - `service.factory_default_password`：服務出廠預設密碼，選填，只有 `Reconcile` 在外部服務被重置時才會用到
+    - `service.factory_default_password`：服務出廠預設密碼，選填，`Rotate` 與 `Reconcile` 都會把它當成候選值驗證，用來處理剛重建的服務
 
 新增一筆憑證只需要編輯 YAML 即可，不需要改程式碼邏輯。有關檔案處理的行為如下：
 
@@ -478,9 +481,10 @@ func (a *app) resolveBastionVaultAddr() string {
 
         ```go
         type serviceConfig struct {
-            Mechanism string `yaml:"mechanism"`
-            Endpoint  string `yaml:"endpoint"`
-            Login     string `yaml:"login"`
+            Mechanism      string `yaml:"mechanism"`
+            Endpoint       string `yaml:"endpoint"`
+            VerifyEndpoint string `yaml:"verify_endpoint"`
+            Login          string `yaml:"login"`
 
             FactoryDefaultPassword string `yaml:"factory_default_password"`
         }
@@ -507,25 +511,30 @@ func (a *app) resolveBastionVaultAddr() string {
 
     `Load` 遇到檔案不存在時，就直接視為「目前沒有任何憑證需要輪替」而回傳空的 `Config`。因為一個還沒有採用密碼輪替功能的專案，不需要放一個空白的佔位檔案
 
-3.  在 `credentials.yaml` 中，每一筆宣告只需要寫 Vault 的位置、密碼長度、要用哪個換密碼機制，這樣 `resolveDeployFunc` 就可以負責把機制名稱解析成實際的 `DeployFunc`。其中 `DeployFunc` 的用途是針對目標服務以前一次密碼驗證成功後，佈署新的輪替的密碼
+3.  在 `credentials.yaml` 中，每一筆宣告只需要寫 Vault 的位置、密碼長度、要用哪個換密碼機制，這樣 `resolveServiceFuncs` 就可以負責把機制名稱解析成實際的 `DeployFunc` 與 `VerifyFunc`。`DeployFunc` 以舊密碼通過認證後，佈署新的輪替密碼。`VerifyFunc` 以唯讀請求回報服務是否接受某個密碼，回答不足以判斷時必須回傳錯誤，不得回傳 `false`
 
     ```go
     type DeployFunc func(ctx context.Context, previous, next string) error
+
+    type VerifyFunc func(ctx context.Context, secret string) (bool, error)
     ```
 
     ```go
-    func resolveDeployFunc(s serviceConfig) (secretrotate.DeployFunc, error) {
+    func resolveServiceFuncs(s serviceConfig) (secretrotate.DeployFunc, secretrotate.VerifyFunc, error) {
         switch s.Mechanism {
         case "http_form":
-            form := httprotate.FormSpec{URL: s.Endpoint, Login: s.Login}
-            return form.Deploy, nil
+            if s.VerifyEndpoint == "" {
+                return nil, nil, fmt.Errorf("http_form requires verify_endpoint, since rotation observes the live credential before any change")
+            }
+            form := httprotate.FormSpec{URL: s.Endpoint, VerifyURL: s.VerifyEndpoint, Login: s.Login}
+            return form.Deploy, form.Verify, nil
         default:
-            return nil, fmt.Errorf("unknown service mechanism %q", s.Mechanism)
+            return nil, nil, fmt.Errorf("unknown service mechanism %q", s.Mechanism)
         }
     }
     ```
 
-    目前只有 `http_form` 一種內建機制，對應 `httprotate.FormSpec`。新增一種機制只需要在這個 `switch` 裡多加一個 `case`
+    目前只有 `http_form` 一種內建機制，對應 `httprotate.FormSpec`。新增一種機制只需要在這個 `switch` 裡多加一個 `case`，並同時提供換密碼與驗證兩個函數。少了 `verify_endpoint` 的宣告在載入時就被拒絕，因為輪替與調諧都必須先觀察服務目前接受的密碼
 
 4.  在 Repo 體系規範中，Vault 欄位名稱一律是 snake_case 宣告，但為了兼容慣例，會透過 `formatVaultFieldName` 把 kebab-case 的憑證 `Key` 轉成 snake_case 的 Vault 欄位名稱：
 
@@ -567,7 +576,7 @@ func (a *app) resolveBastionVaultAddr() string {
 
 ```go
 func (c credentialConfig) toCredential() (Credential, error) {
-    deploy, err := resolveDeployFunc(c.Service)
+    deploy, verify, err := resolveServiceFuncs(c.Service)
     if err != nil {
         return Credential{}, fmt.Errorf("credentials: %s: %w", c.Key, err)
     }
@@ -580,13 +589,14 @@ func (c credentialConfig) toCredential() (Credential, error) {
             Length:                 c.Length,
             Classes:                fullComplexityClasses,
             Deploy:                 deploy,
+            Verify:                 verify,
             FactoryDefaultPassword: c.Service.FactoryDefaultPassword,
         },
     }, nil
 }
 ```
 
-`resolveDeployFunc` 排在最前面而不是寫在結構體字面值裡，是因為只有它會失敗。先讓可能失敗的轉換完成，後面的欄位賦值就都是不會出錯的複製動作，錯誤處理只需要出現一次。錯誤訊息裡包進 `c.Key`，是為了讓操作者知道是哪一筆宣告寫錯了機制名稱，否則一份有十筆憑證的 YAML 只會得到一句「unknown service mechanism」而無從定位。
+`resolveServiceFuncs` 排在最前面而不是寫在結構體字面值裡，是因為只有它會失敗。先讓可能失敗的轉換完成，後面的欄位賦值就都是不會出錯的複製動作，錯誤處理只需要出現一次。錯誤訊息裡包進 `c.Key`，是為了讓操作者知道是哪一筆宣告寫錯了機制名稱，否則一份有十筆憑證的 YAML 只會得到一句「unknown service mechanism」而無從定位。
 
 輸出型別本身很薄：
 
@@ -611,13 +621,14 @@ type Spec struct {
     Classes []secretgen.CharClass
 
     Deploy DeployFunc
+    Verify VerifyFunc
 
-    // FactoryDefaultPassword is a factory-default credential only Reconcile may try.
+    // FactoryDefaultPassword is the credential of a rebuilt service, which Rotate and Reconcile verify as a candidate.
     FactoryDefaultPassword string
 }
 ```
 
-七個欄位的來源分成三類。`Mount` 與 `Path` 與 `Length` 是從 `credentialConfig` 直接複製；`Field` 與 `Deploy` 分別由 `formatVaultFieldName` 與 `resolveDeployFunc` 轉換而來；`Classes` 則完全不來自 YAML，理由在下一段。`FactoryDefaultPassword` 從 `serviceConfig` 取得，只有 `Reconcile` 會讀它，`Rotate` 完全不碰，這個分工在 Section 8 說明。
+八個欄位的來源分成三類。`Mount` 與 `Path` 與 `Length` 是從 `credentialConfig` 直接複製；`Field` 由 `formatVaultFieldName` 轉換而來，`Deploy` 與 `Verify` 由 `resolveServiceFuncs` 轉換而來；`Classes` 則完全不來自 YAML，理由在下一段。`FactoryDefaultPassword` 從 `serviceConfig` 取得，`Rotate` 與 `Reconcile` 都把它當成候選值交給 `Verify`，用法在 Section 6 Item F 與 Section 8 說明。
 
 要特別點出的是 `Deploy` 的型別是函數而不是機制名稱字串。字串到函數的解析發生在 `pkg/credentials`，`pkg/secretrotate` 拿到 `Spec` 的時候已經是一個可以直接呼叫的函數值，因此不需要知道系統裡總共有幾種機制、將來會不會新增。這是 Section 1 Item C 提到的那條虛線的具體形式：新增一種換密碼機制只會改動 `pkg/credentials` 與新的實作套件，`pkg/secretrotate` 不會有任何一行需要跟著改。
 
@@ -1179,6 +1190,9 @@ func formatRotationStateField(field string) string { return field + "_rotation" 
 
 ```go
 func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(string)) (string, error) {
+    if err := requireVerify(spec); err != nil {
+        return "", err
+    }
     _, existedBeforeLock := readField(ctx, client, spec.Mount, spec.Path, spec.Field)
     if !existedBeforeLock && isPathDestroyedOutOfBand(ctx, client, spec.Mount, spec.Path) {
         return "", fmt.Errorf("secretrotate: %s/%s held data before and now reads back empty, refusing to mint a value the live service was never given", spec.Mount, spec.Path)
@@ -1200,13 +1214,49 @@ func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(st
         return recovered, err
     }
 
+    var candidates []string
+    if exists {
+        candidates = append(candidates, previous)
+    }
+    if spec.FactoryDefaultPassword != "" {
+        candidates = append(candidates, spec.FactoryDefaultPassword)
+    }
+    live, err := resolveLiveCredential(ctx, spec, candidates)
+    if err != nil {
+        return "", err
+    }
+
     next, err := secretgen.Generate(spec.Length, spec.Classes...)
     if err != nil {
         return "", err
     }
-    return commitRotation(ctx, client, spec, previous, next, exists, log)
+    return commitRotation(ctx, client, spec, vaultField{value: previous, exists: exists}, live, next, log)
 }
 ```
+
+`Rotate` 在修改任何內容之前，先用 `resolveLiveCredential` 找出外部服務目前接受的密碼。候選值依序是 Vault 的值與出廠預設值，`Verify` 第一個回報接受的候選值，就是這一輪 `Deploy` 用來認證的舊密碼：
+
+```go
+func resolveLiveCredential(ctx context.Context, spec Spec, candidates []string) (string, error) {
+    seen := map[string]bool{}
+    for _, candidate := range candidates {
+        if seen[candidate] {
+            continue
+        }
+        seen[candidate] = true
+        live, err := spec.Verify(ctx, candidate)
+        if err != nil {
+            return "", fmt.Errorf("secretrotate: verify a candidate credential: %w", err)
+        }
+        if live {
+            return candidate, nil
+        }
+    }
+    return "", ErrNoLiveCredential
+}
+```
+
+這個設計涵蓋三種狀況。Vault 與服務同步時，Vault 的值通過驗證。服務被重建時，Vault 的值被拒絕，出廠預設值通過驗證。Vault 被重建時，Vault 沒有值，出廠預設值通過驗證。沒有任何候選值通過時，`Rotate` 回傳 `ErrNoLiveCredential`，不呼叫 `Deploy`，也不寫入 Vault，Vault 因此永遠不會記錄一組服務沒有拿到的密碼。`Verify` 回傳錯誤時同樣停止，因為傳輸失敗無法證明任何事。`Spec.Verify` 為 `nil` 時，`Rotate` 在取鎖之前就回傳錯誤。
 
 ### Item A. 路徑遭到外部破壞的偵測
 
@@ -1400,7 +1450,7 @@ func isCASConflict(err error) bool {
 
 ### Item E. httprotate 的變更密碼協定
 
-到這裡為止，`Deploy` 都只是一個型別。Rotate 流程第一次真正呼叫它是在下一個 Item 的復原探測，所以先說明這個函數值背後的實作長什麼樣子。
+到這裡為止，`Deploy` 與 `Verify` 都只是型別。Rotate 流程第一次真正呼叫外部服務是在下一個 Item 的復原確認，所以先說明這兩個函數值背後的實作長什麼樣子。
 
 `httprotate` 在字面上意義是「透過 HTTP 進行密碼輪替」，方法是把外部服務的介面包成資料：一個需要 Basic Auth 的表單 POST，帶著帳號、舊密碼、新密碼三個欄位。目前用在 SonarQube 的變更密碼 API 上，任何符合這個形狀的服務都能重複使用同一份程式碼，不需要每個服務各寫一套：
 
@@ -1440,6 +1490,41 @@ func (s FormSpec) Deploy(ctx context.Context, previous, next string) error {
 
 `ErrAuthRejected` 是 `secretrotate` 對外公開的合約：任何 `DeployFunc` 實作，遇到服務明確拒絕舊密碼時（例如 HTTP 401），必須用 `fmt.Errorf("%w: ...", ErrAuthRejected)` 包裝回傳。這個區分之所以重要，會在 Item F 展開。
 
+`Verify` 是同一個 `FormSpec` 的唯讀操作，對 `VerifyURL` 送出一個以 Basic Auth 認證的 GET。SonarQube 的 `/api/authentication/validate` 對任何認證都回應 HTTP 200，以 JSON 布林欄位 `valid` 表示密碼是否有效：
+
+```go
+func (s FormSpec) Verify(ctx context.Context, secret string) (bool, error) {
+    if s.VerifyURL == "" {
+        return false, errors.New("httprotate: no verify URL configured")
+    }
+    req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.VerifyURL, nil)
+    if err != nil {
+        return false, fmt.Errorf("httprotate: build request for %s: %w", s.VerifyURL, err)
+    }
+    req.SetBasicAuth(s.Login, secret)
+
+    resp, err := noRedirectClient.Do(req)
+    if err != nil {
+        return false, fmt.Errorf("httprotate: call %s: %w", s.VerifyURL, err)
+    }
+    defer func() { _ = resp.Body.Close() }()
+
+    body, _ := io.ReadAll(resp.Body)
+    if resp.StatusCode != http.StatusOK {
+        return false, fmt.Errorf("httprotate: %s returned %d: %s", s.VerifyURL, resp.StatusCode, strings.TrimSpace(string(body)))
+    }
+    var answer struct {
+        Valid *bool `json:"valid"`
+    }
+    if err := json.Unmarshal(body, &answer); err != nil || answer.Valid == nil {
+        return false, fmt.Errorf("httprotate: %s answered without a boolean valid field", s.VerifyURL)
+    }
+    return *answer.Valid, nil
+}
+```
+
+`Valid` 宣告成指標，用來分辨「欄位不存在」與「欄位為 false」。只有 HTTP 200 且帶有布林 `valid` 的回答才是結論，其他回答一律回傳錯誤，這是 `secretrotate.VerifyFunc` 的合約要求：回答不足以判斷時，不得回傳 `false`。
+
 `noRedirectClient` 刻意設定成永不跟隨重導向：
 
 ```go
@@ -1465,7 +1550,7 @@ type rotationState struct {
 
 在真正呼叫 `Deploy` 之前，`stageAndApply` 會先把這一輪要用的舊密碼跟即將套用的新密碼，一起寫進同一個 Vault 路徑底下的 `<field>_rotation` 附屬欄位，寫入的部分在 Section 7 Item B 說明。這個寫入動作發生在對外部服務動手之前，所以即使程式在呼叫 `Deploy` 之後、正式提交新密碼之前的任何時間點中斷，Vault 裡都留著足夠的資訊：這一輪打算把密碼從哪個舊值換成哪個新值。
 
-自我修復發生在下一次呼叫 `Rotate` 的時候，由 `recoverPendingRotation` 負責，這也是 Rotate 流程裡第一個真正呼叫 `Deploy` 的位置：
+自我修復發生在下一次呼叫 `Rotate` 的時候，由 `recoverPendingRotation` 負責，以 `Verify` 確認暫存的新密碼是否已經生效：
 
 ```go
 func recoverPendingRotation(ctx context.Context, client *vaultapi.Client, spec Spec, log func(string)) (string, bool, error) {
@@ -1473,12 +1558,12 @@ func recoverPendingRotation(ctx context.Context, client *vaultapi.Client, spec S
     if !ok {
         return "", false, nil
     }
-    probeErr := spec.Deploy(ctx, st.PendingNext, st.PendingNext)
-    if probeErr != nil {
-        if errors.Is(probeErr, ErrAuthRejected) {
-            return "", false, nil
-        }
-        return "", false, fmt.Errorf("secretrotate: recovery probe against the staged pending value failed for a reason other than an authentication rejection: %w", probeErr)
+    live, err := spec.Verify(ctx, st.PendingNext)
+    if err != nil {
+        return "", false, fmt.Errorf("secretrotate: verify the staged pending value: %w", err)
+    }
+    if !live {
+        return "", false, nil
     }
     if err := writeField(ctx, client, spec.Mount, spec.Path, spec.Field, st.PendingNext); err != nil {
         return "", false, fmt.Errorf("secretrotate: recovered pending value but the Vault commit failed: %w", err)
@@ -1493,13 +1578,13 @@ func recoverPendingRotation(ctx context.Context, client *vaultapi.Client, spec S
 }
 ```
 
-如果程式一開始就發現 Vault 裡留著上一輪沒清乾淨的 staging 紀錄，它不會忽略這筆紀錄直接產生一組全新的密碼，而是先用那筆紀錄裡的新密碼去試探外部服務：把這組新密碼同時當成舊密碼跟新密碼去呼叫 `Deploy`。這個手法之所以成立，是因為 Item E 的實作用 `previous` 做認證、用 `next` 做提交，兩者傳入同一個值時，成功就代表外部服務目前確實持有這個值。這裡的分類必須精確，不能把探測回傳的任何錯誤都當成同一件事：
+如果程式一開始就發現 Vault 裡留著上一輪沒清乾淨的 staging 紀錄，它不會忽略這筆紀錄直接產生一組全新的密碼，而是先用 `Verify` 確認外部服務是否已經接受那筆紀錄裡的新密碼。`Verify` 是唯讀請求，確認的過程不會改動服務，也不會留下一次失敗的認證。結果分成三類：
 
-- 探測回傳 `nil`：代表上一輪的 `Deploy` 其實已經生效，只是提交到 Vault 那一步沒有完成。這時候直接把這組新密碼提交進正式欄位，不會浪費一次額外的密碼輪替。
-- 探測回傳的錯誤滿足 `errors.Is(err, ErrAuthRejected)`：代表外部服務明確拒絕了這個舊密碼，證明上一輪真正卡在 `Deploy` 執行之前，外部服務根本沒被動過。這時候放棄這筆過期的 staging 紀錄，回傳 `("", false, nil)`，讓 `Rotate` 落回正常流程重新走一次完整的輪替。
-- 探測回傳其他種類的錯誤（連線逾時、5xx、DNS 失敗）：這種失敗不帶任何「上一輪是否生效」的資訊。把它跟明確拒絕混為一談，會導致 `Rotate` 誤判成未生效而繼續往下產生新密碼並覆寫 `_rotation` 欄位，永久遺失上一輪那個可能已經被外部服務接受的值。因此這種情況必須直接回傳錯誤，中止整個 `Rotate` 呼叫，讓 staging 紀錄原封不動地留著，供下一次呼叫重新探測。
+- `Verify` 回報接受：代表上一輪的 `Deploy` 其實已經生效，只是提交到 Vault 那一步沒有完成。這時候直接把這組新密碼提交進正式欄位，不會浪費一次額外的密碼輪替。
+- `Verify` 回報不接受：代表上一輪真正卡在 `Deploy` 生效之前。這時候放棄這筆過期的 staging 紀錄，回傳 `("", false, nil)`，讓 `Rotate` 落回正常流程重新走一次完整的輪替。
+- `Verify` 回傳錯誤（連線逾時、5xx、回應格式不符）：這種失敗不帶任何「上一輪是否生效」的資訊。把它當成不接受，會導致 `Rotate` 繼續往下產生新密碼並覆寫 `_rotation` 欄位，永久遺失上一輪那個可能已經被外部服務接受的值。因此這種情況必須直接回傳錯誤，中止整個 `Rotate` 呼叫，讓 staging 紀錄原封不動地留著，供下一次呼叫重新確認。
 
-這個分類能夠成立，前提是 `DeployFunc` 的實作確實遵守 Item E 提到的合約：`httprotate.FormSpec.Deploy` 在 401 時同時包裝 `ErrAuthRejected`，任何其他新增的驅動程式都必須比照辦理，否則這裡的判斷會退化成把所有失敗都當成未生效的行為。
+這個分類能夠成立，前提是 `VerifyFunc` 的實作確實遵守合約：回答不足以判斷時回傳錯誤，不回傳 `false`。`httprotate.FormSpec.Verify` 只在 HTTP 200 且回應帶有布林欄位 `valid` 時才回傳結果，其他回答一律回傳錯誤。
 
 ### Item G. secretgen 的隨機密碼生成演算法
 
@@ -1619,26 +1704,20 @@ Section 6 結束在 `Rotate` 骨架的最後一行，把 `previous`、`next`、`
 `commitRotation` 自己不做任何 Vault 或外部服務的實際操作，它的工作是決定這一輪要走哪一條分支、以及各個步驟的先後順序：
 
 ```go
-func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, previous, next string, exists bool, log func(string)) (string, error) {
-    if exists {
-        if err := stageAndApply(ctx, client, spec, previous, next, log); err != nil {
-            var raced *applyRaceResolvedError
-            if errors.As(err, &raced) {
-                return resolveAppliedElsewhere(ctx, client, spec, raced, log)
-            }
-            return "", err
+func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, read vaultField, live, next string, log func(string)) (string, error) {
+    if err := stageAndApply(ctx, client, spec, read, live, next, log); err != nil {
+        var raced *applyRaceResolvedError
+        if errors.As(err, &raced) {
+            return resolveAppliedElsewhere(ctx, client, spec, raced, log)
         }
-    } else if log != nil {
-        log("No existing value in Vault; minting a new value without contacting the live service.")
+        return "", err
     }
 
     if err := writeField(ctx, client, spec.Mount, spec.Path, spec.Field, next); err != nil {
-        return "", fmt.Errorf("secretrotate: rotated but the Vault write failed, re-run to retry the write using the rotated value as previous: %w", err)
+        return "", fmt.Errorf("secretrotate: rotated but the Vault write failed, re-run to recover the staged value: %w", err)
     }
-    if exists {
-        if err := clearRotationState(ctx, client, spec.Mount, spec.Path, spec.Field); err != nil {
-            return "", fmt.Errorf("secretrotate: rotated and committed but clearing the staged rotation state failed: %w", err)
-        }
+    if err := clearRotationState(ctx, client, spec.Mount, spec.Path, spec.Field); err != nil {
+        return "", fmt.Errorf("secretrotate: rotated and committed but clearing the staged rotation state failed: %w", err)
     }
     if log != nil {
         log("New value stored at " + spec.Mount + "/" + spec.Path + "#" + spec.Field + ".")
@@ -1647,34 +1726,32 @@ func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, pre
 }
 ```
 
-`exists` 為否的分支完全跳過外部服務。這時候 Vault 裡沒有任何舊密碼，而 Item B 的 `Deploy` 需要一個舊密碼來通過認證，硬是呼叫只會得到一次必然失敗的認證。跳過的代價是外部服務那一側不會被這次操作改動，操作者必須另外用這組新鑄造的密碼去初始化服務，所以這條分支會留下一行明確的紀錄說明沒有聯絡外部服務，避免操作者誤以為兩邊已經同步。
+每一輪都經過 `stageAndApply`，沒有跳過外部服務的分支。Vault 沒有值時，Section 6 的 `resolveLiveCredential` 已經用出廠預設值確認服務目前的密碼，所以 `Deploy` 一定有一個驗證過的舊密碼可用。`read` 帶著 Vault 原本的值，只供 Item C 的回退偵測比對，`live` 才是送給 `Deploy` 的舊密碼。
 
 正式提交用的是 `writeField`，不帶 CAS 條件，與 Section 6 Item B 取鎖時用的 `writeFieldCAS` 不同。理由是這個時間點互斥已經由鎖提供：能走到這裡代表鎖屬於自己，沒有第二個 `Rotate` 會同時寫這個欄位。反過來說，如果這裡也加上 CAS，帶的版本號必然是過期的，因為自己稍早取鎖的那次寫入就已經讓文件版本前進了一次，Vault 會拒絕這次提交，把一次成功的輪替變成失敗。
 
 提交與清除 staging 紀錄的順序不能對調。目前是先 `writeField` 寫入正式欄位、成功之後才 `clearRotationState`。如果反過來先清除，而清除與提交之間發生中斷，Vault 裡會同時失去 staging 紀錄與正式值，但外部服務已經持有新密碼，這正是 Section 6 開頭描述的永久遺失情境。照現在的順序，中斷發生在兩者之間時，最壞情況只是留下一筆已經完成的 staging 紀錄，下一次 `Rotate` 的 `recoverPendingRotation` 會探測到外部服務確實持有這個值，重新提交一次，結果一致。
 
-提交失敗的錯誤訊息直接告訴操作者重跑即可，並且指出重跑時應該把這次輪替出來的值當作舊密碼。這個提示有實際作用：外部服務此時已經換成 `next`，而 Vault 裡還是 `previous`，如果操作者不知道這件事而去查 Vault，拿到的會是一組已經失效的密碼。
-
-`exists` 為否時不呼叫 `clearRotationState`，因為那條分支從頭到尾沒有寫過 staging 紀錄，清除一筆不存在的紀錄只會多送一次沒有必要的請求。
+提交失敗的錯誤訊息直接告訴操作者重跑即可。外部服務此時已經換成 `next`，而 `next` 留在 staging 紀錄的 `pending_next`，重跑時 `recoverPendingRotation` 會以 `Verify` 確認並提交這個值。
 
 ### Item B. Write-Ahead Staging 與 `stageAndApply`
 
-`stageAndApply` 是 `exists` 為真時唯一的執行路徑，負責把 Section 6 Item F 描述的那筆 staging 紀錄寫進去，然後呼叫外部服務：
+`stageAndApply` 負責把 Section 6 Item F 描述的那筆 staging 紀錄寫進去，然後以驗證過的 `live` 呼叫外部服務：
 
 ```go
-func stageAndApply(ctx context.Context, client *vaultapi.Client, spec Spec, previous, next string, log func(string)) error {
-    st := rotationState{Previous: previous, PendingNext: next}
+func stageAndApply(ctx context.Context, client *vaultapi.Client, spec Spec, read vaultField, live, next string, log func(string)) error {
+    st := rotationState{Previous: live, PendingNext: next}
     if err := writeRotationState(ctx, client, spec.Mount, spec.Path, spec.Field, st); err != nil {
         return err
     }
-    applyErr := spec.Deploy(ctx, previous, next)
+    applyErr := spec.Deploy(ctx, live, next)
     if applyErr == nil {
         if log != nil {
             log("Credential rotated against the live service.")
         }
         return nil
     }
-    if current, ok := readField(ctx, client, spec.Mount, spec.Path, spec.Field); ok && current != previous {
+    if current, ok := readField(ctx, client, spec.Mount, spec.Path, spec.Field); ok && (!read.exists || current != read.value) {
         return &applyRaceResolvedError{Resolved: current, cause: applyErr}
     }
     return applyErr
@@ -1687,8 +1764,12 @@ func stageAndApply(ctx context.Context, client *vaultapi.Client, spec Spec, prev
 func formatRotationStateField(field string) string { return field + "_rotation" }
 
 func writeRotationState(ctx context.Context, client *vaultapi.Client, mount, path, field string, st rotationState) error {
+    raw, err := json.Marshal(st)
+    if err != nil {
+        return fmt.Errorf("secretrotate: encode rotation state: %w", err)
+    }
     body := map[string]interface{}{"data": map[string]interface{}{
-        formatRotationStateField(field): map[string]interface{}{"previous": st.Previous, "pending_next": st.PendingNext},
+        formatRotationStateField(field): string(raw),
     }}
     if err := patchOrInitDocument(ctx, client, mount, path, body); err != nil {
         return fmt.Errorf("secretrotate: stage rotation state at %s: %w", resolveDataPath(mount, path), err)
@@ -1706,13 +1787,15 @@ func clearRotationState(ctx context.Context, client *vaultapi.Client, mount, pat
 }
 ```
 
+紀錄以 JSON 字串寫進單一欄位，不寫成巢狀物件。同一個路徑也被 Terraform 的 ephemeral `vault_kv_secret_v2` 讀取，vault provider 把每個欄位都當成字串處理，遇到巢狀物件會在讀取時以 `Value Conversion Error` 中止，連帶讓讀這個路徑的 layer 無法 plan。`<field>_lock` 也是以 JSON 字串寫入，兩個附屬欄位因此採用相同的格式。讀取端只接受字串，不是字串或無法解析的值一律視為沒有紀錄，下一次寫入會直接覆蓋。
+
 清除採用把欄位設成 `nil` 的方式，這是 JSON merge patch 定義的刪除語意，伺服器端會把這個鍵從文件裡移除，而不是留下一個值為 null 的欄位。清除不經過 `patchOrInitDocument`，因為那個函數的退回分支是在文件不存在時改用建立寫入，而清除一筆紀錄的前提本來就是文件存在，走退回分支反而會憑空建立一份只有 null 欄位的文件。
 
 寫入 staging 紀錄的動作排在呼叫 `Deploy` 之前，這個順序就是整個機制的全部重點。紀錄先落地，之後不論在哪一個時間點中斷，Vault 裡都留著「這一輪打算把密碼從哪個舊值換成哪個新值」這項資訊，讓下一次執行有依據可以判斷。順序反過來就完全失去意義：如果先呼叫 `Deploy` 再寫紀錄，兩者之間中斷的話，外部服務已經改變而 Vault 沒有任何線索，跟完全沒有這套機制的結果相同。
 
 ### Item C. `Deploy` 失敗後的回退偵測與驗證
 
-`Deploy` 因為認證失敗而回傳錯誤時，有可能不是這次輪替本身的問題，而是有人繞過這個套件的鎖，直接把 Vault 裡的值換成別的內容。`stageAndApply` 因此在失敗之後會多讀一次 Vault 目前的欄位值，跟這次呼叫一開始讀到的 `previous` 比對。如果兩者不一樣，代表在 `Deploy` 執行的這段時間，有寫入者繞過鎖直接改動了這個欄位，於是回傳 `applyRaceResolvedError`，把對方留下的值一併帶出來：
+`Deploy` 因為認證失敗而回傳錯誤時，有可能不是這次輪替本身的問題，而是有人繞過這個套件的鎖，直接把 Vault 裡的值換成別的內容。`stageAndApply` 因此在失敗之後會多讀一次 Vault 目前的欄位值，跟這次呼叫在鎖內讀到的 `read` 比對。如果兩者不一樣，代表在 `Deploy` 執行的這段時間，有寫入者繞過鎖直接改動了這個欄位，於是回傳 `applyRaceResolvedError`，把對方留下的值一併帶出來：
 
 ```go
 type applyRaceResolvedError struct {
@@ -1729,11 +1812,15 @@ func (e *applyRaceResolvedError) Unwrap() error { return e.cause }
 
 用一個自訂錯誤型別攜帶 `Resolved` 而不是多一個回傳值，是因為這個情況只發生在錯誤路徑上，讓正常路徑的簽章保持乾淨。實作 `Unwrap` 則讓原始的失敗原因仍然可以被 `errors.Is` 一路檢查到，包裝這一層不會把底層的語意藏起來。
 
-光是欄位值變了還不足以直接採信對方留下的值，那有可能只是一次寫入錯誤、或者剛好是垃圾資料，從未真正被外部服務接受過。`resolveAppliedElsewhere` 因此在接受之前，一定要先對這個值做一次探測：
+光是欄位值變了還不足以直接採信對方留下的值，那有可能只是一次寫入錯誤、或者剛好是垃圾資料，從未真正被外部服務接受過。`resolveAppliedElsewhere` 因此在接受之前，一定要先以 `Verify` 確認這個值：
 
 ```go
 func resolveAppliedElsewhere(ctx context.Context, client *vaultapi.Client, spec Spec, raced *applyRaceResolvedError, log func(string)) (string, error) {
-    if err := spec.Deploy(ctx, raced.Resolved, raced.Resolved); err != nil {
+    live, err := spec.Verify(ctx, raced.Resolved)
+    if err != nil {
+        return "", fmt.Errorf("secretrotate: %w, and verifying the raced value failed: %w", raced, err)
+    }
+    if !live {
         return "", raced
     }
     if err := clearRotationState(ctx, client, spec.Mount, spec.Path, spec.Field); err != nil {
@@ -1746,7 +1833,7 @@ func resolveAppliedElsewhere(ctx context.Context, client *vaultapi.Client, spec 
 }
 ```
 
-跟 `recoverPendingRotation` 用同一套手法：把候選值同時當成舊密碼跟新密碼去呼叫 `Deploy`。探測通過，才清掉這次呼叫殘留的 staging 記錄、接受這個值當作結果；探測失敗，直接把原本的 `applyRaceResolvedError` 當成錯誤回傳，讓呼叫端得到明確的失敗，而不是一個看似成功、實際上從未被驗證過的值。
+跟 `recoverPendingRotation` 用同一套手法：以 `Verify` 確認候選值。服務接受，才清掉這次呼叫殘留的 staging 記錄、接受這個值當作結果；服務不接受，直接把原本的 `applyRaceResolvedError` 當成錯誤回傳，讓呼叫端得到明確的失敗，而不是一個看似成功、實際上從未被驗證過的值。`Verify` 傳輸失敗時，兩個錯誤一起回傳。
 
 這條路徑接受的是別人寫入的值，因此 `commitRotation` 在 `errors.As` 命中之後直接回傳 `resolveAppliedElsewhere` 的結果，不會再往下走 `writeField`。這一輪自己產生的 `next` 被整個丟棄，因為外部服務持有的是對方那個值，把自己的值寫進 Vault 只會製造出新的不一致。
 
@@ -1757,31 +1844,45 @@ func resolveAppliedElsewhere(ctx context.Context, client *vaultapi.Client, spec 
 `Reconcile` 跟 `Rotate` 解決的是不同的問題，不應該混為一談。`Rotate` 假設 Vault 跟外部服務原本是同步的，目標是產生一組新密碼並讓兩邊繼續保持同步。`Reconcile` 假設兩邊已經不同步了，目標單純是把 Vault 現有的密碼值推到外部服務上，讓外部服務追上 Vault 記錄的狀態。這種不同步最常發生在外部服務因為某些原因被重設回出廠預設值，但 Vault 裡還留著重設前那組已經不再有效的密碼：
 
 ```go
-func Reconcile(ctx context.Context, client *vaultapi.Client, spec Spec, currentLiveSecret string) error {
+func Reconcile(ctx context.Context, client *vaultapi.Client, spec Spec, operatorSupplied string) error {
+    if err := requireVerify(spec); err != nil {
+        return err
+    }
     next, ok := readField(ctx, client, spec.Mount, spec.Path, spec.Field)
     if !ok {
         return fmt.Errorf("secretrotate: no value in Vault at %s/%s#%s to reconcile", spec.Mount, spec.Path, spec.Field)
     }
 
-    if currentLiveSecret != "" {
-        return spec.Deploy(ctx, currentLiveSecret, next)
+    inSync, err := spec.Verify(ctx, next)
+    if err != nil {
+        return fmt.Errorf("secretrotate: verify the Vault value: %w", err)
+    }
+    if inSync {
+        return nil
     }
 
-    guesses := []string{next}
-    if spec.FactoryDefaultPassword != "" {
-        guesses = append(guesses, spec.FactoryDefaultPassword)
-    }
-    var err error
-    for _, guess := range guesses {
-        if err = spec.Deploy(ctx, guess, next); err == nil {
-            return nil
+    var candidates []string
+    if operatorSupplied != "" {
+        candidates = []string{operatorSupplied}
+    } else {
+        if st, staged := readRotationState(ctx, client, spec.Mount, spec.Path, spec.Field); staged {
+            candidates = append(candidates, st.PendingNext)
+        }
+        if spec.FactoryDefaultPassword != "" {
+            candidates = append(candidates, spec.FactoryDefaultPassword)
         }
     }
-    return err
+    live, err := resolveLiveCredential(ctx, spec, candidates)
+    if err != nil {
+        return err
+    }
+    return spec.Deploy(ctx, live, next)
 }
 ```
 
-`Reconcile` 從頭到尾不會產生新密碼，也不會寫入 Vault，它唯一的動作是呼叫 `Deploy`，把 Vault 目前的值當成新密碼，把呼叫端提供的舊密碼當成認證用的舊值。如果呼叫端沒有提供舊密碼，`Reconcile` 會依序嘗試兩種猜測：先假設外部服務目前的密碼剛好就是 Vault 記錄的那組值，如果失敗，再嘗試 `Spec.FactoryDefaultPassword` 這個出廠預設密碼。兩種猜測都失敗的話，`Reconcile` 會把最後一次的錯誤原封不動地回傳，不會無止盡地猜下去。這個猜測階梯不像 Section 6 Item F 的 `recoverPendingRotation` 那樣區分 `ErrAuthRejected` 跟其他錯誤，任何一種失敗都直接換下一個猜測，因為這裡本來就是人工介入的復原流程，猜錯的代價只是多打一次 `Deploy`，不像自動路徑那樣需要嚴格區分未生效跟狀態未知。
+`Reconcile` 從頭到尾不會產生新密碼，也不會寫入 Vault。它先以 `Verify` 確認服務是否已經接受 Vault 的值，接受就代表兩邊已經同步，直接結束，不呼叫 `Deploy`。這一步不能省略，因為有些服務會拒絕把密碼改成同一個值，以 `Deploy` 試探同步狀態會得到一個誤導的失敗。
+
+兩邊不同步時，`Reconcile` 從候選值中找出服務目前接受的密碼，再以它認證，把服務改成 Vault 的值。操作者輸入了密碼時，候選值只有這一個，不再猜測，因為操作者的輸入是明確的指示。操作者留白時，候選值依序是 staging 紀錄的 `pending_next` 與出廠預設值：前者對應一次中斷的輪替，後者對應一個剛重建的服務。所有候選值都以 `Verify` 確認，沒有一個通過時回傳 `ErrNoLiveCredential`，不呼叫 `Deploy`。
 
 因為不寫入 Vault，`Reconcile` 也不需要取鎖。Section 6 Item B 的鎖保護的是「讀舊值、產生新值、寫回新值」這段會改變 Vault 狀態的臨界區段，而 `Reconcile` 對 Vault 只有一次讀取，不存在兩個呼叫互相覆寫的可能。
 
@@ -1911,7 +2012,7 @@ for i, cred := range a.credentials {
 }
 ```
 
-輪替選單列出全部憑證並標註 Vault 裡有沒有值，因為兩種情況都可以輪替，只是行為不同，Section 7 Item A 的 `exists` 分支就是對應這個差別。調諧選單則只列出已經有值的，因為 Section 8 的 `Reconcile` 對沒有值的憑證無事可做。
+輪替選單列出全部憑證並標註 Vault 裡有沒有值，因為兩種情況都可以輪替：Vault 沒有值時，Section 6 的 `resolveLiveCredential` 會改用出廠預設值確認服務目前的密碼。調諧選單則只列出已經有值的，因為 Section 8 的 `Reconcile` 對沒有值的憑證無事可做。
 
 狀態查詢用的是 `secretrotate.Exists`：
 

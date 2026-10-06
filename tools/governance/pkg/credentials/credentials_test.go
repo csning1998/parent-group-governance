@@ -104,6 +104,47 @@ func TestConfigRegistryBuildsApplyFromHTTPFormMechanism(t *testing.T) {
 	}
 }
 
+func TestConfigRegistryBuildsVerifyFromHTTPFormMechanism(t *testing.T) {
+	cfg, err := Load(fixturePath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	creds, err := cfg.BuildCredentials()
+	if err != nil {
+		t.Fatalf("Registry: %v", err)
+	}
+	if creds[0].Spec.Verify == nil {
+		t.Error("Spec.Verify is nil, want a function built from verify_endpoint")
+	}
+}
+
+// TestConfigRegistryRejectsHTTPFormWithoutVerifyEndpoint covers a declaration which leaves the
+// live credential unobservable. The registry MUST reject the declaration by name.
+func TestConfigRegistryRejectsHTTPFormWithoutVerifyEndpoint(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "credentials.yaml")
+	unverifiable := `
+credentials:
+  - key: unverifiable
+    vault_kv_mount: secret
+    vault_kv_path: x
+    length: 16
+    service:
+      mechanism: http_form
+      endpoint: http://127.0.0.1:9000/api/users/change_password
+      login: admin
+`
+	if err := os.WriteFile(path, []byte(unverifiable), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, err := cfg.BuildCredentials(); err == nil {
+		t.Fatal("Registry: want an error for http_form without verify_endpoint, got nil")
+	}
+}
+
 func TestConfigRegistryUnknownMechanismErrors(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "credentials.yaml")
 	bad := `
@@ -141,6 +182,7 @@ credentials:
     service:
       mechanism: http_form
       endpoint: http://127.0.0.1/a
+      verify_endpoint: http://127.0.0.1/a/validate
       login: admin
   - key: sonar_qube_password
     vault_kv_mount: secret
@@ -149,6 +191,7 @@ credentials:
     service:
       mechanism: http_form
       endpoint: http://127.0.0.1/b
+      verify_endpoint: http://127.0.0.1/b/validate
       login: admin
 `
 	if err := os.WriteFile(path, []byte(collision), 0o600); err != nil {
@@ -246,6 +289,7 @@ credentials:
     service:
       mechanism: http_form
       endpoint: http://127.0.0.1/a
+      verify_endpoint: http://127.0.0.1/a/validate
       login: admin
   - key: dup
     vault_kv_mount: secret
@@ -254,6 +298,7 @@ credentials:
     service:
       mechanism: http_form
       endpoint: http://127.0.0.1/b
+      verify_endpoint: http://127.0.0.1/b/validate
       login: admin
 `
 	if err := os.WriteFile(path, []byte(dup), 0o600); err != nil {

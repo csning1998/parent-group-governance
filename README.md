@@ -354,7 +354,7 @@ Every subcommand other than the bare root command bootstraps `.env` before runni
 
 The file `credentials.yaml` declares every rotatable infrastructure account. A declaration names the Vault mount, the Vault path, the generated length, and the service mechanism performing the remote password change. The current declaration covers the SonarQube administrator account alone.
 
-Rotation applies a write ahead staging protocol across the Vault document and the external service, guarded by a Check and Set advisory lock. The protocol, the recovery paths, and the boundary conditions are documented in `tools/governance/README.md`.
+Every rotation and every reconciliation first verifies the live credential through `service.verify_endpoint`, a read only request, and changes nothing when no known credential is live. Rotation applies a write ahead staging protocol across the Vault document and the external service, guarded by a Check and Set advisory lock. The protocol, the recovery paths, and the boundary conditions are documented in `tools/governance/README.md`.
 
 ## Section 6. Terraform Layers
 
