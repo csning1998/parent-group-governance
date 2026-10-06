@@ -2251,3 +2251,57 @@ Section 6 Item A 已經記錄了銷毀偵測本身的兩層邊界。除此之外
 - Section 4 Item B：重新產生 TLS 會清空整個 `vault/tls/` 目錄，既有憑證無法保留。
 - Section 4 Item D：解封的輪詢逾時上限是 10 秒，逾時錯誤訊息的字面寫的是 5 秒。
 - Section 7 Item A：正式提交失敗時，外部服務已經持有新密碼而 Vault 仍是舊值，必須依照錯誤訊息重跑才能收斂。
+
+## Section 11. Terraform State 機密稽核
+
+`pkg/stateaudit` 回報 Terraform state 中保存機密值的位置，輸出只包含 layer、版本、resource 位址、屬性路徑與偵測來源，永遠不輸出值本身。套件放在 `pkg/`，下游倉庫可以直接引用。
+
+### Item A. 偵測來源
+
+稽核依序使用兩種偵測來源，兩者都不需要逐一為服務撰寫規則：
+
+1.  Terraform 的 sensitive 標記：state 每個 instance 的 `sensitive_attributes` 路徑，以及 root output 的 `sensitive = true`。路徑下任何非空值都是一筆發現。provider schema 宣告的機密屬性因此自動涵蓋，新增服務不需要修改稽核。
+2.  gitleaks 預設規則：沒有 sensitive 標記的值交給 gitleaks 的 Go library 偵測，偵測輸入是 `"<屬性名>": "<值>"`，讓需要屬性名稱的通用規則可以判斷。帶有固定前綴的 token（例如 GitLab 的 `glpat-`、`glrt-`）由社群維護的規則抓出，base64 編碼的內容會遞迴解碼五層。
+
+同一個值只回報一種來源：有 sensitive 標記時只回報標記，沒有標記時才回報 gitleaks 的規則。
+
+### Item B. 讀取 state
+
+`DiscoverLayers` 從每個 layer 的 `backend "http"` 讀出 state 位址，位址必須是字串字面值。`HTTPSource` 以 `TF_HTTP_USERNAME` 與 `TF_HTTP_PASSWORD` 直接讀取 backend，不經過 `terraform` CLI，因此 layer 不需要先執行 `terraform init`，state 也不會寫入磁碟。
+
+歷史版本模式（`--history`）先讀取目前 state 的 `serial`，再由 `serial - 1` 往回讀到 1，每一版位於 `<位址>/versions/<serial>`。backend 已經刪除的版本回應 404，稽核略過該版本。
+
+### Item C. 忽略檔
+
+`terraform/.tfstate-audit-ignore.yaml` 列出「provider 標成 sensitive 但值是公開資料」的位置。每筆必須填寫 `layer`、`address`、`path`、`detection` 與 `reason`，未知欄位會被拒絕。比對以位置為準，不以值為準，因此機密輪替之後忽略檔不需要更新，一筆設定也會套用到同一個 layer 的每個歷史版本。
+
+沒有比對到任何發現的忽略項目同樣讓稽核失敗，避免忽略檔累積失效的項目。
+
+### Item D. 在下游 CLI 使用
+
+選單項目直接呼叫 `Run`：
+
+```go
+{"[Terraform] Audit State Secrets", func(ctx context.Context) error {
+    cfg, err := stateaudit.ConfigFromEnv(terraformDir, os.Getenv, true)
+    if err != nil {
+        return err
+    }
+    return stateaudit.Run(ctx, cfg, os.Stdout)
+}},
+```
+
+子指令以 `NewCommand` 掛載，旗標 `--history` 由套件提供：
+
+```go
+rootCmd.AddCommand(stateaudit.NewCommand(func(history bool) (stateaudit.Config, error) {
+    return stateaudit.ConfigFromEnv(terraformDir, os.Getenv, history)
+}))
+```
+
+`Run` 在有發現或有未使用的忽略項目時回傳 `stateaudit.ErrFindings`，CLI 以非零結束碼結束。
+
+### Item E. 已知限制
+
+1.  同時沒有 sensitive 標記、沒有固定前綴、熵值又低的值無法偵測，例如出廠預設密碼。這類值由服務核發或由人選定，依 `planning/decisions.md` 的「Terraform State 不保存機密」由 `./governance` 處理，不經過 Terraform。
+2.  稽核只涵蓋 state。存檔的 plan、`TF_LOG` 除錯紀錄與 `terraform output` 的輸出不在範圍內。
