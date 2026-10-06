@@ -613,8 +613,9 @@ vault kv metadata get secret/meta-platform/terraform/approle
 Verification of Name Constraints comprises two parts. The first verifies that Vault rejects non-compliant names during issuance. The second simulates a compromised intermediate CA private key, using locally signed leaf certificates to confirm that `openssl verify` rejects non-compliant names. The following commands run using the root token. The test CA has a TTL of 1 hour and MUST be revoked after verification concludes.
 
 ```bash
-export VAULT_ADDR='https://10.20.0.1:8200'
-export VAULT_CACERT="$PWD/vault/tls/ca.pem"
+# The names and addresses inside the test certificates are examples. The listener address and CA of the instance come from .env.
+export VAULT_ADDR="$(grep -E '^BASTION_VAULT_ADDR=' .env | cut -d= -f2- | tr -d '"')"
+export VAULT_CACERT="$(grep -E '^BASTION_VAULT_CACERT=' .env | cut -d= -f2- | tr -d '"')"
 vault read -field=certificate pki-root/cert/ca > root.pem
 vault read -field=certificate pki-spire/cert/ca > inter.pem
 
@@ -631,6 +632,7 @@ cat test-ca.pem inter.pem > chain.pem
 openssl verify -CAfile root.pem -untrusted chain.pem leaf.pem
 
 vault write pki-spire/revoke serial_number="$(jq -r .data.serial_number test-ca.json)"
+unset VAULT_ADDR VAULT_CACERT VAULT_TOKEN
 ```
 
 The expected output of `openssl verify` for non-compliant names is `excluded subtree violation` or `permitted subtree violation`. Swapping `subjectAltName` with names from the table below allows testing additional scenarios:

@@ -350,6 +350,8 @@ Every subcommand other than the bare root command bootstraps `.env` before runni
 | `UNAME`, `UHOME`        | The operator user name and home directory                                           |
 | `SONARQUBE_DB_PASSWORD` | Generated once from `crypto/rand` at first bootstrap                                |
 
+The file `.env` is the only copy of `SONARQUBE_DB_PASSWORD`, while `sonarqube/postgres-data` keeps the password of the first initialization. A deleted `.env` therefore generates a password which the existing database rejects, and the recovery is a rebuild of `sonarqube/postgres-data` and `sonarqube/data`.
+
 ### Item D. Credential Rotation
 
 The file `credentials.yaml` declares every rotatable infrastructure account. A declaration names the Vault mount, the Vault path, the generated length, and the service mechanism performing the remote password change. The current declaration covers the SonarQube administrator account alone.
@@ -368,16 +370,16 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 
 ### Item B. Layer Inventory
 
-| Layer                        | Responsibility                                                                                  | Upstream State                                   |
-| ---------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `foundation-vault-bastion`   | The PKI hierarchy, tenant AppRoles and ACLs, the registry, transit unseal keys, and audit       | None                                             |
-| `group-foundation`           | The top level group `Personal Lab` at path `csning1998-lab`                                     | None                                             |
-| `meta-gitlab-project`        | The GitLab project hosting this repository and every Terraform state                            | `group-foundation`, `group-federation-anthropic` |
-| `group-topology`             | Every subgroup and nested subgroup beneath the top level group                                  | `group-foundation`                               |
-| `group-governance`           | Group labels and the group CI variables sourced from Vault                                      | `group-topology`                                 |
-| `group-gitlab-runner`        | The group runner registration and the rendered `gitlab-runner-configs/config.toml`              | `group-topology`                                 |
-| `group-sonarqube`            | The SonarQube global analysis token, written into Vault                                         | None                                             |
-| `group-federation-anthropic` | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`                 | None                                             |
+| Layer                        | Responsibility                                                                            | Upstream State                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `foundation-vault-bastion`   | The PKI hierarchy, tenant AppRoles and ACLs, the registry, transit unseal keys, and audit | None                                             |
+| `group-foundation`           | The top level group `Personal Lab` at path `csning1998-lab`                               | None                                             |
+| `meta-gitlab-project`        | The GitLab project hosting this repository and every Terraform state                      | `group-foundation`, `group-federation-anthropic` |
+| `group-topology`             | Every subgroup and nested subgroup beneath the top level group                            | `group-foundation`                               |
+| `group-governance`           | Group labels and the group CI variables sourced from Vault                                | `group-topology`                                 |
+| `group-gitlab-runner`        | The group runner registration and the rendered `gitlab-runner-configs/config.toml`        | `group-topology`                                 |
+| `group-sonarqube`            | The SonarQube global analysis token, written into Vault                                   | None                                             |
+| `group-federation-anthropic` | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`           | None                                             |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing the Bootstrap Issuing Intermediate alone, and the intermediate issues every leaf certificate. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
