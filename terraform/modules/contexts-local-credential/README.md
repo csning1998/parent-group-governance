@@ -43,12 +43,12 @@ A `null` value in `ca_cert_path` activates the dynamic certificate generation pa
 
 The variable `bastion_vault_state` defines the remote state coordinates for retrieving the live Bastion Vault CA certificate. A caller MUST override the default values when accessing a Bastion Vault managed by an external project.
 
-| Field         | Type     | Default                       | Description                                                       |
-| ------------- | -------- | ----------------------------- | ----------------------------------------------------------------- |
-| `project_id`  | `number` | `86417732`                    | GitLab project identifier hosting the remote state.               |
-| `state_name`  | `string` | `"foundation-vault-bastion"`  | Name of the Terraform state file in GitLab.                       |
-| `output_name` | `string` | `"bastion_vault"` | Name of the state output object which holds the CA certificate PEM bytes. |
-| `attribute`   | `string` | `"listener_ca_cert_pem"` | Attribute of that output object which carries the CA certificate PEM bytes. |
+| Field         | Type     | Default                      | Description                                                                 |
+| ------------- | -------- | ---------------------------- | --------------------------------------------------------------------------- |
+| `project_id`  | `number` | `86417732`                   | GitLab project identifier hosting the remote state.                         |
+| `state_name`  | `string` | `"foundation-vault-bastion"` | Name of the Terraform state file in GitLab.                                 |
+| `output_name` | `string` | `"bastion_vault"`            | Name of the state output object which holds the CA certificate PEM bytes.   |
+| `attribute`   | `string` | `"listener_ca_cert_pem"`     | Attribute of that output object which carries the CA certificate PEM bytes. |
 
 Upon initial execution by each consumer, the following command MUST be executed to bootstrap, as provider configurations cannot reliably depend on resources created during the same `apply` operation.
 
@@ -56,21 +56,15 @@ Upon initial execution by each consumer, the following command MUST be executed 
 terraform apply -target=module.local_credential_contexts.local_file.bastion_ca_cert
 ```
 
-#### Item B.3. Variable `gitlab_ci_remote_state_read_token`
+#### Item B.3. State Backend Credentials
 
-The variable `gitlab_ci_remote_state_read_token` supplies a GitLab Personal Access Token with `read_api` scope for CI pipeline execution. A CI runner MUST NOT use `CI_JOB_TOKEN` for state retrieval because the GitLab Terraform State API rejects `CI_JOB_TOKEN`.
-
-A `null` value in `gitlab_ci_remote_state_read_token` instructs the module to read the OAuth token from `~/.terraform.d/credentials.tfrc.json`. The `foundation-vault-bastion` layer supplies an explicit file path in `bastion_vault_config.ca_cert_path`. Consequently, the `foundation-vault-bastion` layer MAY leave `gitlab_ci_remote_state_read_token` unset in all environments.
+The module reads the state of `foundation-vault-bastion` with `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD` of the operator environment. The `config` of `data "terraform_remote_state"` holds the address alone, since Terraform persists the `config` in the state of the consuming layer.
 
 ### Item C. Outputs
 
 #### Item C.1. Output `bastion_vault_config`
 
 The output `bastion_vault_config` exposes an object which contains the resolved endpoint address, CA certificate file path, and token file path.
-
-#### Item C.2. Output `state_auth_gitlab_saas`
-
-The output `state_auth_gitlab_saas` exposes a sensitive object which contains authentication credentials for the GitLab HTTP state backend. Consuming layers MUST pass this object to the `config` argument of `data "terraform_remote_state"` blocks.
 
 ## Section 3. Dynamic CA Certificate Architecture
 

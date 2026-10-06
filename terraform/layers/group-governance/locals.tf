@@ -6,7 +6,6 @@ module "local_credential_contexts" {
 locals {
   # Target: group-topology and group-sonarqube state, hosted under this GitLab project.
   _state_base = "https://gitlab.com/api/v4/projects/86417732/terraform/state"
-  _state_auth = module.local_credential_contexts.state_auth_gitlab_saas
 
   group_variables_secret = {
     SONAR_TOKEN = data.vault_kv_secret_v2.sonar_token.data["sonarqube_ci_token"]

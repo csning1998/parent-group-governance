@@ -35,21 +35,6 @@ run "explicit_endpoint_override" {
   }
 }
 
-run "state_auth_unused_when_ca_cert_path_overridden" {
-  command = plan
-
-  variables {
-    bastion_vault_config = {
-      ca_cert_path = "/tmp/fake-ca.pem"
-    }
-  }
-
-  assert {
-    condition     = output.state_auth_gitlab_saas.password == ""
-    error_message = "a caller which never reads the state of foundation-vault-bastion must not be forced to read ~/.terraform.d/credentials.tfrc.json"
-  }
-}
-
 run "fully_overridden_config" {
   command = plan
 

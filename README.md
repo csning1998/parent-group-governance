@@ -365,7 +365,7 @@ Every rotation and every reconciliation first verifies the live credential throu
 
 Every layer stores state in the GitLab HTTP backend under the project hosting this repository, with one state name per layer. Three credential sources feed the providers, and the module `terraform/modules/contexts-local-credential` centralizes each source.
 
-- The HTTP backend and every `terraform_remote_state` block authenticate through the `read_api` token in `~/.terraform.d/credentials.tfrc.json`.
+- The HTTP backend and every `terraform_remote_state` block authenticate through `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD`, which the operator exports from the Bastion Vault secret `secret/parent-group-governance/terraform/state-backend`. The `config` of a `terraform_remote_state` block holds the address alone, since Terraform persists the `config` in the state.
 - The Vault provider connects to `https://172.16.0.1:8200` with the CA at `vault/tls/ca.pem`, authenticating through the token helper file `~/.vault-token`. Reading the token from the helper file breaks the cyclic authentication dependency present during initialization.
 - The GitLab provider reads a token from the ephemeral Vault secret `secret/parent-group-governance/state-backend`. An ephemeral read keeps the token out of the persisted state of the consuming layer.
 

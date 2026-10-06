@@ -19,10 +19,3 @@ variable "bastion_vault_state" {
   })
   default = {}
 }
-
-variable "gitlab_ci_remote_state_read_token" {
-  description = "GitLab PAT with read_api scope, for terraform_remote_state HTTP backend auth in a CI runner. CI_JOB_TOKEN cannot be used here: its API allowlist excludes the Terraform State API. Unset for a local operator apply, which falls back to the ~/.terraform.d/credentials.tfrc.json OAuth token from terraform login."
-  type        = string
-  sensitive   = true
-  default     = null
-}

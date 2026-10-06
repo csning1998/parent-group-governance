@@ -28,7 +28,7 @@ Execution requires interactive administrative access to the Anthropic organizati
 
 - The operator account requires `org:admin`, `owner`, or `primary_owner` role within the targeted Anthropic organization.
 - Bastion Vault must be unsealed with the KV version 2 secrets engine enabled at mount path `secret`.
-- The operator environment configures GitLab HTTP backend authentication via `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD` (or `~/.terraform.d/credentials.tfrc.json`).
+- The operator environment configures GitLab HTTP backend authentication via `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD`.
 
 ### Item B. CLI Tooling
 

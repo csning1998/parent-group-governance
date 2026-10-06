@@ -7,5 +7,5 @@ ephemeral "vault_kv_secret_v2" "state_backend" {
 
 data "terraform_remote_state" "group_topology" {
   backend = "http"
-  config  = merge(local._state_auth, { address = "${local._state_base}/group-topology" })
+  config  = { address = "${local._state_base}/group-topology" }
 }
