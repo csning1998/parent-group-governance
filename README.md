@@ -333,6 +333,7 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 | `[Hypervisor] Apply workstation SELinux policy and file contexts`                     | `ansible selinux`                  | Runs the playbook described in Section 3 Item B                            |
 | `[Hypervisor] Apply workstation Libvirt network and Bastion Vault host prerequisites` | `ansible libvirt`                  | Runs the playbook described in Section 4 Item C                            |
 | `[Hypervisor] Verify host IaC tools`                                                  | `env verify`                       | Reports the presence of Terraform, Vault, and Ansible on `PATH`            |
+| `[Terraform] Audit State Secrets`                                                     | `state-audit [--history]`          | Lists state locations holding a secret, see tools/governance Section 11    |
 
 Each credential key listed in `credentials.yaml` becomes one subcommand under `vault`, and one more under `vault reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already holds a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears.
 
