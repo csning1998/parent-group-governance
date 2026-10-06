@@ -1,16 +1,74 @@
 ---
-# Relies on kernel parameters configured by the meta-platform hypervisor_baseline role
-# (rp_filter=2 loose mode and ip_forward=1) to accommodate asymmetric return path
-# routing across this network segment.
-- name: "C1. Open Bastion Vault HTTPS port in the libvirt-routed zone, restricted to this host address"
-  ansible.posix.firewalld:
-    zone: libvirt-routed
-    rich_rule: >-
-      rule family="ipv4"
-      source address="{{ workstation_libvirt_publish_source_cidr }}"
-      destination address="{{ workstation_libvirt_publish_network_address }}"
-      port protocol="tcp" port="{{ workstation_libvirt_vault_port }}"
-      accept
-    permanent: true
-    state: enabled
-  notify: Reload firewalld
+# The policy carries priority -1 and target REJECT, hence the policy decides routed guest traffic
+# to the host before any rule of the zone libvirt-routed, and the Bastion Vault port lives here.
+# Asymmetric return paths rely on rp_filter=2 and ip_forward=1 from hypervisor_baseline.
+- name: "C1. Declare the policy for routed guest traffic to the host"
+  ansible.builtin.template:
+    src: libvirt-to-host.xml.j2
+    dest: /etc/firewalld/policies/libvirt-to-host.xml
+    owner: root
+    group: root
+    mode: "0644"
+
+# The shipped zone also admits ssh and tftp from NAT guests, which no guest of this host uses.
+- name: "C2. Declare the zone for NAT guest traffic to the host"
+  ansible.builtin.template:
+    src: libvirt-zone.xml.j2
+    dest: /etc/firewalld/zones/libvirt.xml
+    owner: root
+    group: root
+    mode: "0644"
+
+# A reload discards a runtime-only zone binding absent from the permanent configuration,
+# reconciling runtime state independently of whether C1 and C2 report changed.
+- name: "C3. Reload firewalld to reconcile runtime state with the permanent configuration"
+  ansible.builtin.command:
+    cmd: firewall-cmd --reload
+  changed_when: false
+
+- name: "C4. Read the permanent bindings of the zone trusted"
+  ansible.builtin.command:
+    cmd: firewall-cmd --permanent --zone=trusted --list-all
+  register: _workstation_libvirt_trusted_zone
+  changed_when: false
+
+# A source or interface in the zone trusted accepts every port of the host and bypasses C1 and C2.
+- name: "C5. Assert the zone trusted holds no binding"
+  ansible.builtin.assert:
+    that:
+      - _workstation_libvirt_trusted_zone.stdout is not search('^\s*(interfaces|sources):[ ]+\S', multiline=true)
+    fail_msg: >-
+      The permanent zone trusted binds an interface or a source, which admits that traffic to every port of the host.
+      Remove the binding with firewall-cmd --permanent --zone=trusted --remove-source or --remove-interface.
+
+- name: "C6. Read the runtime bindings of the zone trusted"
+  ansible.builtin.command:
+    cmd: firewall-cmd --zone=trusted --list-all
+  register: _workstation_libvirt_trusted_zone_runtime
+  changed_when: false
+
+# C5 covers the permanent configuration file alone. C7 covers a runtime-only binding added
+# by a prior manual firewall-cmd call outside the permanent configuration.
+- name: "C7. Assert the runtime zone trusted holds no binding"
+  ansible.builtin.assert:
+    that:
+      - _workstation_libvirt_trusted_zone_runtime.stdout is not search('^\s*(interfaces|sources):[ ]+\S', multiline=true)
+    fail_msg: >-
+      The runtime zone trusted binds an interface or a source, which admits that traffic to every port of the host.
+      Remove the binding with firewall-cmd --zone=trusted --remove-source or --remove-interface.
+
+- name: "C8. Read the runtime policy for routed guest traffic to the host"
+  ansible.builtin.command:
+    cmd: firewall-cmd --info-policy=libvirt-to-host
+  register: _workstation_libvirt_policy_info
+  changed_when: false
+
+# The policy admits exactly dhcp, dhcpv6, and dns, plus the rich rule which opens the Bastion Vault port.
+- name: "C9. Assert the runtime policy matches the declared service and port set"
+  ansible.builtin.assert:
+    that:
+      - _workstation_libvirt_policy_info.stdout is search('^\s*services:\s*dhcp dhcpv6 dns\s*$', multiline=true)
+      - _workstation_libvirt_policy_info.stdout is search('port="' ~ workstation_libvirt_vault_port ~ '"')
+    fail_msg: >-
+      The runtime policy libvirt-to-host does not match the declared service set (dhcp, dhcpv6, dns) and the
+      Bastion Vault rich rule. Compare against the rendered libvirt-to-host.xml.j2 and rerun C1 and C3.

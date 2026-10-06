@@ -283,14 +283,21 @@ Vault exits when any declared TCP listener fails to bind. The host network names
 
 ### Item C. Host Prerequisites of the Vault Container
 
-A host prerequisite is a host setting which the Vault container requires before the container starts. The role `workstation_libvirt` declares four host prerequisites.
+A host prerequisite is a host setting which the Vault container requires before the container starts. The role `workstation_libvirt` declares five host prerequisites.
 
 1.  The libvirt network `vault-bastion-publish` provides the address `172.16.0.1` on the bridge of the network.
-2.  The unit `virtnetworkd.service` is enabled and running.
-3.  A firewalld rich rule in the zone `libvirt-routed` admits TCP port 8200 from `172.16.0.0/12` to `172.16.0.1`.
-4.  The memlock limits of the operator user are unlimited, because Vault locks memory under rootless Podman.
+2.  The unit `virtnetworkd.service` is enabled, and a drop-in starts the unit after firewalld reports the running state.
+3.  The firewalld policy `libvirt-to-host` admits DHCP, DNS, ICMP, and TCP port 8200 from `172.16.0.0/12` to `172.16.0.1` for routed guests.
+4.  The firewalld zone `libvirt` admits DHCP, DNS, and ICMP for NAT guests.
+5.  The memlock limits of the operator user are unlimited, because Vault locks memory under rootless Podman.
 
 The unit `virtnetworkd.service` MUST be enabled. A host which enables only `virtnetworkd.socket` never starts the daemon at boot. The daemon executes the autostart of every libvirt network at startup alone. The network `vault-bastion-publish` therefore does not exist until a client connects to the socket.
+
+The unit MUST start after firewalld reports the running state. libvirt adds each bridge to a zone when the network starts, and libvirt repeats the step on a firewalld reload but not on the first start of firewalld. A bridge created earlier stays outside every zone, and the default zone rejects the DHCP requests of the guests on that bridge.
+
+The policy `libvirt-to-host` carries priority -1 and target REJECT. The policy decides routed guest traffic to the host before any rule of the zone `libvirt-routed`, hence the rule for port 8200 resides in the policy. The policy and the zone `libvirt` omit `ssh` and `tftp`, which the shipped files admit, since no guest of this host logs in to the host or fetches files from the host. The role overrides both shipped files under `/etc/firewalld`, hence a later libvirt package does not change the overrides.
+
+The zone `trusted` MUST NOT bind an interface or a source. A binding in that zone accepts every port of the host and bypasses the policy and the zone `libvirt`. The role asserts the permanent zone `trusted` holds no binding.
 
 The entrypoint of Item B exits after the polling attempts are exhausted. The restart policy `restart: always` then starts the container again. A missing prerequisite consequently produces a restart loop instead of a single failure.
 

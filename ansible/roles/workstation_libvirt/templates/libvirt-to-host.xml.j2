@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Managed by the parent-group-governance role workstation_libvirt. -->
+<policy target="REJECT" priority="-1">
+  <short>libvirt-to-host</short>
+  <description>Routed libvirt guests reach DHCP, DNS, and the Bastion Vault listener of the host.</description>
+  <ingress-zone name="libvirt-routed"/>
+  <egress-zone name="HOST"/>
+  <protocol value="icmp"/>
+  <protocol value="ipv6-icmp"/>
+  <service name="dhcp"/>
+  <service name="dhcpv6"/>
+  <service name="dns"/>
+  <rule family="ipv4">
+    <source address="{{ workstation_libvirt_publish_source_cidr }}"/>
+    <destination address="{{ workstation_libvirt_publish_network_address }}"/>
+    <port protocol="tcp" port="{{ workstation_libvirt_vault_port }}"/>
+    <accept/>
+  </rule>
+</policy>
