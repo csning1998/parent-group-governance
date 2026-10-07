@@ -116,10 +116,12 @@ type HTTPSource struct {
 // FetchCurrent returns the current state at address.
 func (s HTTPSource) FetchCurrent(ctx context.Context, address string) ([]byte, error) {
 	body, status, err := s.get(ctx, address)
-	if err != nil {
+	switch {
+	case err != nil:
 		return nil, err
-	}
-	if status != http.StatusOK {
+	case status == http.StatusNoContent:
+		return nil, fmt.Errorf("%w: %s", ErrStateMissing, address)
+	case status != http.StatusOK:
 		return nil, fmt.Errorf("stateaudit: GET %s returned %d", address, status)
 	}
 	return body, nil

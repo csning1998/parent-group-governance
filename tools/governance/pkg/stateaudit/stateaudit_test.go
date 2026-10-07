@@ -90,21 +90,24 @@ func TestScanStateRejectsMalformedDocument(t *testing.T) {
 
 func TestApplyIgnores(t *testing.T) {
 	findings := []Finding{
-		{Layer: "a", Version: "current", Address: "data.vault_generic_secret.facts", Path: "data_json", Detection: DetectionSensitiveAttribute},
-		{Layer: "a", Version: "serial-2", Address: "data.vault_generic_secret.facts", Path: "data_json", Detection: DetectionSensitiveAttribute},
+		{Layer: "a", Version: "current", Address: "data.vault_generic_secret.facts", Path: "data.domain", Detection: DetectionSensitiveAttribute},
+		{Layer: "a", Version: "serial-2", Address: "data.vault_generic_secret.facts", Path: "data.domain", Detection: DetectionSensitiveAttribute},
+		{Layer: "a", Version: "current", Address: "output.facts", Path: "domain", Detection: DetectionSensitiveOutput},
 		{Layer: "a", Version: "current", Address: "gitlab_user_runner.shared", Path: "token", Detection: DetectionSensitiveAttribute},
+		{Layer: "a", Version: "current", Address: "terraform_remote_state.x", Path: "config.password", Detection: "gitleaks:gitlab-pat"},
 	}
 	ignores := []Ignore{
-		{Layer: "a", Address: "data.vault_generic_secret.facts", Path: "data_json", Detection: DetectionSensitiveAttribute, Reason: "facts"},
-		{Layer: "a", Address: "gitlab_user_runner.shared", Path: "token", Detection: "gitleaks:gitlab-pat", Reason: "wrong detection"},
-		{Layer: "b", Address: "gitlab_user_runner.shared", Path: "token", Detection: DetectionSensitiveAttribute, Reason: "wrong layer"},
+		{Layer: "a", Address: "data.vault_generic_secret.facts", Path: "data.domain", Reason: "facts"},
+		{Layer: "a", Address: "output.facts", Path: "domain", Reason: "facts"},
+		{Layer: "a", Address: "terraform_remote_state.x", Path: "config.password", Reason: "a gitleaks detection"},
+		{Layer: "b", Address: "gitlab_user_runner.shared", Path: "token", Reason: "wrong layer"},
 	}
 	kept, unused := ApplyIgnores(findings, ignores)
-	if !slices.Equal(kept, findings[2:]) {
-		t.Errorf("kept = %+v, want the runner token alone", kept)
+	if !slices.Equal(kept, findings[3:]) {
+		t.Errorf("kept = %+v, want the runner token and the gitleaks detection", kept)
 	}
-	if !slices.Equal(unused, ignores[1:]) {
-		t.Errorf("unused = %+v, want the entries of the wrong detection and the wrong layer", unused)
+	if !slices.Equal(unused, ignores[2:]) {
+		t.Errorf("unused = %+v, want the entries of the gitleaks detection and the wrong layer", unused)
 	}
 }
 
@@ -118,19 +121,25 @@ func writeIgnoreFile(t *testing.T, content string) string {
 	return path
 }
 
-func TestLoadIgnores(t *testing.T) {
+func TestLoadIgnoresExpandsEveryPair(t *testing.T) {
 	path := writeIgnoreFile(t, `ignores:
-  - layer: foundation-vault-bastion
-    address: data.vault_generic_secret.platform_trust
-    path: data_json
-    detection: sensitive-attribute
-    reason: The path holds network facts.
+  layer-b:
+    - address: x.single
+      path: data.one
+      reason: single
+  layer-a:
+    - addresses: [x.first, x.second]
+      paths: [data.one, data.two]
+      reason: pairs
 `)
 	got, err := LoadIgnores(path)
-	want := []Ignore{{
-		Layer: "foundation-vault-bastion", Address: "data.vault_generic_secret.platform_trust", Path: "data_json",
-		Detection: DetectionSensitiveAttribute, Reason: "The path holds network facts.",
-	}}
+	want := []Ignore{
+		{Layer: "layer-a", Address: "x.first", Path: "data.one", Reason: "pairs"},
+		{Layer: "layer-a", Address: "x.first", Path: "data.two", Reason: "pairs"},
+		{Layer: "layer-a", Address: "x.second", Path: "data.one", Reason: "pairs"},
+		{Layer: "layer-a", Address: "x.second", Path: "data.two", Reason: "pairs"},
+		{Layer: "layer-b", Address: "x.single", Path: "data.one", Reason: "single"},
+	}
 	if err != nil || !slices.Equal(got, want) {
 		t.Errorf("LoadIgnores = %+v, %v, want %+v", got, err, want)
 	}
@@ -143,11 +152,14 @@ func TestLoadIgnores(t *testing.T) {
 
 func TestLoadIgnoresRejectsIncompleteEntry(t *testing.T) {
 	for name, content := range map[string]string{
-		"no reason":    "ignores:\n  - {layer: a, address: b, path: c, detection: sensitive-attribute}\n",
-		"no detection": "ignores:\n  - {layer: a, address: b, path: c, reason: r}\n",
-		"no path":      "ignores:\n  - {layer: a, address: b, detection: sensitive-attribute, reason: r}\n",
-		"unknown key":  "ignores:\n  - {layer: a, address: b, path: c, detection: sensitive-attribute, reason: r, value: x}\n",
-		"not yaml":     "ignores: [",
+		"no reason":              "ignores:\n  a:\n    - {address: b, path: c}\n",
+		"no address":             "ignores:\n  a:\n    - {path: c, reason: r}\n",
+		"address and addresses":  "ignores:\n  a:\n    - {address: b, addresses: [d], path: c, reason: r}\n",
+		"path and paths":         "ignores:\n  a:\n    - {address: b, path: c, paths: [d], reason: r}\n",
+		"empty item":             "ignores:\n  a:\n    - {address: b, paths: [c, ''], reason: r}\n",
+		"detection is not a key": "ignores:\n  a:\n    - {address: b, path: c, reason: r, detection: sensitive-attribute}\n",
+		"layer list":             "ignores:\n  - {address: b, path: c, reason: r}\n",
+		"not yaml":               "ignores: [",
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := LoadIgnores(writeIgnoreFile(t, content))
@@ -158,6 +170,28 @@ func TestLoadIgnoresRejectsIncompleteEntry(t *testing.T) {
 	}
 }
 
+func TestScanStateMergesJSONRestatement(t *testing.T) {
+	document := []byte(`{"version": 4, "resources": [
+  {"mode": "managed", "type": "vault_kv_secret_v2", "name": "registry", "instances": [
+    {"attributes": {
+       "data": {"domain": "example.test", "stages": "[\"dev\"]"},
+       "data_json": "{\"domain\": \"example.test\", \"stages\": [\"dev\"], \"extra\": \"only-in-json\"}"},
+     "sensitive_attributes": [[{"type": "get_attr", "value": "data"}], [{"type": "get_attr", "value": "data_json"}]]}
+  ]}
+]}`)
+	got, err := ScanState("a", "current", document, prefixDetector{})
+	if err != nil {
+		t.Fatalf("ScanState: %v", err)
+	}
+	var paths []string
+	for _, f := range got {
+		paths = append(paths, f.Path)
+	}
+	if want := []string{"data.domain", "data.stages", "data_json.extra"}; !slices.Equal(paths, want) {
+		t.Errorf("paths = %v, want %v", paths, want)
+	}
+}
+
 func TestWriteReportNamesLocationsAlone(t *testing.T) {
 	findings, err := ScanState("group-gitlab-runner", "current", stateFixture(), prefixDetector{})
 	if err != nil {
@@ -165,7 +199,7 @@ func TestWriteReportNamesLocationsAlone(t *testing.T) {
 	}
 	report := Report{
 		Findings:      findings,
-		UnusedIgnores: []Ignore{{Layer: "b", Address: "x.y", Path: "z", Detection: DetectionSensitiveAttribute, Reason: "stale"}},
+		UnusedIgnores: []Ignore{{Layer: "b", Address: "x.y", Path: "z", Reason: "stale"}},
 		Scanned:       []string{"group-gitlab-runner@current"},
 	}
 	var out bytes.Buffer

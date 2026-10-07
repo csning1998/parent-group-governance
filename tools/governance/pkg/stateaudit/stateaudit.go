@@ -9,6 +9,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -36,15 +37,26 @@ type Finding struct {
 	Address   string
 	Path      string
 	Detection Detection
+
+	// value is set by a revealing audit alone.
+	value string
 }
 
-// Ignore exempts one location and detection of a layer.
+// Ignore exempts one location of a layer from the sensitive markers. A gitleaks detection is never exempt.
 type Ignore struct {
-	Layer     string    `yaml:"layer"`
-	Address   string    `yaml:"address"`
-	Path      string    `yaml:"path"`
-	Detection Detection `yaml:"detection"`
-	Reason    string    `yaml:"reason"`
+	Layer   string
+	Address string
+	Path    string
+	Reason  string
+}
+
+// ignoreEntry is one entry of the ignore file, which names one or more addresses and one or more paths.
+type ignoreEntry struct {
+	Address   string   `yaml:"address"`
+	Addresses []string `yaml:"addresses"`
+	Path      string   `yaml:"path"`
+	Paths     []string `yaml:"paths"`
+	Reason    string   `yaml:"reason"`
 }
 
 // Report holds the findings, the unused ignore entries, and the scanned versions.
@@ -89,6 +101,7 @@ type pathStep struct {
 type scanner struct {
 	layer, version string
 	detector       ValueDetector
+	reveal         bool
 	findings       []Finding
 }
 
@@ -101,13 +114,17 @@ func parseState(document []byte) (stateDocument, error) {
 	return state, nil
 }
 
-// ScanState returns the findings of one state document.
+// ScanState returns the findings of one state document without the values.
 func ScanState(layer, version string, document []byte, detector ValueDetector) ([]Finding, error) {
+	return scanState(layer, version, document, detector, false)
+}
+
+func scanState(layer, version string, document []byte, detector ValueDetector, reveal bool) ([]Finding, error) {
 	state, err := parseState(document)
 	if err != nil {
 		return nil, err
 	}
-	s := &scanner{layer: layer, version: version, detector: detector}
+	s := &scanner{layer: layer, version: version, detector: detector, reveal: reveal}
 	for name, output := range state.Outputs {
 		s.scanValue("output."+name, output.Value, nil, output.Sensitive, DetectionSensitiveOutput)
 	}
@@ -141,7 +158,7 @@ func (s *scanner) scanInstance(address string, instance stateInstance) error {
 		}
 		sensitive = append(sensitive, path)
 	}
-	walkLeaves(instance.Attributes, nil, func(path []string, value string) {
+	walkLeaves(mergeJSONRestatements(instance.Attributes), nil, func(path []string, value string) {
 		isSensitive := slices.ContainsFunc(sensitive, func(p []string) bool { return len(p) <= len(path) && slices.Equal(p, path[:len(p)]) })
 		s.addLeaf(address, path, value, isSensitive, DetectionSensitiveAttribute)
 	})
@@ -165,10 +182,51 @@ func (s *scanner) addLeaf(address string, path []string, value string, isSensiti
 		detections = s.detector.Detect(key, value)
 	}
 	for _, detection := range detections {
-		s.findings = append(s.findings, Finding{
-			Layer: s.layer, Version: s.version, Address: address, Path: strings.Join(path, "."), Detection: detection,
-		})
+		finding := Finding{Layer: s.layer, Version: s.version, Address: address, Path: strings.Join(path, "."), Detection: detection}
+		if s.reveal {
+			finding.value = value
+		}
+		s.findings = append(s.findings, finding)
 	}
+}
+
+// mergeJSONRestatements drops each <name>_json string whose JSON object restates the map <name>, hence one value is
+// reported once at <name>.<key>. A key which the map lacks or holds with another value stays under <name>_json.
+func mergeJSONRestatements(attributes any) any {
+	attrs, ok := attributes.(map[string]any)
+	if !ok {
+		return attributes
+	}
+	merged := maps.Clone(attrs)
+	for key, value := range attrs {
+		name, isJSON := strings.CutSuffix(key, "_json")
+		text, isString := value.(string)
+		restated, hasMap := attrs[name].(map[string]any)
+		var decoded map[string]any
+		if !isJSON || !isString || !hasMap || json.Unmarshal([]byte(text), &decoded) != nil {
+			continue
+		}
+		maps.DeleteFunc(decoded, func(k string, v any) bool { return restates(restated[k], v) })
+		if len(decoded) == 0 {
+			delete(merged, key)
+		} else {
+			merged[key] = decoded
+		}
+	}
+	return merged
+}
+
+// restates reports whether held equals decoded, where a map attribute holds a nested value as JSON text.
+func restates(held, decoded any) bool {
+	if reflect.DeepEqual(held, decoded) {
+		return true
+	}
+	text, ok := held.(string)
+	if !ok {
+		return false
+	}
+	var parsed any
+	return json.Unmarshal([]byte(text), &parsed) == nil && reflect.DeepEqual(parsed, decoded)
 }
 
 // walkLeaves calls visit for every non-empty string below value.
@@ -239,7 +297,7 @@ func LoadIgnores(path string) ([]Ignore, error) {
 	defer func() { _ = file.Close() }()
 
 	var content struct {
-		Ignores []Ignore `yaml:"ignores"`
+		Ignores map[string][]ignoreEntry `yaml:"ignores"`
 	}
 	decoder := yaml.NewDecoder(file)
 	decoder.KnownFields(true)
@@ -247,12 +305,52 @@ func LoadIgnores(path string) ([]Ignore, error) {
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("stateaudit: parse %s: %w", path, err)
 	}
-	for i, entry := range content.Ignores {
-		if entry.Layer == "" || entry.Address == "" || entry.Path == "" || entry.Detection == "" || entry.Reason == "" {
-			return nil, fmt.Errorf("stateaudit: %s entry %d MUST set layer, address, path, detection, and reason", path, i+1)
+	var ignores []Ignore
+	for _, layer := range slices.Sorted(maps.Keys(content.Ignores)) {
+		for i, entry := range content.Ignores[layer] {
+			expanded, err := expandIgnoreEntry(layer, entry)
+			if err != nil {
+				return nil, fmt.Errorf("stateaudit: %s layer %s entry %d: %w", path, layer, i+1, err)
+			}
+			ignores = append(ignores, expanded...)
 		}
 	}
-	return content.Ignores, nil
+	return ignores, nil
+}
+
+// expandIgnoreEntry returns one Ignore per pair of the addresses and the paths of entry.
+func expandIgnoreEntry(layer string, entry ignoreEntry) ([]Ignore, error) {
+	addresses, err := pickOneOrMany(entry.Address, entry.Addresses, "address", "addresses")
+	if err != nil {
+		return nil, err
+	}
+	paths, err := pickOneOrMany(entry.Path, entry.Paths, "path", "paths")
+	if err != nil {
+		return nil, err
+	}
+	if entry.Reason == "" {
+		return nil, errors.New("MUST set reason")
+	}
+	var ignores []Ignore
+	for _, address := range addresses {
+		for _, p := range paths {
+			ignores = append(ignores, Ignore{Layer: layer, Address: address, Path: p, Reason: entry.Reason})
+		}
+	}
+	return ignores, nil
+}
+
+func pickOneOrMany(one string, many []string, oneKey, manyKey string) ([]string, error) {
+	if (one == "") == (len(many) == 0) {
+		return nil, fmt.Errorf("MUST set exactly one of %s and %s", oneKey, manyKey)
+	}
+	if one != "" {
+		return []string{one}, nil
+	}
+	if slices.Contains(many, "") {
+		return nil, fmt.Errorf("%s MUST NOT hold an empty item", manyKey)
+	}
+	return many, nil
 }
 
 // ApplyIgnores returns the findings which no entry names, and the entries which named none.
@@ -260,8 +358,9 @@ func ApplyIgnores(findings []Finding, ignores []Ignore) ([]Finding, []Ignore) {
 	used := make([]bool, len(ignores))
 	var kept []Finding
 	for _, f := range findings {
+		marked := f.Detection == DetectionSensitiveAttribute || f.Detection == DetectionSensitiveOutput
 		index := slices.IndexFunc(ignores, func(i Ignore) bool {
-			return i.Layer == f.Layer && i.Address == f.Address && i.Path == f.Path && i.Detection == f.Detection
+			return marked && i.Layer == f.Layer && i.Address == f.Address && i.Path == f.Path
 		})
 		if index < 0 {
 			kept = append(kept, f)
@@ -283,9 +382,12 @@ func WriteReport(w io.Writer, report Report) error {
 	var b strings.Builder
 	for _, f := range report.Findings {
 		fmt.Fprintf(&b, "%s@%s  %s  %s  [%s]\n", f.Layer, f.Version, f.Address, f.Path, f.Detection)
+		if f.value != "" {
+			fmt.Fprintf(&b, "    value: %q\n", f.value)
+		}
 	}
 	for _, i := range report.UnusedIgnores {
-		fmt.Fprintf(&b, "unused ignore: %s  %s  %s  [%s]\n", i.Layer, i.Address, i.Path, i.Detection)
+		fmt.Fprintf(&b, "unused ignore: %s  %s  %s\n", i.Layer, i.Address, i.Path)
 	}
 	fmt.Fprintf(&b, "%d finding(s) in %d version(s), %d unused ignore(s)\n",
 		len(report.Findings), len(report.Scanned), len(report.UnusedIgnores))

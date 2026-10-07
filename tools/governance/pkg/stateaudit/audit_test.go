@@ -92,8 +92,8 @@ func TestAuditHistory(t *testing.T) {
 func TestAuditAppliesIgnores(t *testing.T) {
 	cfg := twoLayerConfig()
 	cfg.Ignores = []Ignore{
-		{Layer: "b", Address: "gitlab_user_runner.shared", Path: "token", Detection: DetectionSensitiveAttribute, Reason: "test"},
-		{Layer: "a", Address: "x.y", Path: "z", Detection: DetectionSensitiveAttribute, Reason: "stale"},
+		{Layer: "b", Address: "gitlab_user_runner.shared", Path: "token", Reason: "test"},
+		{Layer: "a", Address: "x.y", Path: "z", Reason: "stale"},
 	}
 	report, err := Audit(context.Background(), cfg)
 	if err != nil || len(report.Findings) != 0 || !slices.Equal(report.UnusedIgnores, cfg.Ignores[1:]) {
@@ -129,7 +129,7 @@ func TestRun(t *testing.T) {
 		{"unused ignore", func() Config {
 			cfg := twoLayerConfig()
 			cfg.Layers = cfg.Layers[:1]
-			cfg.Ignores = []Ignore{{Layer: "a", Address: "x.y", Path: "z", Detection: DetectionSensitiveAttribute, Reason: "stale"}}
+			cfg.Ignores = []Ignore{{Layer: "a", Address: "x.y", Path: "z", Reason: "stale"}}
 			return cfg
 		}, ErrFindings, "x.y"},
 	}
@@ -149,7 +149,7 @@ func TestConfigFromEnv(t *testing.T) {
 	writeLayer(t, filepath.Join(terraformDir, "layers"), "a",
 		"terraform {\n  backend \"http\" {\n    address = \"https://gitlab.com/api/v4/projects/1/terraform/state/a\"\n  }\n}\n")
 	err := os.WriteFile(filepath.Join(terraformDir, IgnoreFileName),
-		[]byte("ignores:\n  - {layer: a, address: x.y, path: z, detection: sensitive-attribute, reason: test}\n"), 0o600)
+		[]byte("ignores:\n  a:\n    - {address: x.y, path: z, reason: test}\n"), 0o600)
 	if err != nil {
 		t.Fatalf("write ignore file: %v", err)
 	}
@@ -224,5 +224,48 @@ func TestAuditSkipsALayerWithoutState(t *testing.T) {
 	report, err := Audit(context.Background(), cfg)
 	if err != nil || !slices.Equal(report.Scanned, []string{"b@current"}) {
 		t.Errorf("Audit = %+v, %v, want layer a skipped and b scanned", report, err)
+	}
+}
+
+func TestRunRevealsValuesOnRequestAlone(t *testing.T) {
+	for _, reveal := range []bool{false, true} {
+		cfg := twoLayerConfig()
+		cfg.Reveal = reveal
+		var out bytes.Buffer
+		_ = Run(context.Background(), cfg, &out)
+		if got := strings.Contains(out.String(), "value: "); got != reveal {
+			t.Errorf("Reveal %v: output shows values %v:\n%s", reveal, got, out.String())
+		}
+	}
+}
+
+func TestCheckRevealOutputRefusesPipesAndCI(t *testing.T) {
+	noCI := func(string) string { return "" }
+	if err := checkRevealOutput(&bytes.Buffer{}, noCI); !errors.Is(err, ErrRevealRefused) {
+		t.Errorf("buffer error = %v, want ErrRevealRefused", err)
+	}
+	inCI := func(key string) string {
+		if key == "CI" {
+			return "true"
+		}
+		return ""
+	}
+	if err := checkRevealOutput(os.Stdout, inCI); !errors.Is(err, ErrRevealRefused) {
+		t.Errorf("CI error = %v, want ErrRevealRefused", err)
+	}
+}
+
+func TestNewCommandRefusesRevealBeforeReadingStates(t *testing.T) {
+	resolved := false
+	cmd := NewCommand(func(bool) (Config, error) {
+		resolved = true
+		return twoLayerConfig(), nil
+	})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"--reveal"})
+	err := cmd.Execute()
+	if !errors.Is(err, ErrRevealRefused) || resolved {
+		t.Errorf("Execute = %v, resolved %v, want ErrRevealRefused before resolve", err, resolved)
 	}
 }

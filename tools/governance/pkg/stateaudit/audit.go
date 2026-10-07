@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // IgnoreFileName is the ignore file below the Terraform directory.
@@ -19,6 +21,9 @@ const IgnoreFileName = ".tfstate-audit-ignore.yaml"
 // ErrCredentialsMissing reports empty TF_HTTP_USERNAME or TF_HTTP_PASSWORD.
 var ErrCredentialsMissing = errors.New("stateaudit: TF_HTTP_USERNAME and TF_HTTP_PASSWORD are empty, export the state backend credentials first")
 
+// ErrRevealRefused reports --reveal outside an interactive terminal, where a value would reach a log, a pipe, or a file.
+var ErrRevealRefused = errors.New("stateaudit: --reveal prints values to an interactive terminal alone, outside CI")
+
 // Config holds the inputs of one audit.
 type Config struct {
 	Layers   []Layer
@@ -26,6 +31,7 @@ type Config struct {
 	Detector ValueDetector
 	Ignores  []Ignore
 	History  bool
+	Reveal   bool
 }
 
 // Audit scans the current state of every layer, and every historical version with cfg.History.
@@ -34,6 +40,9 @@ func Audit(ctx context.Context, cfg Config) (Report, error) {
 	var findings []Finding
 	for _, layer := range cfg.Layers {
 		found, scanned, err := auditLayer(ctx, cfg, layer)
+		if errors.Is(err, ErrStateMissing) {
+			continue
+		}
 		if err != nil {
 			return Report{}, fmt.Errorf("stateaudit: layer %s: %w", layer.Name, err)
 		}
@@ -49,7 +58,7 @@ func auditLayer(ctx context.Context, cfg Config, layer Layer) ([]Finding, []stri
 	if err != nil {
 		return nil, nil, err
 	}
-	findings, err := ScanState(layer.Name, "current", current, cfg.Detector)
+	findings, err := scanState(layer.Name, "current", current, cfg.Detector, cfg.Reveal)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -71,7 +80,7 @@ func auditLayer(ctx context.Context, cfg Config, layer Layer) ([]Finding, []stri
 			return nil, nil, err
 		}
 		version := "serial-" + strconv.Itoa(serial)
-		found, err := ScanState(layer.Name, version, document, cfg.Detector)
+		found, err := scanState(layer.Name, version, document, cfg.Detector, cfg.Reveal)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -126,19 +135,38 @@ func ConfigFromEnv(terraformDir string, getenv func(string) string, history bool
 
 // NewCommand returns the subcommand state-audit.
 func NewCommand(resolve func(history bool) (Config, error)) *cobra.Command {
-	var history bool
+	var history, reveal bool
 	cmd := &cobra.Command{
 		Use:   "state-audit",
 		Short: "Report every location of a Terraform state which holds a confidential value",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if reveal {
+				if err := checkRevealOutput(cmd.OutOrStdout(), os.Getenv); err != nil {
+					return err
+				}
+			}
 			cfg, err := resolve(history)
 			if err != nil {
 				return err
 			}
+			cfg.Reveal = reveal
 			return Run(cmd.Context(), cfg, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().BoolVar(&history, "history", false, "also scan every historical state version which the backend holds")
+	cmd.Flags().BoolVar(&reveal, "reveal", false, "print each value below its location, on an interactive terminal outside CI alone")
 	return cmd
+}
+
+// checkRevealOutput accepts an interactive terminal outside CI, where the values stay off logs, pipes, and files.
+func checkRevealOutput(w io.Writer, getenv func(string) string) error {
+	if getenv("CI") != "" {
+		return ErrRevealRefused
+	}
+	file, ok := w.(*os.File)
+	if !ok || !term.IsTerminal(int(file.Fd())) {
+		return ErrRevealRefused
+	}
+	return nil
 }
