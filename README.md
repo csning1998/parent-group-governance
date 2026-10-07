@@ -419,6 +419,20 @@ A precondition of `foundation-vault-bastion` stops the plan when a field is miss
 - `provisioner-gitlab-project` creates one GitLab project with a fixed merge policy, branch protection on `main`, and generic `extra_variables`. The caller supplies every environment specific value.
 - `provisioner-vault-credential` generates a set of random passwords and writes one KV version 2 secret. The module is the single generation point for the secrets under its control.
 
+### Item E. Known Operational Risks of the State
+
+`./governance state-audit` reports the locations below, since each value enters the state through a provider attribute without a write-only form. Each location is a known operational risk, and the ignore file MUST NOT exempt it, because the value is confidential. The convergence model is a CI job which reads Vault at run time through a GitLab `id_tokens` login, which removes the CI variable itself.
+
+| Layer                    | Address                                                                      | Value                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `meta-gitlab-project`    | `module.code_reviewer`                                                       | The reviewer and tag bot tokens, read and published as project variables |
+| `group-governance`       | `data.vault_kv_secret_v2.sonar_token`, `gitlab_group_variable.review_secret` | The SonarQube analysis token, read and published as a group variable     |
+| `group-sonarqube`        | `sonarqube_user_token.ci_analysis`, `vault_kv_secret_v2.sonar_token`         | The SonarQube analysis token, minted by the provider                     |
+| `group-gitlab-runner`    | `gitlab_user_runner.shared`, `local_sensitive_file.runner_config`            | The runner authentication token                                          |
+| `group-federation-azure` | `azurerm_cognitive_account.openai`                                           | The account access keys, inert while `local_auth_enabled = false`        |
+
+The historical state versions of every layer still hold values which a later change removed. A purge of the history and a rotation of each exposed value close the record.
+
 ## Section 7. Continuous Integration
 
 The pipeline includes five components published by the `gitlab-ci-with-code-reviewer` project at version 1.6.7.
