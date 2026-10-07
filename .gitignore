@@ -10,6 +10,9 @@
 # Ansible
 .ansible/.lock
 
+# Declarations of the workstation, copied from the tracked .example file
+/gitlab-variables.yaml
+
 # BLOBs
 /fmt-commit-pusher
 /governance
