@@ -19,9 +19,16 @@ import (
 // ErrAuthRejected marks a DeployFunc failure attributed to previous itself.
 var ErrAuthRejected = errors.New("secretrotate: the live service rejected the previous credential")
 
+// ErrNoLiveCredential marks a live service which accepts none of the candidate credentials.
+var ErrNoLiveCredential = errors.New("secretrotate: the live service accepts none of the known credentials")
+
 // DeployFunc deploys a rotated secret against the target service, authenticating with previous.
 // An implementation MUST wrap ErrAuthRejected when the service rejects previous.
 type DeployFunc func(ctx context.Context, previous, next string) error
+
+// VerifyFunc reports whether the live service accepts secret, without changing the service.
+// An implementation MUST return an error, never false, for an answer which proves nothing.
+type VerifyFunc func(ctx context.Context, secret string) (bool, error)
 
 // Spec describes one rotatable secret.
 type Spec struct {
@@ -33,9 +40,36 @@ type Spec struct {
 	Classes []secretgen.CharClass
 
 	Deploy DeployFunc
+	Verify VerifyFunc
 
-	// FactoryDefaultPassword is a factory-default credential only Reconcile may try.
+	// FactoryDefaultPassword is the credential of a rebuilt service, which Rotate and Reconcile verify as a candidate.
 	FactoryDefaultPassword string
+}
+
+func requireVerify(spec Spec) error {
+	if spec.Verify == nil {
+		return errors.New("secretrotate: Spec.Verify is required, since every operation observes the live credential first")
+	}
+	return nil
+}
+
+// resolveLiveCredential returns the first candidate which the live service accepts.
+func resolveLiveCredential(ctx context.Context, spec Spec, candidates []string) (string, error) {
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		live, err := spec.Verify(ctx, candidate)
+		if err != nil {
+			return "", fmt.Errorf("secretrotate: verify a candidate credential: %w", err)
+		}
+		if live {
+			return candidate, nil
+		}
+	}
+	return "", ErrNoLiveCredential
 }
 
 // Exists reports whether Vault already holds a value for spec.
@@ -45,28 +79,40 @@ func Exists(ctx context.Context, client *vaultapi.Client, spec Spec) bool {
 }
 
 // Reconcile pushes the value Vault already holds for spec out to a drifted live service, never
-// generating a value and never writing to Vault.
-func Reconcile(ctx context.Context, client *vaultapi.Client, spec Spec, currentLiveSecret string) error {
+// generating a value and never writing to Vault. An operator value replaces every other candidate.
+func Reconcile(ctx context.Context, client *vaultapi.Client, spec Spec, operatorSupplied string) error {
+	if err := requireVerify(spec); err != nil {
+		return err
+	}
 	next, ok := readField(ctx, client, spec.Mount, spec.Path, spec.Field)
 	if !ok {
 		return fmt.Errorf("secretrotate: no value in Vault at %s/%s#%s to reconcile", spec.Mount, spec.Path, spec.Field)
 	}
 
-	if currentLiveSecret != "" {
-		return spec.Deploy(ctx, currentLiveSecret, next)
+	inSync, err := spec.Verify(ctx, next)
+	if err != nil {
+		return fmt.Errorf("secretrotate: verify the Vault value: %w", err)
+	}
+	if inSync {
+		return nil
 	}
 
-	guesses := []string{next}
-	if spec.FactoryDefaultPassword != "" {
-		guesses = append(guesses, spec.FactoryDefaultPassword)
-	}
-	var err error
-	for _, guess := range guesses {
-		if err = spec.Deploy(ctx, guess, next); err == nil {
-			return nil
+	var candidates []string
+	if operatorSupplied != "" {
+		candidates = []string{operatorSupplied}
+	} else {
+		if st, staged := readRotationState(ctx, client, spec.Mount, spec.Path, spec.Field); staged {
+			candidates = append(candidates, st.PendingNext)
+		}
+		if spec.FactoryDefaultPassword != "" {
+			candidates = append(candidates, spec.FactoryDefaultPassword)
 		}
 	}
-	return err
+	live, err := resolveLiveCredential(ctx, spec, candidates)
+	if err != nil {
+		return err
+	}
+	return spec.Deploy(ctx, live, next)
 }
 
 func resolveDataPath(mount, path string) string { return mount + "/data/" + path }
@@ -159,19 +205,25 @@ func readRotationState(ctx context.Context, client *vaultapi.Client, mount, path
 		return rotationState{}, false
 	}
 	data, _ := secret.Data["data"].(map[string]interface{})
-	raw, ok := data[formatRotationStateField(field)].(map[string]interface{})
+	raw, ok := data[formatRotationStateField(field)].(string)
 	if !ok {
 		return rotationState{}, false
 	}
 	var st rotationState
-	st.Previous, _ = raw["previous"].(string)
-	st.PendingNext, _ = raw["pending_next"].(string)
+	if err := json.Unmarshal([]byte(raw), &st); err != nil {
+		return rotationState{}, false
+	}
 	return st, true
 }
 
+// writeRotationState stores the record as a JSON string, since Terraform reads every field of the path as a string.
 func writeRotationState(ctx context.Context, client *vaultapi.Client, mount, path, field string, st rotationState) error {
+	raw, err := json.Marshal(st)
+	if err != nil {
+		return fmt.Errorf("secretrotate: encode rotation state: %w", err)
+	}
 	body := map[string]interface{}{"data": map[string]interface{}{
-		formatRotationStateField(field): map[string]interface{}{"previous": st.Previous, "pending_next": st.PendingNext},
+		formatRotationStateField(field): string(raw),
 	}}
 	if err := patchOrInitDocument(ctx, client, mount, path, body); err != nil {
 		return fmt.Errorf("secretrotate: stage rotation state at %s: %w", resolveDataPath(mount, path), err)
@@ -348,19 +400,19 @@ func hasVersionHistory(ctx context.Context, client *vaultapi.Client, mount, path
 	return parseVersionNumber(secret.Data["current_version"]) > 0
 }
 
-// recoverPendingRotation probes the pending value staged by a prior, interrupted Rotate call.
-// Only an ErrAuthRejected rejection falls through to a normal rotation.
+// recoverPendingRotation verifies the pending value staged by a prior, interrupted Rotate call.
+// Only a verified rejection falls through to a normal rotation.
 func recoverPendingRotation(ctx context.Context, client *vaultapi.Client, spec Spec, log func(string)) (string, bool, error) {
 	st, ok := readRotationState(ctx, client, spec.Mount, spec.Path, spec.Field)
 	if !ok {
 		return "", false, nil
 	}
-	probeErr := spec.Deploy(ctx, st.PendingNext, st.PendingNext)
-	if probeErr != nil {
-		if errors.Is(probeErr, ErrAuthRejected) {
-			return "", false, nil
-		}
-		return "", false, fmt.Errorf("secretrotate: recovery probe against the staged pending value failed for a reason other than an authentication rejection: %w", probeErr)
+	live, err := spec.Verify(ctx, st.PendingNext)
+	if err != nil {
+		return "", false, fmt.Errorf("secretrotate: verify the staged pending value: %w", err)
+	}
+	if !live {
+		return "", false, nil
 	}
 	if err := writeField(ctx, client, spec.Mount, spec.Path, spec.Field, st.PendingNext); err != nil {
 		return "", false, fmt.Errorf("secretrotate: recovered pending value but the Vault commit failed: %w", err)
@@ -374,10 +426,13 @@ func recoverPendingRotation(ctx context.Context, client *vaultapi.Client, spec S
 	return st.PendingNext, true, nil
 }
 
-// Rotate applies Spec against client: read the previous value from Vault, generate a replacement,
+// Rotate applies Spec against client: verify the live credential, generate a replacement,
 // deploy the replacement via Spec.Deploy, and on success persist and return the replacement.
 // A failed Deploy is returned unchanged and Vault is left untouched.
 func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(string)) (string, error) {
+	if err := requireVerify(spec); err != nil {
+		return "", err
+	}
 	_, existedBeforeLock := readField(ctx, client, spec.Mount, spec.Path, spec.Field)
 	if !existedBeforeLock && isPathDestroyedOutOfBand(ctx, client, spec.Mount, spec.Path) {
 		return "", fmt.Errorf("secretrotate: %s/%s held data before and now reads back empty, refusing to mint a value the live service was never given", spec.Mount, spec.Path)
@@ -399,11 +454,30 @@ func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(st
 		return recovered, err
 	}
 
+	// A rebuilt service holds the factory default, and a rebuilt Vault holds no value at all.
+	var candidates []string
+	if exists {
+		candidates = append(candidates, previous)
+	}
+	if spec.FactoryDefaultPassword != "" {
+		candidates = append(candidates, spec.FactoryDefaultPassword)
+	}
+	live, err := resolveLiveCredential(ctx, spec, candidates)
+	if err != nil {
+		return "", err
+	}
+
 	next, err := secretgen.Generate(spec.Length, spec.Classes...)
 	if err != nil {
 		return "", err
 	}
-	return commitRotation(ctx, client, spec, previous, next, exists, log)
+	return commitRotation(ctx, client, spec, vaultField{value: previous, exists: exists}, live, next, log)
+}
+
+// vaultField is the value of the rotated field which Rotate read under the lock.
+type vaultField struct {
+	value  string
+	exists bool
 }
 
 func isPathDestroyedOutOfBand(ctx context.Context, client *vaultapi.Client, mount, path string) bool {
@@ -423,44 +497,38 @@ func (e *applyRaceResolvedError) Error() string {
 
 func (e *applyRaceResolvedError) Unwrap() error { return e.cause }
 
-func stageAndApply(ctx context.Context, client *vaultapi.Client, spec Spec, previous, next string, log func(string)) error {
-	st := rotationState{Previous: previous, PendingNext: next}
+func stageAndApply(ctx context.Context, client *vaultapi.Client, spec Spec, read vaultField, live, next string, log func(string)) error {
+	st := rotationState{Previous: live, PendingNext: next}
 	if err := writeRotationState(ctx, client, spec.Mount, spec.Path, spec.Field, st); err != nil {
 		return err
 	}
-	applyErr := spec.Deploy(ctx, previous, next)
+	applyErr := spec.Deploy(ctx, live, next)
 	if applyErr == nil {
 		if log != nil {
 			log("Credential rotated against the live service.")
 		}
 		return nil
 	}
-	if current, ok := readField(ctx, client, spec.Mount, spec.Path, spec.Field); ok && current != previous {
+	if current, ok := readField(ctx, client, spec.Mount, spec.Path, spec.Field); ok && (!read.exists || current != read.value) {
 		return &applyRaceResolvedError{Resolved: current, cause: applyErr}
 	}
 	return applyErr
 }
 
-func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, previous, next string, exists bool, log func(string)) (string, error) {
-	if exists {
-		if err := stageAndApply(ctx, client, spec, previous, next, log); err != nil {
-			var raced *applyRaceResolvedError
-			if errors.As(err, &raced) {
-				return resolveAppliedElsewhere(ctx, client, spec, raced, log)
-			}
-			return "", err
+func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, read vaultField, live, next string, log func(string)) (string, error) {
+	if err := stageAndApply(ctx, client, spec, read, live, next, log); err != nil {
+		var raced *applyRaceResolvedError
+		if errors.As(err, &raced) {
+			return resolveAppliedElsewhere(ctx, client, spec, raced, log)
 		}
-	} else if log != nil {
-		log("No existing value in Vault; minting a new value without contacting the live service.")
+		return "", err
 	}
 
 	if err := writeField(ctx, client, spec.Mount, spec.Path, spec.Field, next); err != nil {
-		return "", fmt.Errorf("secretrotate: rotated but the Vault write failed, re-run to retry the write using the rotated value as previous: %w", err)
+		return "", fmt.Errorf("secretrotate: rotated but the Vault write failed, re-run to recover the staged value: %w", err)
 	}
-	if exists {
-		if err := clearRotationState(ctx, client, spec.Mount, spec.Path, spec.Field); err != nil {
-			return "", fmt.Errorf("secretrotate: rotated and committed but clearing the staged rotation state failed: %w", err)
-		}
+	if err := clearRotationState(ctx, client, spec.Mount, spec.Path, spec.Field); err != nil {
+		return "", fmt.Errorf("secretrotate: rotated and committed but clearing the staged rotation state failed: %w", err)
 	}
 	if log != nil {
 		log("New value stored at " + spec.Mount + "/" + spec.Path + "#" + spec.Field + ".")
@@ -468,10 +536,14 @@ func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, pre
 	return next, nil
 }
 
-// resolveAppliedElsewhere accepts raced.Resolved only after a probe confirms the live service
+// resolveAppliedElsewhere accepts raced.Resolved only after Verify confirms the live service
 // holds that same value.
 func resolveAppliedElsewhere(ctx context.Context, client *vaultapi.Client, spec Spec, raced *applyRaceResolvedError, log func(string)) (string, error) {
-	if err := spec.Deploy(ctx, raced.Resolved, raced.Resolved); err != nil {
+	live, err := spec.Verify(ctx, raced.Resolved)
+	if err != nil {
+		return "", fmt.Errorf("secretrotate: %w, and verifying the raced value failed: %w", raced, err)
+	}
+	if !live {
 		return "", raced
 	}
 	if err := clearRotationState(ctx, client, spec.Mount, spec.Path, spec.Field); err != nil {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
@@ -26,6 +27,20 @@ func TestRunPlaybookMissingPlaybookFileFails(t *testing.T) {
 	err := RunPlaybook(context.Background(), dir, "", filepath.Join(dir, "no-such-playbook.yaml"), &playbook.AnsiblePlaybookOptions{}, nil)
 	if err == nil {
 		t.Error("RunPlaybook on a missing playbook file = nil error, want error")
+	}
+}
+
+func TestRunPlaybookErrorOmitsExtraEnvValues(t *testing.T) {
+	requireAnsiblePlaybook(t)
+	dir := t.TempDir()
+	const secret = "become-password-fixture"
+
+	err := RunPlaybook(context.Background(), dir, "", filepath.Join(dir, "no-such-playbook.yaml"), &playbook.AnsiblePlaybookOptions{}, map[string]string{"ANSIBLE_BECOME_PASS": secret})
+	if err == nil {
+		t.Fatal("RunPlaybook on a missing playbook file = nil error, want error")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Errorf("RunPlaybook error = %q, want an error without the extraEnv value", err)
 	}
 }
 

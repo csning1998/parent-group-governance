@@ -7,5 +7,5 @@ ephemeral "vault_kv_secret_v2" "state_backend" {
 
 data "terraform_remote_state" "foundation_group" {
   backend = "http"
-  config  = merge(local._state_auth, { address = "${local._state_base}/group-foundation" })
+  config  = { address = "${local._state_base}/group-foundation" }
 }

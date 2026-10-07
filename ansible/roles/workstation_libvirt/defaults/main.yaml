@@ -15,3 +15,6 @@ workstation_libvirt_publish_network_netmask: "255.255.255.0"
 # segment reach Bastion Vault through the routed publish network.
 workstation_libvirt_publish_source_cidr: "172.16.0.0/12"
 workstation_libvirt_vault_port: 8200
+
+# Seconds which virtnetworkd waits at start for firewalld to report the running state.
+workstation_libvirt_firewalld_ready_timeout: 120

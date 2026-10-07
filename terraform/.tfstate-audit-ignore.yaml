@@ -1,0 +1,63 @@
+---
+# Locations which a provider marks sensitive while the value is public. See tools/governance/README.md Section 11.
+ignores:
+  foundation-vault-bastion:
+    - address: data.vault_generic_secret.platform_trust
+      paths:
+        - data.bastion_publish_cidr
+        - data.domain_suffix
+        - data.network_cidr
+        - data.stages
+      reason: The platform trust facts are network CIDRs, stages, and the domain suffix.
+
+    - address: vault_kv_secret_v2.registry_platform_trust
+      paths:
+        - data_json.bastion_publish_cidr
+        - data_json.domain_suffix
+        - data_json.network_cidr
+        - data_json.spire_trust_domains
+      reason: The registry republishes the platform trust facts.
+
+    - address: vault_kv_secret_v2.registry_tenant_bastion["meta-platform"]
+      paths:
+        - data_json.assignable_policies
+        - data_json.pki
+        - data_json.transit_unseal
+        - data_json.vault
+      reason: The registry holds endpoints, mount paths, policy names, and public certificates.
+
+  meta-gitlab-project:
+    - address: module.workload_identity_federation.vault_kv_secret_v2.binding["anthropic"]
+      paths:
+        - data_json.federation_rule_id
+        - data_json.issuer_id
+        - data_json.organization_id
+        - data_json.service_account_id
+        - data_json.workspace_id
+      reason: The binding holds federation identifiers, which grant nothing without a signed CI job token.
+
+    - address: module.workload_identity_federation.vault_kv_secret_v2.binding["azure"]
+      paths:
+        - data_json.client_id
+        - data_json.cognitive_account_id
+        - data_json.federated_credential_id
+        - data_json.openai_endpoint
+        - data_json.service_principal_id
+        - data_json.subscription_id
+        - data_json.tenant_id
+      reason: The binding holds federation identifiers, which grant nothing without a signed CI job token.
+
+    - address: module.workload_identity_federation.vault_kv_secret_v2.binding["google"]
+      paths:
+        - data_json.pool_id
+        - data_json.project_id
+        - data_json.project_number
+        - data_json.provider_id
+        - data_json.service_account_email
+        - data_json.service_account_id
+        - data_json.workload_identity_provider
+      reason: The binding holds federation identifiers, which grant nothing without a signed CI job token.
+
+    - address: module.github_mirror.gitlab_project_push_mirror.this
+      path: url
+      reason: The mirror URL uses the SSH scheme and carries no password.

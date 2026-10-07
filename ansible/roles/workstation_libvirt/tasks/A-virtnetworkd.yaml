@@ -1,5 +1,27 @@
 ---
-- name: "A1. Enable and start virtnetworkd.service"
+- name: "A1. Create the drop-in directory of virtnetworkd.service"
+  ansible.builtin.file:
+    path: /etc/systemd/system/virtnetworkd.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Virtual network bridges created prior to firewalld startup fail to bind to designated firewall zones.
+# Guest traffic consequently falls into the default zone because virtnetworkd ignores the initial activation of firewalld.
+- name: "A2. Order virtnetworkd after a running firewalld"
+  ansible.builtin.template:
+    src: 10-after-firewalld.conf.j2
+    dest: /etc/systemd/system/virtnetworkd.service.d/10-after-firewalld.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: "A3. Apply the unit drop-in before the service task"
+  ansible.builtin.meta: flush_handlers
+
+- name: "A4. Enable and start virtnetworkd.service"
   ansible.builtin.systemd_service:
     name: virtnetworkd.service
     enabled: true

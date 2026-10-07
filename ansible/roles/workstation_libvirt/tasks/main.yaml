@@ -11,13 +11,13 @@
 
 # The publish network requires a running virtnetworkd. A host which enables only
 # the socket unit never starts the daemon at boot, which skips libvirt autostart.
-- name: "Section A. Enable the libvirt network daemon"
+- name: "Section A. Enable the libvirt network daemon after firewalld"
   ansible.builtin.include_tasks: A-virtnetworkd.yaml
 
 - name: "Section B. Define the Bastion Vault publish network"
   ansible.builtin.include_tasks: B-publish-network.yaml
 
-- name: "Section C. Open the Bastion Vault port for the publish network"
+- name: "Section C. Restrict guest traffic to the host"
   ansible.builtin.include_tasks: C-firewalld.yaml
 
 - name: "Section D. Grant memlock to the operator user"

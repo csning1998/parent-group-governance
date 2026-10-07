@@ -1,0 +1,19 @@
+---
+# Declares the CI/CD variables which `./governance gitlab-variables apply` writes masked and hidden from Bastion Vault.
+api_url: https://gitlab.com/api/v4
+token: secret/<owner>/terraform/state-backend#token
+
+projects:
+  "1001":
+    name: example-group/example-project
+    variables:
+      ALPHA_TOKEN: secret/example/alpha#token
+      BETA_TOKEN:
+        source: secret/example/beta#token
+        protected: true
+
+groups:
+  "2001":
+    name: example-group
+    variables:
+      GAMMA_TOKEN: secret/example/gamma#token

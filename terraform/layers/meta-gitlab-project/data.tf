@@ -1,27 +1,26 @@
 
 locals {
   _state_base = "https://gitlab.com/api/v4/projects/86417732/terraform/state"
-  _state_auth = module.local_credential_contexts.state_auth_gitlab_saas
 }
 
 data "terraform_remote_state" "foundation_group" {
   backend = "http"
-  config  = merge(local._state_auth, { address = "${local._state_base}/group-foundation" })
+  config  = { address = "${local._state_base}/group-foundation" }
 }
 
 data "terraform_remote_state" "group_federation_anthropic" {
   backend = "http"
-  config  = merge(local._state_auth, { address = "${local._state_base}/group-federation-anthropic" })
+  config  = { address = "${local._state_base}/group-federation-anthropic" }
 }
 
 data "terraform_remote_state" "group_federation_gcp" {
   backend = "http"
-  config  = merge(local._state_auth, { address = "${local._state_base}/group-federation-gcp" })
+  config  = { address = "${local._state_base}/group-federation-gcp" }
 }
 
 data "terraform_remote_state" "group_federation_azure" {
   backend = "http"
-  config  = merge(local._state_auth, { address = "${local._state_base}/group-federation-azure" })
+  config  = { address = "${local._state_base}/group-federation-azure" }
 }
 
 ephemeral "vault_kv_secret_v2" "state_backend" {

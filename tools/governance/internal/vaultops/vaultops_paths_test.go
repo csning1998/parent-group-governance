@@ -95,6 +95,7 @@ func TestWritePEMWritesDecodableFileWithGivenMode(t *testing.T) {
 	block, _ := pem.Decode(data)
 	if block == nil {
 		t.Fatalf("no PEM block in %s", path)
+		return
 	}
 	if block.Type != "TEST BLOCK" {
 		t.Errorf("block.Type = %q, want %q", block.Type, "TEST BLOCK")

@@ -283,14 +283,21 @@ Vault exits when any declared TCP listener fails to bind. The host network names
 
 ### Item C. Host Prerequisites of the Vault Container
 
-A host prerequisite is a host setting which the Vault container requires before the container starts. The role `workstation_libvirt` declares four host prerequisites.
+A host prerequisite is a host setting which the Vault container requires before the container starts. The role `workstation_libvirt` declares five host prerequisites.
 
 1.  The libvirt network `vault-bastion-publish` provides the address `172.16.0.1` on the bridge of the network.
-2.  The unit `virtnetworkd.service` is enabled and running.
-3.  A firewalld rich rule in the zone `libvirt-routed` admits TCP port 8200 from `172.16.0.0/12` to `172.16.0.1`.
-4.  The memlock limits of the operator user are unlimited, because Vault locks memory under rootless Podman.
+2.  The unit `virtnetworkd.service` is enabled, and a drop-in starts the unit after firewalld reports the running state.
+3.  The firewalld policy `libvirt-to-host` admits DHCP, DNS, ICMP, and TCP port 8200 from `172.16.0.0/12` to `172.16.0.1` for routed guests.
+4.  The firewalld zone `libvirt` admits DHCP, DNS, and ICMP for NAT guests.
+5.  The memlock limits of the operator user are unlimited, because Vault locks memory under rootless Podman.
 
 The unit `virtnetworkd.service` MUST be enabled. A host which enables only `virtnetworkd.socket` never starts the daemon at boot. The daemon executes the autostart of every libvirt network at startup alone. The network `vault-bastion-publish` therefore does not exist until a client connects to the socket.
+
+The unit MUST start after firewalld reports the running state. libvirt adds each bridge to a zone when the network starts, and libvirt repeats the step on a firewalld reload but not on the first start of firewalld. A bridge created earlier stays outside every zone, and the default zone rejects the DHCP requests of the guests on that bridge.
+
+The policy `libvirt-to-host` carries priority -1 and target REJECT. The policy decides routed guest traffic to the host before any rule of the zone `libvirt-routed`, hence the rule for port 8200 resides in the policy. The policy and the zone `libvirt` omit `ssh` and `tftp`, which the shipped files admit, since no guest of this host logs in to the host or fetches files from the host. The role overrides both shipped files under `/etc/firewalld`, hence a later libvirt package does not change the overrides.
+
+The zone `trusted` MUST NOT bind an interface or a source. A binding in that zone accepts every port of the host and bypasses the policy and the zone `libvirt`. The role asserts the permanent zone `trusted` holds no binding.
 
 The entrypoint of Item B exits after the polling attempts are exhausted. The restart policy `restart: always` then starts the container again. A missing prerequisite consequently produces a restart loop instead of a single failure.
 
@@ -326,6 +333,7 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 | `[Hypervisor] Apply workstation SELinux policy and file contexts`                     | `ansible selinux`                  | Runs the playbook described in Section 3 Item B                            |
 | `[Hypervisor] Apply workstation Libvirt network and Bastion Vault host prerequisites` | `ansible libvirt`                  | Runs the playbook described in Section 4 Item C                            |
 | `[Hypervisor] Verify host IaC tools`                                                  | `env verify`                       | Reports the presence of Terraform, Vault, and Ansible on `PATH`            |
+| `[Terraform] Audit State Secrets`                                                     | `state-audit [--history]`          | Lists state locations holding a secret, see tools/governance Section 11    |
 
 Each credential key listed in `credentials.yaml` becomes one subcommand under `vault`, and one more under `vault reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already holds a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears.
 
@@ -343,11 +351,13 @@ Every subcommand other than the bare root command bootstraps `.env` before runni
 | `UNAME`, `UHOME`        | The operator user name and home directory                                           |
 | `SONARQUBE_DB_PASSWORD` | Generated once from `crypto/rand` at first bootstrap                                |
 
+The file `.env` is the only copy of `SONARQUBE_DB_PASSWORD`, while `sonarqube/postgres-data` keeps the password of the first initialization. A deleted `.env` therefore generates a password which the existing database rejects, and the recovery is a rebuild of `sonarqube/postgres-data` and `sonarqube/data`.
+
 ### Item D. Credential Rotation
 
 The file `credentials.yaml` declares every rotatable infrastructure account. A declaration names the Vault mount, the Vault path, the generated length, and the service mechanism performing the remote password change. The current declaration covers the SonarQube administrator account alone.
 
-Rotation applies a write ahead staging protocol across the Vault document and the external service, guarded by a Check and Set advisory lock. The protocol, the recovery paths, and the boundary conditions are documented in `tools/governance/README.md`.
+Every rotation and every reconciliation first verifies the live credential through `service.verify_endpoint`, a read only request, and changes nothing when no known credential is live. Rotation applies a write ahead staging protocol across the Vault document and the external service, guarded by a Check and Set advisory lock. The protocol, the recovery paths, and the boundary conditions are documented in `tools/governance/README.md`.
 
 ## Section 6. Terraform Layers
 
@@ -355,22 +365,22 @@ Rotation applies a write ahead staging protocol across the Vault document and th
 
 Every layer stores state in the GitLab HTTP backend under the project hosting this repository, with one state name per layer. Three credential sources feed the providers, and the module `terraform/modules/contexts-local-credential` centralizes each source.
 
-- The HTTP backend and every `terraform_remote_state` block authenticate through the `read_api` token in `~/.terraform.d/credentials.tfrc.json`.
+- The HTTP backend and every `terraform_remote_state` block authenticate through `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD`, which the operator exports from the Bastion Vault secret `secret/parent-group-governance/terraform/state-backend`. The `config` of a `terraform_remote_state` block holds the address alone, since Terraform persists the `config` in the state.
 - The Vault provider connects to `https://172.16.0.1:8200` with the CA at `vault/tls/ca.pem`, authenticating through the token helper file `~/.vault-token`. Reading the token from the helper file breaks the cyclic authentication dependency present during initialization.
 - The GitLab provider reads a token from the ephemeral Vault secret `secret/parent-group-governance/state-backend`. An ephemeral read keeps the token out of the persisted state of the consuming layer.
 
 ### Item B. Layer Inventory
 
-| Layer                        | Responsibility                                                                                  | Upstream State                                   |
-| ---------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `foundation-vault-bastion`   | The PKI hierarchy, tenant AppRoles and ACLs, the registry, transit unseal keys, and audit       | None                                             |
-| `group-foundation`           | The top level group `Personal Lab` at path `csning1998-lab`                                     | None                                             |
-| `meta-gitlab-project`        | The GitLab project hosting this repository and every Terraform state                            | `group-foundation`, `group-federation-anthropic` |
-| `group-topology`             | Every subgroup and nested subgroup beneath the top level group                                  | `group-foundation`                               |
-| `group-governance`           | Group labels and the group CI variables sourced from Vault                                      | `group-topology`                                 |
-| `group-gitlab-runner`        | The group runner registration and the rendered `gitlab-runner-configs/config.toml`              | `group-topology`                                 |
-| `group-sonarqube`            | The SonarQube global analysis token, written into Vault                                         | None                                             |
-| `group-federation-anthropic` | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`                 | None                                             |
+| Layer                        | Responsibility                                                                            | Upstream State                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `foundation-vault-bastion`   | The PKI hierarchy, tenant AppRoles and ACLs, the registry, transit unseal keys, and audit | None                                             |
+| `group-foundation`           | The top level group `Personal Lab` at path `csning1998-lab`                               | None                                             |
+| `meta-gitlab-project`        | The GitLab project hosting this repository and every Terraform state                      | `group-foundation`, `group-federation-anthropic` |
+| `group-topology`             | Every subgroup and nested subgroup beneath the top level group                            | `group-foundation`                               |
+| `group-governance`           | Group labels and the group CI variables sourced from Vault                                | `group-topology`                                 |
+| `group-gitlab-runner`        | The group runner registration and the rendered `gitlab-runner-configs/config.toml`        | `group-topology`                                 |
+| `group-sonarqube`            | The SonarQube global analysis token, written into Vault                                   | None                                             |
+| `group-federation-anthropic` | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`           | None                                             |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing the Bootstrap Issuing Intermediate alone, and the intermediate issues every leaf certificate. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
@@ -408,6 +418,20 @@ A precondition of `foundation-vault-bastion` stops the plan when a field is miss
 - `contexts-local-credential` does not declare any resource. The module exposes the Bastion Vault endpoint, the CA path, the Vault token, and the GitLab state authentication block as outputs. Every layer reads the endpoint from the module instead of redeclaring a default.
 - `provisioner-gitlab-project` creates one GitLab project with a fixed merge policy, branch protection on `main`, and generic `extra_variables`. The caller supplies every environment specific value.
 - `provisioner-vault-credential` generates a set of random passwords and writes one KV version 2 secret. The module is the single generation point for the secrets under its control.
+
+### Item E. Known Operational Risks of the State
+
+`./governance state-audit` reports the locations below, since each value enters the state through a provider attribute without a write-only form. Each location is a known operational risk, and the ignore file MUST NOT exempt it, because the value is confidential. The convergence model is a CI job which reads Vault at run time through a GitLab `id_tokens` login, which removes the CI variable itself.
+
+| Layer                    | Address                                                                      | Value                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `meta-gitlab-project`    | `module.code_reviewer`                                                       | The reviewer and tag bot tokens, read and published as project variables |
+| `group-governance`       | `data.vault_kv_secret_v2.sonar_token`, `gitlab_group_variable.review_secret` | The SonarQube analysis token, read and published as a group variable     |
+| `group-sonarqube`        | `sonarqube_user_token.ci_analysis`, `vault_kv_secret_v2.sonar_token`         | The SonarQube analysis token, minted by the provider                     |
+| `group-gitlab-runner`    | `gitlab_user_runner.shared`, `local_sensitive_file.runner_config`            | The runner authentication token                                          |
+| `group-federation-azure` | `azurerm_cognitive_account.openai`                                           | The account access keys, inert while `local_auth_enabled = false`        |
+
+The historical state versions of every layer still hold values which a later change removed. A purge of the history and a rotation of each exposed value close the record.
 
 ## Section 7. Continuous Integration
 

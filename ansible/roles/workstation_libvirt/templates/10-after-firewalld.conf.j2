@@ -1,0 +1,6 @@
+[Unit]
+Wants=firewalld.service
+After=firewalld.service
+
+[Service]
+ExecStartPre=/usr/bin/timeout {{ workstation_libvirt_firewalld_ready_timeout }} /bin/sh -c 'until /usr/bin/firewall-cmd --state >/dev/null 2>&1; do sleep 1; done'

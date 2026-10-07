@@ -125,6 +125,7 @@ func execute(args []string) int {
 		a.newVaultCmd(),
 		a.newAnsibleCmd(),
 		a.newEnvCmd(),
+		a.newStateAuditCmd(),
 	)
 
 	rootCmd.SetArgs(args)

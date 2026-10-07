@@ -3,6 +3,7 @@ package httprotate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -144,5 +145,62 @@ func TestFormSpecDeployPreservesInjectionAttemptCharactersVerbatim(t *testing.T)
 	}
 	if extraFieldSeen {
 		t.Error("an injected extra form field was parsed out of the password value, want it kept opaque")
+	}
+}
+
+// TestFormSpecVerifyReportsWhetherTheServiceAcceptsTheSecret covers the read only observation
+// which secretrotate uses in place of a change request whenever the live credential is unknown.
+func TestFormSpecVerifyReportsWhetherTheServiceAcceptsTheSecret(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/validate" {
+			t.Errorf("request = %s %s, want GET /validate", r.Method, r.URL.Path)
+		}
+		user, pass, _ := r.BasicAuth()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"valid":%t}`, user == "admin" && pass == "live-pass")
+	}))
+	defer srv.Close()
+
+	spec := FormSpec{URL: srv.URL + "/change", VerifyURL: srv.URL + "/validate", Login: "admin"}
+	for secret, want := range map[string]bool{"live-pass": true, "stale-pass": false} {
+		got, err := spec.Verify(context.Background(), secret)
+		if err != nil {
+			t.Fatalf("Verify(%q): %v", secret, err)
+		}
+		if got != want {
+			t.Errorf("Verify(%q) = %v, want %v", secret, got, want)
+		}
+	}
+}
+
+// TestFormSpecVerifyFailsOnAnInconclusiveAnswer covers every answer which proves nothing
+// about the credential. Verify MUST return an error, never false, for each answer.
+func TestFormSpecVerifyFailsOnAnInconclusiveAnswer(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "server error", status: http.StatusInternalServerError, body: `{"valid":false}`},
+		{name: "body without the valid field", status: http.StatusOK, body: `{}`},
+		{name: "body which is not JSON", status: http.StatusOK, body: `<html></html>`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(c.status)
+				_, _ = w.Write([]byte(c.body))
+			}))
+			defer srv.Close()
+
+			spec := FormSpec{URL: srv.URL, VerifyURL: srv.URL, Login: "admin"}
+			if _, err := spec.Verify(context.Background(), "any"); err == nil {
+				t.Error("Verify: want an error for an inconclusive answer, got nil")
+			}
+		})
+	}
+
+	if _, err := (FormSpec{URL: "http://127.0.0.1:1", Login: "admin"}).Verify(context.Background(), "any"); err == nil {
+		t.Error("Verify without VerifyURL: want an error, got nil")
 	}
 }

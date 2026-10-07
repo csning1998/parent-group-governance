@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Managed by the parent-group-governance role workstation_libvirt. -->
+<zone target="ACCEPT">
+  <short>libvirt</short>
+  <description>NAT libvirt guests reach DHCP and DNS of the host. The target forwards guest traffic, and the low priority reject blocks every other port of the host.</description>
+  <rule priority="32767">
+    <reject/>
+  </rule>
+  <protocol value="icmp"/>
+  <protocol value="ipv6-icmp"/>
+  <service name="dhcp"/>
+  <service name="dhcpv6"/>
+  <service name="dns"/>
+</zone>

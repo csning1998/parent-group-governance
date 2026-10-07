@@ -232,9 +232,9 @@ func (s *fakeKVv2) handleMetadata(w http.ResponseWriter, r *http.Request, path s
 
 var errAuth = errors.New("auth rejected")
 
-// readStagedRotationFields reads the Write-Ahead staging document Rotate is expected to persist
-// at "<field>_rotation" before calling Apply. The test talks to the fake server directly, since
-// the point of this test is to force a matching production helper into being.
+// readStagedRotationFields reads the Write-Ahead staging record Rotate is expected to persist
+// at "<field>_rotation" before calling Apply. The record MUST be a JSON string, because a
+// consumer such as the ephemeral vault_kv_secret_v2 of Terraform reads every field as a string.
 func readStagedRotationFields(t *testing.T, client *vaultapi.Client, mount, path, field string) (previous, pendingNext string, ok bool) {
 	t.Helper()
 	secret, err := client.Logical().ReadWithContext(context.Background(), mount+"/data/"+path)
@@ -242,13 +242,87 @@ func readStagedRotationFields(t *testing.T, client *vaultapi.Client, mount, path
 		return "", "", false
 	}
 	data, _ := secret.Data["data"].(map[string]interface{})
-	staging, ok := data[field+"_rotation"].(map[string]interface{})
-	if !ok {
+	value, present := data[field+"_rotation"]
+	if !present || value == nil {
 		return "", "", false
 	}
-	previous, _ = staging["previous"].(string)
-	pendingNext, _ = staging["pending_next"].(string)
-	return previous, pendingNext, true
+	raw, isString := value.(string)
+	if !isString {
+		t.Fatalf("%s_rotation holds %T, want a JSON string", field, value)
+	}
+	var staging struct {
+		Previous    string `json:"previous"`
+		PendingNext string `json:"pending_next"`
+	}
+	if err := json.Unmarshal([]byte(raw), &staging); err != nil {
+		t.Fatalf("%s_rotation is not JSON: %v", field, err)
+	}
+	return staging.Previous, staging.PendingNext, true
+}
+
+// TestWriteRotationStateKeepsEveryFieldAString covers the Terraform consumer of the same path,
+// which fails with a value conversion error on any field which is not a string.
+func TestWriteRotationStateKeepsEveryFieldAString(t *testing.T) {
+	srv, client, _ := newFakeKVv2Server(t)
+	defer srv.Close()
+	seedField(t, client, "password", "old-value")
+
+	staged := rotationState{Previous: "old-value", PendingNext: "next-value"}
+	if err := writeRotationState(context.Background(), client, "secret", "app/infra", "password", staged); err != nil {
+		t.Fatalf("writeRotationState: %v", err)
+	}
+
+	secret, err := client.Logical().ReadWithContext(context.Background(), "secret/data/app/infra")
+	if err != nil || secret == nil {
+		t.Fatalf("read document: %v", err)
+	}
+	data, _ := secret.Data["data"].(map[string]interface{})
+	for key, value := range data {
+		if _, ok := value.(string); !ok {
+			t.Errorf("field %s holds %T, want string", key, value)
+		}
+	}
+
+	got, ok := readRotationState(context.Background(), client, "secret", "app/infra", "password")
+	if !ok || got != staged {
+		t.Errorf("readRotationState = %+v, ok=%v, want %+v", got, ok, staged)
+	}
+}
+
+// liveService fakes the one credential which the live service accepts, behind both the Deploy and
+// the Verify of a Spec. Deploy changes the credential only when previous matches the credential.
+type liveService struct {
+	current   string
+	deploys   [][2]string
+	verifies  []string
+	deployErr error
+	verifyErr error
+}
+
+func (s *liveService) deploy(ctx context.Context, previous, next string) error {
+	s.deploys = append(s.deploys, [2]string{previous, next})
+	if s.deployErr != nil {
+		return s.deployErr
+	}
+	if previous != s.current {
+		return fmt.Errorf("%w: test", ErrAuthRejected)
+	}
+	s.current = next
+	return nil
+}
+
+func (s *liveService) verify(ctx context.Context, secret string) (bool, error) {
+	s.verifies = append(s.verifies, secret)
+	if s.verifyErr != nil {
+		return false, s.verifyErr
+	}
+	return secret == s.current, nil
+}
+
+func (s *liveService) bind(spec Spec) Spec {
+	spec.Deploy = s.deploy
+	spec.Verify = s.verify
+	return spec
 }
 
 // TestRotatePreservesUnrelatedFieldsAtTheSamePath covers a Vault path shared with a writer this
@@ -257,21 +331,12 @@ func readStagedRotationFields(t *testing.T, client *vaultapi.Client, mount, path
 func TestRotatePreservesUnrelatedFieldsAtTheSamePath(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
+	seedField(t, client, "other_field", "keep-me")
 
-	if err := writeField(context.Background(), client, "secret", "app/infra", "other_field", "keep-me"); err != nil {
-		t.Fatalf("seed writeField: %v", err)
-	}
-
-	spec := Spec{
-		Mount:   "secret",
-		Path:    "app/infra",
-		Field:   "password",
-		Length:  16,
-		Classes: []secretgen.CharClass{secretgen.Upper, secretgen.Lower, secretgen.Digit},
-		Deploy: func(ctx context.Context, previous, next string) error {
-			return nil
-		},
-	}
+	live := &liveService{current: "factory"}
+	spec := lockTestSpec()
+	spec.FactoryDefaultPassword = "factory"
+	spec = live.bind(spec)
 
 	next, err := Rotate(context.Background(), client, spec, nil)
 	if err != nil {
@@ -283,8 +348,8 @@ func TestRotatePreservesUnrelatedFieldsAtTheSamePath(t *testing.T) {
 		t.Errorf("other_field = %q, ok=%v, want the unrelated field untouched", other, ok)
 	}
 	password, ok := readField(context.Background(), client, "secret", "app/infra", "password")
-	if !ok || password != next {
-		t.Errorf("password = %q, ok=%v, want %q", password, ok, next)
+	if !ok || password != next || live.current != next {
+		t.Errorf("password = %q, ok=%v, live = %q, want both %q", password, ok, live.current, next)
 	}
 }
 
@@ -294,23 +359,15 @@ func TestRotatePreservesUnrelatedFieldsAtTheSamePath(t *testing.T) {
 func TestRotateStagesPendingStateBeforeApplyingToTheLiveService(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
+	seedField(t, client, "password", "old-value")
 
-	if err := writeField(context.Background(), client, "secret", "app/infra", "password", "old-value"); err != nil {
-		t.Fatalf("seed writeField: %v", err)
-	}
-
+	live := &liveService{current: "old-value"}
+	spec := live.bind(lockTestSpec())
 	var stagedPrevious, stagedPendingNext string
 	var stagedOK bool
-	spec := Spec{
-		Mount:   "secret",
-		Path:    "app/infra",
-		Field:   "password",
-		Length:  16,
-		Classes: []secretgen.CharClass{secretgen.Upper, secretgen.Lower, secretgen.Digit},
-		Deploy: func(ctx context.Context, previous, next string) error {
-			stagedPrevious, stagedPendingNext, stagedOK = readStagedRotationFields(t, client, "secret", "app/infra", "password")
-			return nil
-		},
+	spec.Deploy = func(ctx context.Context, previous, next string) error {
+		stagedPrevious, stagedPendingNext, stagedOK = readStagedRotationFields(t, client, "secret", "app/infra", "password")
+		return live.deploy(ctx, previous, next)
 	}
 
 	next, err := Rotate(context.Background(), client, spec, nil)
@@ -328,72 +385,106 @@ func TestRotateStagesPendingStateBeforeApplyingToTheLiveService(t *testing.T) {
 	}
 }
 
-// TestRotateSkipsApplyAndMintsDirectlyWhenNoPriorValueExists covers first-time creation: Vault
-// does not hold a previous value, leaving no credential with which the live service call can be
-// authenticated. Rotate mints a value straight into Vault instead of calling Apply.
-func TestRotateSkipsApplyAndMintsDirectlyWhenNoPriorValueExists(t *testing.T) {
+// TestRotateRequiresAVerifyFunction covers a Spec without a way to observe the live service.
+// Rotate MUST refuse before touching the service or Vault.
+func TestRotateRequiresAVerifyFunction(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
+	seedField(t, client, "password", "old-value")
 
-	applyCalled := false
-	spec := Spec{
-		Mount:   "secret",
-		Path:    "app/infra",
-		Field:   "password",
-		Length:  16,
-		Classes: []secretgen.CharClass{secretgen.Upper, secretgen.Lower, secretgen.Digit},
-		Deploy: func(ctx context.Context, previous, next string) error {
-			applyCalled = true
-			return nil
-		},
-	}
+	live := &liveService{current: "old-value"}
+	spec := live.bind(lockTestSpec())
+	spec.Verify = nil
 
-	next, err := Rotate(context.Background(), client, spec, nil)
-	if err != nil {
-		t.Fatalf("Rotate: %v", err)
+	if _, err := Rotate(context.Background(), client, spec, nil); err == nil {
+		t.Fatal("Rotate: want an error for a Spec without Verify, got nil")
 	}
-	if applyCalled {
-		t.Error("Apply was called on first creation, want it skipped")
-	}
-	if len(next) != 16 {
-		t.Errorf("Rotate returned %q, want length 16", next)
-	}
-
-	stored, ok := readField(context.Background(), client, "secret", "app/infra", "password")
-	if !ok || stored != next {
-		t.Errorf("stored value = %q, ok=%v, want %q", stored, ok, next)
+	if len(live.deploys) != 0 {
+		t.Errorf("deploys = %v, want none", live.deploys)
 	}
 }
 
-// TestRotatePropagatesApplyFailureWithoutTouchingVault covers a failed Apply from both angles:
-// the value read from Vault MUST be the exact and only previous guess offered, and a failed
-// Apply MUST leave the pre-existing Vault value untouched.
+// rotateCase is one row of TestRotateAuthenticatesWithTheVerifiedLiveCredential.
+type rotateCase struct {
+	name           string
+	vaultValue     string
+	hasVaultValue  bool
+	factoryDefault string
+	liveValue      string
+	wantPrevious   string
+	wantErr        error
+}
+
+func (c rotateCase) run(t *testing.T) {
+	srv, client, _ := newFakeKVv2Server(t)
+	defer srv.Close()
+	if c.hasVaultValue {
+		seedField(t, client, "password", c.vaultValue)
+	}
+	live := &liveService{current: c.liveValue}
+	spec := lockTestSpec()
+	spec.FactoryDefaultPassword = c.factoryDefault
+	spec = live.bind(spec)
+
+	next, err := Rotate(context.Background(), client, spec, nil)
+	stored, storedOK := readField(context.Background(), client, "secret", "app/infra", "password")
+	if c.wantErr != nil {
+		c.assertRejected(t, err, live, stored, storedOK)
+		return
+	}
+	if err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+	if len(live.deploys) != 1 || live.deploys[0] != [2]string{c.wantPrevious, next} {
+		t.Errorf("deploys = %v, want one Deploy(%q, next)", live.deploys, c.wantPrevious)
+	}
+	if !storedOK || stored != next || live.current != next {
+		t.Errorf("stored = %q, live = %q, want both %q", stored, live.current, next)
+	}
+}
+
+func (c rotateCase) assertRejected(t *testing.T, err error, live *liveService, stored string, storedOK bool) {
+	t.Helper()
+	if !errors.Is(err, c.wantErr) {
+		t.Fatalf("Rotate: err = %v, want %v", err, c.wantErr)
+	}
+	if len(live.deploys) != 0 {
+		t.Errorf("deploys = %v, want none", live.deploys)
+	}
+	if storedOK != c.hasVaultValue || stored != c.vaultValue {
+		t.Errorf("stored = %q, ok=%v, want Vault untouched", stored, storedOK)
+	}
+}
+
+// TestRotateAuthenticatesWithTheVerifiedLiveCredential covers every relation of the live credential to Vault.
+func TestRotateAuthenticatesWithTheVerifiedLiveCredential(t *testing.T) {
+	cases := []rotateCase{
+		{name: "the vault value is live", vaultValue: "vault-value", hasVaultValue: true, liveValue: "vault-value", wantPrevious: "vault-value"},
+		{name: "a rebuilt service holds only the factory default", vaultValue: "vault-value", hasVaultValue: true, factoryDefault: "admin", liveValue: "admin", wantPrevious: "admin"},
+		{name: "a rebuilt vault holds no value and the service holds the factory default", factoryDefault: "admin", liveValue: "admin", wantPrevious: "admin"},
+		{name: "the service accepts no known credential", vaultValue: "vault-value", hasVaultValue: true, factoryDefault: "admin", liveValue: "unknown", wantErr: ErrNoLiveCredential},
+		{name: "a rebuilt vault holds no value and no factory default exists", liveValue: "unknown", wantErr: ErrNoLiveCredential},
+	}
+	for _, c := range cases {
+		t.Run(c.name, c.run)
+	}
+}
+
+// TestRotatePropagatesApplyFailureWithoutTouchingVault covers a failed Apply against a verified
+// live credential: the failure MUST surface unchanged and the Vault value MUST stay untouched.
 func TestRotatePropagatesApplyFailureWithoutTouchingVault(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
+	seedField(t, client, "password", "stale-value")
 
-	if err := writeField(context.Background(), client, "secret", "app/infra", "password", "stale-value"); err != nil {
-		t.Fatalf("seed writeField: %v", err)
-	}
-
-	var attempts []string
-	spec := Spec{
-		Mount:   "secret",
-		Path:    "app/infra",
-		Field:   "password",
-		Length:  16,
-		Classes: []secretgen.CharClass{secretgen.Upper, secretgen.Lower, secretgen.Digit},
-		Deploy: func(ctx context.Context, previous, next string) error {
-			attempts = append(attempts, previous)
-			return errAuth
-		},
-	}
+	live := &liveService{current: "stale-value", deployErr: errAuth}
+	spec := live.bind(lockTestSpec())
 
 	if _, err := Rotate(context.Background(), client, spec, nil); !errors.Is(err, errAuth) {
 		t.Fatalf("Rotate: err = %v, want errAuth", err)
 	}
-	if len(attempts) != 1 || attempts[0] != "stale-value" {
-		t.Errorf("attempts = %v, want exactly one attempt with the value read from Vault", attempts)
+	if len(live.deploys) != 1 || live.deploys[0][0] != "stale-value" {
+		t.Errorf("deploys = %v, want exactly one attempt with the verified value", live.deploys)
 	}
 	stored, ok := readField(context.Background(), client, "secret", "app/infra", "password")
 	if !ok || stored != "stale-value" {
@@ -428,16 +519,10 @@ func TestRotateRetriesVaultWriteAfterApplySucceeds(t *testing.T) {
 	defer srv.Close()
 	store.failWritesRemaining = 2
 
-	spec := Spec{
-		Mount:   "secret",
-		Path:    "app/infra",
-		Field:   "password",
-		Length:  16,
-		Classes: []secretgen.CharClass{secretgen.Upper, secretgen.Lower, secretgen.Digit},
-		Deploy: func(ctx context.Context, previous, next string) error {
-			return nil
-		},
-	}
+	live := &liveService{current: "factory"}
+	spec := lockTestSpec()
+	spec.FactoryDefaultPassword = "factory"
+	spec = live.bind(spec)
 
 	next, err := Rotate(context.Background(), client, spec, nil)
 	if err != nil {
@@ -454,32 +539,40 @@ func TestRotateRetriesVaultWriteAfterApplySucceeds(t *testing.T) {
 func TestReconcileAppliesVaultStoredValueAsNext(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
+	seedField(t, client, "password", "vault-value")
 
-	if err := writeField(context.Background(), client, "secret", "app/infra", "password", "vault-value"); err != nil {
-		t.Fatalf("seed writeField: %v", err)
-	}
-
-	var gotPrevious, gotNext string
-	spec := Spec{
-		Mount: "secret",
-		Path:  "app/infra",
-		Field: "password",
-		Deploy: func(ctx context.Context, previous, next string) error {
-			gotPrevious, gotNext = previous, next
-			return nil
-		},
-	}
+	live := &liveService{current: "live-value"}
+	spec := live.bind(lockTestSpec())
 
 	if err := Reconcile(context.Background(), client, spec, "live-value"); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	if gotPrevious != "live-value" || gotNext != "vault-value" {
-		t.Errorf("Apply(%q, %q), want Apply(%q, %q)", gotPrevious, gotNext, "live-value", "vault-value")
+	if len(live.deploys) != 1 || live.deploys[0] != [2]string{"live-value", "vault-value"} {
+		t.Errorf("deploys = %v, want one Deploy(live-value, vault-value)", live.deploys)
 	}
-
 	stored, ok := readField(context.Background(), client, "secret", "app/infra", "password")
 	if !ok || stored != "vault-value" {
 		t.Errorf("stored value = %q, ok=%v, want the Vault value left unchanged", stored, ok)
+	}
+}
+
+// TestReconcileIsANoOpWhenTheServiceAlreadyAcceptsTheVaultValue covers a service already in sync.
+// Reconcile MUST NOT call Deploy, since a change to the same password is rejected by some services.
+func TestReconcileIsANoOpWhenTheServiceAlreadyAcceptsTheVaultValue(t *testing.T) {
+	srv, client, _ := newFakeKVv2Server(t)
+	defer srv.Close()
+	seedField(t, client, "password", "vault-value")
+
+	live := &liveService{current: "vault-value"}
+	spec := lockTestSpec()
+	spec.FactoryDefaultPassword = "admin"
+	spec = live.bind(spec)
+
+	if err := Reconcile(context.Background(), client, spec, ""); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if len(live.deploys) != 0 {
+		t.Errorf("deploys = %v, want none for a service already in sync", live.deploys)
 	}
 }
 
@@ -489,46 +582,50 @@ func TestReconcileFailsWhenNoValueExistsInVault(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
 
-	applyCalled := false
-	spec := Spec{
-		Mount: "secret",
-		Path:  "app/infra",
-		Field: "password",
-		Deploy: func(ctx context.Context, previous, next string) error {
-			applyCalled = true
-			return nil
-		},
-	}
+	live := &liveService{current: "live-value"}
+	spec := live.bind(lockTestSpec())
 
 	if err := Reconcile(context.Background(), client, spec, "live-value"); err == nil {
 		t.Fatal("Reconcile: want error, got nil")
 	}
-	if applyCalled {
-		t.Error("Apply was called with nothing in Vault to push, want it skipped")
+	if len(live.deploys) != 0 {
+		t.Errorf("deploys = %v, want none with nothing in Vault to push", live.deploys)
 	}
 }
 
-// TestReconcilePropagatesApplyFailure covers a wrong previous: Reconcile returns the failure
-// unchanged rather than guessing at a different previous value.
+// TestReconcilePropagatesApplyFailure covers a Deploy failure against a verified live credential:
+// Reconcile returns the failure unchanged.
 func TestReconcilePropagatesApplyFailure(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
+	seedField(t, client, "password", "vault-value")
 
-	if err := writeField(context.Background(), client, "secret", "app/infra", "password", "vault-value"); err != nil {
-		t.Fatalf("seed writeField: %v", err)
-	}
+	live := &liveService{current: "live-value", deployErr: errAuth}
+	spec := live.bind(lockTestSpec())
 
-	spec := Spec{
-		Mount: "secret",
-		Path:  "app/infra",
-		Field: "password",
-		Deploy: func(ctx context.Context, previous, next string) error {
-			return errAuth
-		},
-	}
-
-	if err := Reconcile(context.Background(), client, spec, "wrong-previous"); !errors.Is(err, errAuth) {
+	if err := Reconcile(context.Background(), client, spec, "live-value"); !errors.Is(err, errAuth) {
 		t.Errorf("Reconcile: err = %v, want errAuth", err)
+	}
+}
+
+// TestReconcileStopsWhenVerifyIsInconclusive covers a transport failure of Verify, which proves
+// nothing about the live credential. Reconcile MUST stop before Deploy.
+func TestReconcileStopsWhenVerifyIsInconclusive(t *testing.T) {
+	srv, client, _ := newFakeKVv2Server(t)
+	defer srv.Close()
+	seedField(t, client, "password", "vault-value")
+
+	transport := errors.New("dial tcp 10.0.0.9:443: connect: connection refused")
+	live := &liveService{current: "admin", verifyErr: transport}
+	spec := lockTestSpec()
+	spec.FactoryDefaultPassword = "admin"
+	spec = live.bind(spec)
+
+	if err := Reconcile(context.Background(), client, spec, ""); !errors.Is(err, transport) {
+		t.Fatalf("Reconcile: err = %v, want the transport failure", err)
+	}
+	if len(live.deploys) != 0 {
+		t.Errorf("deploys = %v, want none", live.deploys)
 	}
 }
 
@@ -540,76 +637,53 @@ func seedField(t *testing.T, client *vaultapi.Client, field, value string) {
 	}
 }
 
-// guessLadderCase is one row of TestReconcileEmptyPreviousGuessLadder. acceptedGuess names the
-// single previous value the fake live service accepts, with "" meaning every guess is rejected.
-type guessLadderCase struct {
-	name            string
-	defaultPrevious string
-	acceptedGuess   string
-	wantAttempts    []string
-	wantErr         bool
+// reconcileCase is one row of TestReconcileResolvesTheLiveCredentialBeforeDeploying.
+type reconcileCase struct {
+	name         string
+	staged       string
+	liveValue    string
+	operator     string
+	wantPrevious string
+	wantErr      error
 }
 
-func (c guessLadderCase) run(t *testing.T) {
+func (c reconcileCase) run(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
 	seedField(t, client, "password", "vault-value")
-
-	var attempts []string
-	spec := Spec{
-		Mount:                  "secret",
-		Path:                   "app/infra",
-		Field:                  "password",
-		FactoryDefaultPassword: c.defaultPrevious,
-		Deploy: func(ctx context.Context, previous, next string) error {
-			attempts = append(attempts, previous)
-			if previous == c.acceptedGuess {
-				return nil
-			}
-			return errAuth
-		},
+	if c.staged != "" {
+		staged := rotationState{Previous: "vault-value", PendingNext: c.staged}
+		err := writeRotationState(context.Background(), client, "secret", "app/infra", "password", staged)
+		if err != nil {
+			t.Fatalf("seed writeRotationState: %v", err)
+		}
 	}
+	live := &liveService{current: c.liveValue}
+	spec := lockTestSpec()
+	spec.FactoryDefaultPassword = "admin"
+	spec = live.bind(spec)
 
-	c.assertOutcome(t, Reconcile(context.Background(), client, spec, ""), attempts)
-}
-
-func (c guessLadderCase) assertOutcome(t *testing.T, err error, attempts []string) {
-	t.Helper()
-	switch {
-	case c.wantErr && !errors.Is(err, errAuth):
-		t.Errorf("Reconcile: err = %v, want errAuth", err)
-	case !c.wantErr && err != nil:
-		t.Fatalf("Reconcile: %v", err)
+	err := Reconcile(context.Background(), client, spec, c.operator)
+	if !errors.Is(err, c.wantErr) {
+		t.Fatalf("Reconcile: err = %v, want %v", err, c.wantErr)
 	}
-	if !slices.Equal(attempts, c.wantAttempts) {
-		t.Errorf("attempts = %v, want %v", attempts, c.wantAttempts)
+	want := [][2]string{{c.wantPrevious, "vault-value"}}
+	if c.wantErr != nil {
+		want = nil
+	}
+	if !slices.Equal(live.deploys, want) {
+		t.Errorf("deploys = %v, want %v", live.deploys, want)
 	}
 }
 
-// TestReconcileEmptyPreviousGuessLadder covers an operator leaving previous blank: Reconcile
-// walks a fixed guess ladder (the Vault value, then Spec.DefaultPrevious) and stops at the
-// first guess Apply accepts.
-func TestReconcileEmptyPreviousGuessLadder(t *testing.T) {
-	cases := []guessLadderCase{
-		{
-			name:            "vault value accepted on the first attempt",
-			defaultPrevious: "admin",
-			acceptedGuess:   "vault-value",
-			wantAttempts:    []string{"vault-value"},
-		},
-		{
-			name:            "falls back to DefaultPrevious once the vault value is rejected",
-			defaultPrevious: "admin",
-			acceptedGuess:   "admin",
-			wantAttempts:    []string{"vault-value", "admin"},
-		},
-		{
-			name:            "fails once every guess is exhausted with no DefaultPrevious set",
-			defaultPrevious: "",
-			acceptedGuess:   "",
-			wantAttempts:    []string{"vault-value"},
-			wantErr:         true,
-		},
+// TestReconcileResolvesTheLiveCredentialBeforeDeploying covers an operator who leaves previous blank.
+func TestReconcileResolvesTheLiveCredentialBeforeDeploying(t *testing.T) {
+	cases := []reconcileCase{
+		{name: "the factory default is live", liveValue: "admin", wantPrevious: "admin"},
+		{name: "an interrupted rotation left the staged value live", staged: "pending-value", liveValue: "pending-value", wantPrevious: "pending-value"},
+		{name: "the operator supplies the live value", operator: "typed-value", liveValue: "typed-value", wantPrevious: "typed-value"},
+		{name: "the operator supplies a value which the service rejects", operator: "typed-value", liveValue: "admin", wantErr: ErrNoLiveCredential},
+		{name: "no candidate is live", liveValue: "unknown", wantErr: ErrNoLiveCredential},
 	}
 	for _, c := range cases {
 		t.Run(c.name, c.run)
@@ -661,62 +735,33 @@ func TestWriteFieldRoundTripsSpecialCharacters(t *testing.T) {
 func TestReconcileTreatsStoredEmptyStringAsAValidNext(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
+	seedField(t, client, "password", "")
 
-	if err := writeField(context.Background(), client, "secret", "app/infra", "password", ""); err != nil {
-		t.Fatalf("seed writeField: %v", err)
-	}
-
-	var gotNext string
-	called := false
-	spec := Spec{
-		Mount: "secret",
-		Path:  "app/infra",
-		Field: "password",
-		Deploy: func(ctx context.Context, previous, next string) error {
-			called = true
-			gotNext = next
-			return nil
-		},
-	}
+	live := &liveService{current: "live-value"}
+	spec := live.bind(lockTestSpec())
 
 	if err := Reconcile(context.Background(), client, spec, "live-value"); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	if !called || gotNext != "" {
-		t.Errorf("Apply called=%v next=%q, want Apply called once with next empty string", called, gotNext)
+	if len(live.deploys) != 1 || live.deploys[0] != [2]string{"live-value", ""} {
+		t.Errorf("deploys = %v, want one Deploy(live-value, \"\")", live.deploys)
 	}
 }
 
 // TestRotateRecoversWhenApplySucceededButCommitNeverRan covers the worst crash point: a prior
 // run staged {previous, pending_next}, the live service accepted the Apply, and the process
-// died before the final Vault commit. Rotate MUST detect and commit that already-live value.
+// died before the final Vault commit. Rotate MUST verify and commit that already-live value.
 func TestRotateRecoversWhenApplySucceededButCommitNeverRan(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
-
-	if err := writeField(context.Background(), client, "secret", "app/infra", "password", "old-value"); err != nil {
-		t.Fatalf("seed writeField: %v", err)
-	}
+	seedField(t, client, "password", "old-value")
 	if err := writeRotationState(context.Background(), client, "secret", "app/infra", "password",
 		rotationState{Previous: "old-value", PendingNext: "actually-applied-value"}); err != nil {
 		t.Fatalf("seed writeRotationState: %v", err)
 	}
 
-	var attempts []string
-	spec := Spec{
-		Mount:   "secret",
-		Path:    "app/infra",
-		Field:   "password",
-		Length:  16,
-		Classes: []secretgen.CharClass{secretgen.Upper, secretgen.Lower, secretgen.Digit},
-		Deploy: func(ctx context.Context, previous, next string) error {
-			attempts = append(attempts, previous)
-			if previous == "actually-applied-value" {
-				return nil
-			}
-			return errAuth
-		},
-	}
+	live := &liveService{current: "actually-applied-value"}
+	spec := live.bind(lockTestSpec())
 
 	next, err := Rotate(context.Background(), client, spec, nil)
 	if err != nil {
@@ -725,14 +770,20 @@ func TestRotateRecoversWhenApplySucceededButCommitNeverRan(t *testing.T) {
 	if next != "actually-applied-value" {
 		t.Errorf("Rotate returned %q, want the recovered pending_next %q instead of a freshly minted value", next, "actually-applied-value")
 	}
+	if len(live.deploys) != 0 {
+		t.Errorf("deploys = %v, want the recovery confirmed through Verify alone", live.deploys)
+	}
 	stored, ok := readField(context.Background(), client, "secret", "app/infra", "password")
 	if !ok || stored != "actually-applied-value" {
 		t.Errorf("stored value = %q, ok=%v, want %q committed", stored, ok, "actually-applied-value")
 	}
+	if _, _, staged := readStagedRotationFields(t, client, "secret", "app/infra", "password"); staged {
+		t.Error("the staged rotation record survived the recovery, want the record cleared")
+	}
 }
 
 // TestRotatePreservesStagedStateWhenTheRecoveryProbeIsInconclusive covers a staged pending value
-// and a probe which fails for a transport reason. The failure proves nothing about the live
+// and a Verify which fails for a transport reason. The failure proves nothing about the live
 // service. The staged record MUST survive and Rotate MUST refuse to mint over the record.
 func TestRotatePreservesStagedStateWhenTheRecoveryProbeIsInconclusive(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
@@ -744,13 +795,14 @@ func TestRotatePreservesStagedStateWhenTheRecoveryProbeIsInconclusive(t *testing
 		t.Fatalf("seed writeRotationState: %v", err)
 	}
 
-	spec := lockTestSpec()
-	spec.Deploy = func(ctx context.Context, previous, next string) error {
-		return errors.New("dial tcp 10.0.0.9:443: connect: connection refused")
-	}
+	live := &liveService{current: "old-value", verifyErr: errors.New("dial tcp 10.0.0.9:443: connect: connection refused")}
+	spec := live.bind(lockTestSpec())
 
 	if _, err := Rotate(context.Background(), client, spec, nil); err == nil {
 		t.Fatal("Rotate: want an error while the state of the live service stays unknown, got nil")
+	}
+	if len(live.deploys) != 0 {
+		t.Errorf("deploys = %v, want none", live.deploys)
 	}
 
 	_, pending, ok := readStagedRotationFields(t, client, "secret", "app/infra", "password")
@@ -853,17 +905,18 @@ func testLockRejectsConcurrentCall(t *testing.T) {
 	defer srv.Close()
 	seedField(t, client, "password", "old-value")
 
+	live := &liveService{current: "old-value"}
 	var concurrentErr error
 	concurrentApplyCalled := false
-	outer := lockTestSpec()
+	outer := live.bind(lockTestSpec())
 	outer.Deploy = func(ctx context.Context, previous, next string) error {
-		inner := lockTestSpec()
+		inner := live.bind(lockTestSpec())
 		inner.Deploy = func(ctx context.Context, previous, next string) error {
 			concurrentApplyCalled = true
 			return nil
 		}
 		_, concurrentErr = Rotate(context.Background(), client, inner, nil)
-		return nil
+		return live.deploy(ctx, previous, next)
 	}
 
 	if _, err := Rotate(context.Background(), client, outer, nil); err != nil {
@@ -882,8 +935,8 @@ func testLockReleasesAfterCompleting(t *testing.T) {
 	defer srv.Close()
 	seedField(t, client, "password", "old-value")
 
-	spec := lockTestSpec()
-	spec.Deploy = func(ctx context.Context, previous, next string) error { return nil }
+	live := &liveService{current: "old-value"}
+	spec := live.bind(lockTestSpec())
 
 	if _, err := Rotate(context.Background(), client, spec, nil); err != nil {
 		t.Fatalf("first Rotate: %v", err)
@@ -899,8 +952,8 @@ func testLockRetriesTransientConflict(t *testing.T) {
 	seedField(t, client, "password", "old-value")
 	store.failCASConflicts = acquireLockMaxAttempts - 1
 
-	spec := lockTestSpec()
-	spec.Deploy = func(ctx context.Context, previous, next string) error { return nil }
+	live := &liveService{current: "old-value"}
+	spec := live.bind(lockTestSpec())
 
 	if _, err := Rotate(context.Background(), client, spec, nil); err != nil {
 		t.Fatalf("Rotate: %v, want the retry to absorb the transient version conflicts", err)
@@ -913,17 +966,13 @@ func testLockGivesUpAfterPersistentConflict(t *testing.T) {
 	seedField(t, client, "password", "old-value")
 	store.failCASConflicts = acquireLockMaxAttempts
 
-	applyCalled := false
-	spec := lockTestSpec()
-	spec.Deploy = func(ctx context.Context, previous, next string) error {
-		applyCalled = true
-		return nil
-	}
+	live := &liveService{current: "old-value"}
+	spec := live.bind(lockTestSpec())
 
 	if _, err := Rotate(context.Background(), client, spec, nil); err == nil {
 		t.Fatal("Rotate: want error after exhausting every lock retry, got nil")
 	}
-	if applyCalled {
+	if len(live.deploys) != 0 {
 		t.Error("Apply was called despite the lock never being acquired")
 	}
 }
@@ -944,8 +993,13 @@ func (c outsideWriteCase) run(t *testing.T) {
 	defer srv.Close()
 	seedField(t, client, "password", "old-value")
 
+	outsiderWrote := false
 	spec := lockTestSpec()
+	spec.Verify = func(ctx context.Context, secret string) (bool, error) {
+		return secret == c.liveValue || (secret == "old-value" && !outsiderWrote), nil
+	}
 	spec.Deploy = func(ctx context.Context, previous, next string) error {
+		outsiderWrote = true
 		if previous == "old-value" {
 			if err := writeField(context.Background(), client, "secret", "app/infra", "password", c.storedByOutsider); err != nil {
 				t.Fatalf("simulate an out-of-band write: %v", err)
@@ -1037,23 +1091,13 @@ func TestRotateRefusesToApplyInUnsafeSituations(t *testing.T) {
 			defer srv.Close()
 			c.setup(t, client, store)
 
-			applyCalled := false
-			spec := Spec{
-				Mount:   "secret",
-				Path:    "app/infra",
-				Field:   "password",
-				Length:  16,
-				Classes: []secretgen.CharClass{secretgen.Upper, secretgen.Lower, secretgen.Digit},
-				Deploy: func(ctx context.Context, previous, next string) error {
-					applyCalled = true
-					return nil
-				},
-			}
+			live := &liveService{current: "old-value"}
+			spec := live.bind(lockTestSpec())
 
 			if _, err := Rotate(context.Background(), client, spec, nil); err == nil {
 				t.Fatal("Rotate: want error, got nil")
 			}
-			if applyCalled {
+			if len(live.deploys) != 0 {
 				t.Error("Apply was called, want Rotate to refuse before reaching the live service")
 			}
 		})
@@ -1081,15 +1125,15 @@ func (c reReadCase) run(t *testing.T) {
 		},
 	}
 
-	var attempts []string
-	spec := lockTestSpec()
-	spec.Deploy = func(ctx context.Context, previous, next string) error {
-		attempts = append(attempts, previous)
-		return nil
-	}
+	live := &liveService{current: c.outOfBand}
+	spec := live.bind(lockTestSpec())
 
 	if _, err := Rotate(ctx, client, spec, nil); err != nil {
 		t.Fatalf("Rotate: %v", err)
+	}
+	attempts := make([]string, 0, len(live.deploys))
+	for _, d := range live.deploys {
+		attempts = append(attempts, d[0])
 	}
 	if len(attempts) != 1 || attempts[0] != c.outOfBand {
 		t.Errorf("Apply attempts = %v, want exactly one call authenticated with %q, the value an outside writer stored after the initial read observed the field as absent", attempts, c.outOfBand)
