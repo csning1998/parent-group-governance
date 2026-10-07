@@ -81,6 +81,8 @@ func newBackend(t *testing.T) *httptest.Server {
 		switch r.URL.Path {
 		case "/state/a":
 			_, _ = w.Write([]byte(`{"version": 4, "serial": 3}`))
+		case "/state/never-applied":
+			w.WriteHeader(http.StatusNoContent)
 		case "/state/a/versions/2":
 			_, _ = w.Write([]byte(`{"version": 4, "serial": 2}`))
 		default:
@@ -116,5 +118,16 @@ func TestHTTPSourceReportsRejectedCredentials(t *testing.T) {
 	_, err := source.FetchCurrent(context.Background(), server.URL+"/state/a")
 	if err == nil || !strings.Contains(err.Error(), "401") || strings.Contains(err.Error(), "wrong-secret") {
 		t.Errorf("FetchCurrent error = %v, want the status 401 without the password", err)
+	}
+}
+
+// TestHTTPSourceReportsAStateWhichNeverExisted covers GitLab, which answers 204 for a layer without any apply.
+func TestHTTPSourceReportsAStateWhichNeverExisted(t *testing.T) {
+	server := newBackend(t)
+	source := HTTPSource{Client: server.Client(), Username: "gitlab-ci-token", Password: "backend-secret"}
+
+	_, err := source.FetchCurrent(context.Background(), server.URL+"/state/never-applied")
+	if !errors.Is(err, ErrStateMissing) {
+		t.Errorf("FetchCurrent error = %v, want ErrStateMissing", err)
 	}
 }

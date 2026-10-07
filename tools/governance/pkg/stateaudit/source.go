@@ -15,6 +15,9 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+// ErrStateMissing reports a layer whose backend holds no state.
+var ErrStateMissing = errors.New("stateaudit: the backend holds no state for the layer")
+
 // ErrVersionMissing reports a state version which the backend no longer holds.
 var ErrVersionMissing = errors.New("stateaudit: the backend holds no such state version")
 

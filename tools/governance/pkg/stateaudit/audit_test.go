@@ -16,11 +16,15 @@ type fakeSource struct {
 	current  map[string][]byte
 	versions map[string]map[int][]byte
 	failing  string
+	missing  string
 }
 
 func (s fakeSource) FetchCurrent(_ context.Context, address string) ([]byte, error) {
 	if address == s.failing {
 		return nil, errors.New("backend returned 503")
+	}
+	if address == s.missing {
+		return nil, ErrStateMissing
 	}
 	return s.current[address], nil
 }
@@ -208,5 +212,17 @@ func TestNewCommandReturnsTheResolveFailure(t *testing.T) {
 	err := cmd.Execute()
 	if !errors.Is(err, ErrCredentialsMissing) {
 		t.Errorf("Execute error = %v, want ErrCredentialsMissing", err)
+	}
+}
+
+func TestAuditSkipsALayerWithoutState(t *testing.T) {
+	cfg := twoLayerConfig()
+	source := cfg.Source.(fakeSource)
+	source.missing = "https://state/a"
+	cfg.Source = source
+
+	report, err := Audit(context.Background(), cfg)
+	if err != nil || !slices.Equal(report.Scanned, []string{"b@current"}) {
+		t.Errorf("Audit = %+v, %v, want layer a skipped and b scanned", report, err)
 	}
 }
