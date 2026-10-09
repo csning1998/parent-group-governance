@@ -1,7 +1,4 @@
 
-module "local_credential_contexts" {
-  source = "../../modules/contexts-local-credential"
-}
 
 locals {
   # Target: group-topology and group-sonarqube state, hosted under this GitLab project.
