@@ -41,12 +41,12 @@ type Options struct {
 	TerraformDir string
 }
 
-// Audit scans the current state of every layer, and every historical version with cfg.History.
-func Audit(ctx context.Context, cfg Config) (Report, error) {
+// AuditStates scans the current state of every layer, and every historical version with cfg.History.
+func AuditStates(ctx context.Context, cfg Config) (Report, error) {
 	var report Report
 	var findings []Finding
 	for _, layer := range cfg.Layers {
-		found, scanned, err := auditLayer(ctx, cfg, layer)
+		found, scanned, err := auditLayerState(ctx, cfg, layer)
 		if errors.Is(err, ErrStateMissing) {
 			continue
 		}
@@ -60,8 +60,8 @@ func Audit(ctx context.Context, cfg Config) (Report, error) {
 	return report, nil
 }
 
-// ConfigFromEnv builds the configuration of terraformDir from the TF_HTTP credentials of getenv.
-func ConfigFromEnv(terraformDir string, getenv func(string) string, history bool) (Config, error) {
+// BuildConfigFromEnv builds the configuration of terraformDir from the TF_HTTP credentials of getenv.
+func BuildConfigFromEnv(terraformDir string, getenv func(string) string, history bool) (Config, error) {
 	username, password := getenv("TF_HTTP_USERNAME"), getenv("TF_HTTP_PASSWORD")
 	if username == "" || password == "" {
 		return Config{}, ErrCredentialsMissing
@@ -106,7 +106,7 @@ func NewCommand(resolve func(opts Options) (Config, error)) *cobra.Command {
 				return err
 			}
 			cfg.Reveal = reveal
-			return Run(cmd.Context(), cfg, cmd.OutOrStdout())
+			return AuditAndReport(cmd.Context(), cfg, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().BoolVar(&opts.History, "history", false, "also scan every historical state version which the backend holds")
@@ -115,9 +115,9 @@ func NewCommand(resolve func(opts Options) (Config, error)) *cobra.Command {
 	return cmd
 }
 
-// Run audits cfg, writes the report to w, and returns ErrFindings on a finding or an unused ignore entry.
-func Run(ctx context.Context, cfg Config, w io.Writer) error {
-	report, err := Audit(ctx, cfg)
+// AuditAndReport audits cfg, writes the report to w, and returns ErrFindings on a finding or an unused ignore entry.
+func AuditAndReport(ctx context.Context, cfg Config, w io.Writer) error {
+	report, err := AuditStates(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func Run(ctx context.Context, cfg Config, w io.Writer) error {
 	return nil
 }
 
-func auditLayer(ctx context.Context, cfg Config, layer Layer) ([]Finding, []string, error) {
+func auditLayerState(ctx context.Context, cfg Config, layer Layer) ([]Finding, []string, error) {
 	current, err := cfg.Source.FetchCurrent(ctx, layer.Address)
 	if err != nil {
 		return nil, nil, err

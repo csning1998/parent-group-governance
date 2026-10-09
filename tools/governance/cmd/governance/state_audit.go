@@ -29,7 +29,7 @@ func (a *app) newTerraformCmd() *cobra.Command {
 // resolveStateAuditConfig audits the terraform directory of this repository unless opts names another one.
 func (a *app) resolveStateAuditConfig(opts stateaudit.Options) (stateaudit.Config, error) {
 	dir := cmp.Or(opts.TerraformDir, filepath.Join(a.root, "terraform"))
-	return stateaudit.ConfigFromEnv(dir, os.Getenv, opts.History)
+	return stateaudit.BuildConfigFromEnv(dir, os.Getenv, opts.History)
 }
 
 // runStateAuditMenu scans every historical version, as the acceptance of a merge request does.
@@ -38,5 +38,5 @@ func (a *app) runStateAuditMenu(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return stateaudit.Run(ctx, cfg, os.Stdout)
+	return stateaudit.AuditAndReport(ctx, cfg, os.Stdout)
 }

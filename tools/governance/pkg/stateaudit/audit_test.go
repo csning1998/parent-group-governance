@@ -25,14 +25,14 @@ func TestAuditAppliesIgnores(t *testing.T) {
 		{Layer: "b", Address: "gitlab_user_runner.shared", Path: "token", Reason: "test"},
 		{Layer: "a", Address: "x.y", Path: "z", Reason: "stale"},
 	}
-	report, err := Audit(context.Background(), cfg)
+	report, err := AuditStates(context.Background(), cfg)
 	if err != nil || len(report.Findings) != 0 || !slices.Equal(report.UnusedIgnores, cfg.Ignores[1:]) {
 		t.Errorf("Audit = %+v, %v, want no finding and the stale entry unused", report, err)
 	}
 }
 
 func TestAuditCurrentStates(t *testing.T) {
-	report, err := Audit(context.Background(), twoLayerConfig())
+	report, err := AuditStates(context.Background(), twoLayerConfig())
 	if err != nil {
 		t.Fatalf("Audit: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestAuditHistory(t *testing.T) {
 	cfg := twoLayerConfig()
 	cfg.History = true
 
-	report, err := Audit(context.Background(), cfg)
+	report, err := AuditStates(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Audit: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestAuditSkipsALayerWithoutState(t *testing.T) {
 	source.missing = "https://state/a"
 	cfg.Source = source
 
-	report, err := Audit(context.Background(), cfg)
+	report, err := AuditStates(context.Background(), cfg)
 	if err != nil || !slices.Equal(report.Scanned, []string{"b@current"}) {
 		t.Errorf("Audit = %+v, %v, want layer a skipped and b scanned", report, err)
 	}
@@ -76,7 +76,7 @@ func TestAuditStopsOnSourceFailure(t *testing.T) {
 	source.failing = "https://state/b"
 	cfg.Source = source
 
-	_, err := Audit(context.Background(), cfg)
+	_, err := AuditStates(context.Background(), cfg)
 	if err == nil || !strings.Contains(err.Error(), "b") || !strings.Contains(err.Error(), "503") {
 		t.Errorf("Audit error = %v, want the failure of layer b", err)
 	}
@@ -98,7 +98,7 @@ func TestCheckRevealOutputRefusesPipesAndCI(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnv(t *testing.T) {
+func TestBuildConfigFromEnv(t *testing.T) {
 	terraformDir := t.TempDir()
 	writeLayer(t, filepath.Join(terraformDir, "layers"), "a",
 		"terraform {\n  backend \"http\" {\n    address = \"https://gitlab.com/api/v4/projects/1/terraform/state/a\"\n  }\n}\n")
@@ -109,9 +109,9 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	env := map[string]string{"TF_HTTP_USERNAME": "gitlab-ci-token", "TF_HTTP_PASSWORD": "backend-secret"}
 
-	cfg, err := ConfigFromEnv(terraformDir, func(key string) string { return env[key] }, true)
+	cfg, err := BuildConfigFromEnv(terraformDir, func(key string) string { return env[key] }, true)
 	if err != nil {
-		t.Fatalf("ConfigFromEnv: %v", err)
+		t.Fatalf("BuildConfigFromEnv: %v", err)
 	}
 	source, ok := cfg.Source.(HTTPSource)
 	if !ok || source.Username != "gitlab-ci-token" || source.Password != "backend-secret" || source.Client == nil {
@@ -122,15 +122,15 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnvRequiresCredentials(t *testing.T) {
+func TestBuildConfigFromEnvRequiresCredentials(t *testing.T) {
 	for name, env := range map[string]map[string]string{
 		"no password": {"TF_HTTP_USERNAME": "gitlab-ci-token"},
 		"no username": {"TF_HTTP_PASSWORD": "backend-secret"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := ConfigFromEnv(t.TempDir(), func(key string) string { return env[key] }, false)
+			_, err := BuildConfigFromEnv(t.TempDir(), func(key string) string { return env[key] }, false)
 			if !errors.Is(err, ErrCredentialsMissing) {
-				t.Errorf("ConfigFromEnv error = %v, want ErrCredentialsMissing", err)
+				t.Errorf("BuildConfigFromEnv error = %v, want ErrCredentialsMissing", err)
 			}
 		})
 	}
@@ -212,7 +212,7 @@ func TestRun(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var out bytes.Buffer
-			err := Run(context.Background(), c.cfg(), &out)
+			err := AuditAndReport(context.Background(), c.cfg(), &out)
 			if !errors.Is(err, c.wantErr) || !strings.Contains(out.String(), c.want) {
 				t.Errorf("Run = %v with %q, want %v with %q", err, out.String(), c.wantErr, c.want)
 			}
@@ -225,7 +225,7 @@ func TestRunRevealsValuesOnRequestAlone(t *testing.T) {
 		cfg := twoLayerConfig()
 		cfg.Reveal = reveal
 		var out bytes.Buffer
-		_ = Run(context.Background(), cfg, &out)
+		_ = AuditAndReport(context.Background(), cfg, &out) /* WHY: Discarding report error to test reveal behavior. */
 		if got := strings.Contains(out.String(), "value: "); got != reveal {
 			t.Errorf("Reveal %v: output shows values %v:\n%s", reveal, got, out.String())
 		}

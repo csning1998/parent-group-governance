@@ -152,7 +152,7 @@ func (s HTTPSource) get(ctx context.Context, url string) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, fmt.Errorf("stateaudit: GET %s: %w", url, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() /* WHY: Read-only response body close error is unactionable. */ }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("stateaudit: read %s: %w", url, err)
