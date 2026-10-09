@@ -1,15 +1,15 @@
 
 mock_provider "gitlab" {}
 
-# meta-platform/terraform/layers/meta-gitlab-project: module.provisioner_gitlab_project
-run "meta_platform_project" {
+# Mirrors the module.provisioner_gitlab_project call of a governance-gitlab-project layer.
+run "example_platform_project" {
   command = plan
 
   variables {
-    name         = "meta-platform"
-    description  = "Shared platform infrastructure and GitLab group governance for the csning1998-lab group."
+    name         = "example-platform"
+    description  = "Example platform repository."
     visibility   = "public"
-    namespace_id = 142251633
+    namespace_id = 1000001
     extra_variables = {
       CLAUDE_API_KEY = "fake-claude-key"
     }
@@ -45,8 +45,8 @@ run "no_extra_variables" {
   command = plan
 
   variables {
-    name         = "meta-platform"
-    namespace_id = 142251633
+    name         = "example-platform"
+    namespace_id = 1000001
   }
 
   assert {
@@ -69,8 +69,8 @@ run "multiple_extra_variables" {
   command = plan
 
   variables {
-    name         = "meta-platform"
-    namespace_id = 142251633
+    name         = "example-platform"
+    namespace_id = 1000001
     extra_variables = {
       CLAUDE_API_KEY = "fake-claude-key"
       GEMINI_API_KEY = "fake-gemini-key"
@@ -128,8 +128,8 @@ run "rejects_invalid_visibility" {
   command = plan
 
   variables {
-    name         = "meta-platform"
-    namespace_id = 142251633
+    name         = "example-platform"
+    namespace_id = 1000001
     visibility   = "bogus"
   }
 
