@@ -29,7 +29,7 @@ var errAuth = errors.New("auth rejected")
 // call, matching how the real Vault metadata endpoint keeps version history after data is gone.
 type fakeKVv2 struct {
 	mu                   sync.Mutex
-	data                 map[string]map[string]interface{}
+	data                 map[string]map[string]any
 	version              map[string]int
 	everExisted          map[string]bool
 	failWritesRemaining  int
@@ -43,8 +43,8 @@ type fakeKVv2 struct {
 // server, holding the KV-v2 data map plus an optional check-and-set version requested by the
 // caller.
 type fakeVaultPayload struct {
-	Data map[string]interface{} `json:"data"`
-	Cas  *int                   `json:"cas"`
+	Data map[string]any `json:"data"`
+	Cas  *int           `json:"cas"`
 }
 
 // liveService fakes the one credential which the live service accepts, behind both the Deploy and
@@ -673,7 +673,7 @@ func TestWriteRotationStateKeepsEveryFieldAString(t *testing.T) {
 	if err != nil || secret == nil {
 		t.Fatalf("read document: %v", err)
 	}
-	data, _ := secret.Data["data"].(map[string]interface{})
+	data, _ := secret.Data["data"].(map[string]any)
 	for key, value := range data {
 		if _, ok := value.(string); !ok {
 			t.Errorf("field %s holds %T, want string", key, value)
@@ -689,7 +689,7 @@ func TestWriteRotationStateKeepsEveryFieldAString(t *testing.T) {
 func decodeFakeVaultPayload(r *http.Request) (fakeVaultPayload, error) {
 	body, _ := io.ReadAll(r.Body)
 	var raw struct {
-		Data    map[string]interface{} `json:"data"`
+		Data    map[string]any `json:"data"`
 		Options struct {
 			Cas *int `json:"cas"`
 		} `json:"options"`
@@ -715,7 +715,7 @@ func lockTestSpec() Spec {
 func newFakeKVv2Server(t *testing.T) (*httptest.Server, *vaultapi.Client, *fakeKVv2) {
 	t.Helper()
 	store := &fakeKVv2{
-		data:        map[string]map[string]interface{}{},
+		data:        map[string]map[string]any{},
 		version:     map[string]int{},
 		everExisted: map[string]bool{},
 	}
@@ -761,7 +761,7 @@ func readStagedRotationFields(t *testing.T, client *vaultapi.Client, mount, path
 	if err != nil || secret == nil {
 		return "", "", false
 	}
-	data, _ := secret.Data["data"].(map[string]interface{})
+	data, _ := secret.Data["data"].(map[string]any)
 	value, present := data[field+"_rotation"]
 	if !present || value == nil {
 		return "", "", false
@@ -960,10 +960,10 @@ func (s *fakeKVv2) handleGet(w http.ResponseWriter, path string) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": map[string]any{
 			"data":     fields,
-			"metadata": map[string]interface{}{"version": s.version[path]},
+			"metadata": map[string]any{"version": s.version[path]},
 		},
 	})
 }
@@ -983,8 +983,8 @@ func (s *fakeKVv2) handleMetadata(w http.ResponseWriter, r *http.Request, path s
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": map[string]interface{}{"current_version": s.version[path]},
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": map[string]any{"current_version": s.version[path]},
 	})
 }
 
@@ -1018,7 +1018,7 @@ func (s *fakeKVv2) handlePatch(w http.ResponseWriter, r *http.Request, path stri
 	s.version[path]++
 	s.everExisted[path] = true
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": map[string]interface{}{}})
+	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
 }
 
 func (s *fakeKVv2) handleWrite(w http.ResponseWriter, r *http.Request, path string) {
@@ -1043,7 +1043,7 @@ func (s *fakeKVv2) handleWrite(w http.ResponseWriter, r *http.Request, path stri
 	s.version[path]++
 	s.everExisted[path] = true
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": map[string]interface{}{}})
+	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
 }
 
 // recordRequest appends one "METHOD path" entry to the request log and fires any hook staged for
