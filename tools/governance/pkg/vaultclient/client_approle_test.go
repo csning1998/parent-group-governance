@@ -19,7 +19,7 @@ func newMockAppRoleServer(t *testing.T, mount, wantRoleID, wantSecretID string, 
 			http.NotFound(w, r)
 			return
 		}
-		var payload map[string]interface{}
+		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

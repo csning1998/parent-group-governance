@@ -16,9 +16,9 @@ func kvAppConfigHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": map[string]interface{}{
-			"data": map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": map[string]any{
+			"data": map[string]any{
 				"api_key": "secret123",
 			},
 		},
@@ -60,9 +60,9 @@ func kvProdTokenHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": map[string]interface{}{
-			"data": map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": map[string]any{
+			"data": map[string]any{
 				"prod_vault_root_token": "s.prod-root-token",
 			},
 		},

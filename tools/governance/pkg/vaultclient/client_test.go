@@ -118,7 +118,7 @@ func TestNewClient_ValidConfig(t *testing.T) {
 	}
 }
 
-func TestProbeStateLeavesCallerClientRetriesUnchanged(t *testing.T) {
+func TestProbeSealStateLeavesCallerClientRetriesUnchanged(t *testing.T) {
 	server := httptest.NewServer(sealStatusJSON(true, false))
 	t.Cleanup(server.Close)
 	client, err := vaultclient.NewClient(vaultclient.Config{Address: server.URL})
@@ -127,25 +127,25 @@ func TestProbeStateLeavesCallerClientRetriesUnchanged(t *testing.T) {
 	}
 	wantRetries := client.MaxRetries()
 
-	if _, _, err := vaultclient.ProbeState(context.Background(), client); err != nil {
-		t.Fatalf("ProbeState: %v", err)
+	if _, _, err := vaultclient.ProbeSealState(context.Background(), client); err != nil {
+		t.Fatalf("ProbeSealState: %v", err)
 	}
 	if got := client.MaxRetries(); got != wantRetries {
-		t.Errorf("caller client MaxRetries = %d after ProbeState, want %d", got, wantRetries)
+		t.Errorf("caller client MaxRetries = %d after ProbeSealState, want %d", got, wantRetries)
 	}
 }
 
-func TestProbeStateNilClient(t *testing.T) {
-	running, sealed, err := vaultclient.ProbeState(context.Background(), nil)
+func TestProbeSealStateNilClient(t *testing.T) {
+	running, sealed, err := vaultclient.ProbeSealState(context.Background(), nil)
 	if err == nil {
-		t.Fatal("ProbeState(nil): want error, got nil")
+		t.Fatal("ProbeSealState(nil): want error, got nil")
 	}
 	if running || sealed {
-		t.Errorf("ProbeState(nil) = (%v, %v), want (false, false)", running, sealed)
+		t.Errorf("ProbeSealState(nil) = (%v, %v), want (false, false)", running, sealed)
 	}
 }
 
-func TestProbeStateReturnsBeforeDefaultClientTimeout(t *testing.T) {
+func TestProbeSealStateReturnsBeforeDefaultClientTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(hangUntilCanceled))
 	t.Cleanup(server.Close)
 	client, err := vaultclient.NewClient(vaultclient.Config{Address: server.URL})
@@ -154,40 +154,40 @@ func TestProbeStateReturnsBeforeDefaultClientTimeout(t *testing.T) {
 	}
 
 	start := time.Now()
-	running, _, err := vaultclient.ProbeState(context.Background(), client)
+	running, _, err := vaultclient.ProbeSealState(context.Background(), client)
 	if err != nil {
-		t.Fatalf("ProbeState: %v", err)
+		t.Fatalf("ProbeSealState: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Errorf("ProbeState took %v against a hung server, want under 5s", elapsed)
+		t.Errorf("ProbeSealState took %v against a hung server, want under 5s", elapsed)
 	}
 	if running {
-		t.Error("ProbeState running = true against a hung server, want false")
+		t.Error("ProbeSealState running = true against a hung server, want false")
 	}
 }
 
-func TestProbeStateSealed(t *testing.T) {
-	assertProbeState(t, true, true)
+func TestProbeSealStateSealed(t *testing.T) {
+	assertProbeSealState(t, true, true)
 }
 
-func TestProbeStateUnreachableReturnsNotRunning(t *testing.T) {
+func TestProbeSealStateUnreachableReturnsNotRunning(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(rejectAllRequests))
 	server.Close()
 	client, err := vaultclient.NewClient(vaultclient.Config{Address: server.URL})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	running, sealed, err := vaultclient.ProbeState(context.Background(), client)
+	running, sealed, err := vaultclient.ProbeSealState(context.Background(), client)
 	if err != nil {
-		t.Fatalf("ProbeState unreachable: %v", err)
+		t.Fatalf("ProbeSealState unreachable: %v", err)
 	}
 	if running || sealed {
-		t.Errorf("ProbeState unreachable = (%v, %v), want (false, false)", running, sealed)
+		t.Errorf("ProbeSealState unreachable = (%v, %v), want (false, false)", running, sealed)
 	}
 }
 
-func TestProbeStateUnsealed(t *testing.T) {
-	assertProbeState(t, false, false)
+func TestProbeSealStateUnsealed(t *testing.T) {
+	assertProbeSealState(t, false, false)
 }
 
 func assertInspectStatus(t *testing.T, handler http.HandlerFunc, closeBeforeQuery, wantReach, wantInit, wantSealed bool) {
@@ -211,7 +211,7 @@ func assertInspectStatus(t *testing.T, handler http.HandlerFunc, closeBeforeQuer
 	}
 }
 
-func assertProbeState(t *testing.T, handlerSealed, wantSealed bool) {
+func assertProbeSealState(t *testing.T, handlerSealed, wantSealed bool) {
 	t.Helper()
 	server := httptest.NewServer(sealStatusJSON(true, handlerSealed))
 	t.Cleanup(server.Close)
@@ -219,15 +219,15 @@ func assertProbeState(t *testing.T, handlerSealed, wantSealed bool) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	running, sealed, err := vaultclient.ProbeState(context.Background(), client)
+	running, sealed, err := vaultclient.ProbeSealState(context.Background(), client)
 	if err != nil {
-		t.Fatalf("ProbeState: %v", err)
+		t.Fatalf("ProbeSealState: %v", err)
 	}
 	if !running {
-		t.Fatal("ProbeState running = false, want true")
+		t.Fatal("ProbeSealState running = false, want true")
 	}
 	if sealed != wantSealed {
-		t.Errorf("ProbeState sealed = %v, want %v", sealed, wantSealed)
+		t.Errorf("ProbeSealState sealed = %v, want %v", sealed, wantSealed)
 	}
 }
 
@@ -249,7 +249,7 @@ func sealStatusJSON(initialized, sealed bool) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"initialized": initialized,
 			"sealed":      sealed,
 		})

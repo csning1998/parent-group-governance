@@ -18,18 +18,6 @@ const probeTimeout = 3 * time.Second
 
 const tokenFileName = ".vault-token"
 
-// AppRoleAuth defines parameters for Vault AppRole authentication.
-type AppRoleAuth struct {
-	Mount    string // Auth method mount path (defaults to "approle" if empty)
-	RoleID   string
-	SecretID string
-}
-
-// AuthMethod defines the interface for authenticating against Vault to obtain a client token.
-type AuthMethod interface {
-	Login(ctx context.Context, client *vaultapi.Client) (string, error)
-}
-
 // Config encapsulates connection parameters and authentication credentials for constructing a Vault API client.
 type Config struct {
 	Address    string
@@ -39,49 +27,6 @@ type Config struct {
 	ClientKey  string
 	Token      string
 	Auth       AuthMethod
-}
-
-// JWTAuth defines parameters for Vault JWT/OIDC authentication methods.
-type JWTAuth struct {
-	Token string // Raw JWT / SPIFFE SVID string
-	Role  string // Vault JWT auth role name
-	Mount string // Auth method mount path (defaults to "jwt" if empty)
-}
-
-// SealStatus records reachability, initialization, and seal state for a target Vault instance.
-type SealStatus struct {
-	Reachable   bool
-	Initialized bool
-	Sealed      bool
-}
-
-// SecretRef encapsulates the mount path, secret path, and field key for a KV-v2 secret lookup.
-type SecretRef struct {
-	Mount string
-	Path  string
-	Field string
-}
-
-// TokenAuth implements direct token authentication.
-type TokenAuth struct {
-	Token string
-}
-
-// InspectStatus queries the Vault instance defined by cfg, reporting reachability, initialization, and seal status.
-func InspectStatus(ctx context.Context, cfg Config) SealStatus {
-	client, err := NewClient(cfg)
-	if err != nil {
-		return SealStatus{}
-	}
-	st, err := probeSealStatus(ctx, client)
-	if err != nil {
-		return SealStatus{}
-	}
-	return SealStatus{
-		Reachable:   true,
-		Initialized: st.Initialized,
-		Sealed:      st.Sealed,
-	}
 }
 
 // NewClient constructs a configured Vault API client according to cfg.
@@ -106,13 +51,108 @@ func NewClient(cfg Config) (*vaultapi.Client, error) {
 	return client, nil
 }
 
-// PersistTokenFile writes token to homeDir/.vault-token at 0600 through a unique temporary file.
-func PersistTokenFile(homeDir, token string) error {
-	return writeTokenFile(resolveTokenFile(homeDir), token)
+// AuthMethod defines the interface for authenticating against Vault to obtain a client token.
+type AuthMethod interface {
+	Login(ctx context.Context, client *vaultapi.Client) (string, error)
 }
 
-// ProbeState checks whether the target client can query seal status, reporting running and sealed flags.
-func ProbeState(ctx context.Context, client *vaultapi.Client) (running, sealed bool, err error) {
+// AppRoleAuth defines parameters for Vault AppRole authentication.
+type AppRoleAuth struct {
+	Mount    string // Auth method mount path (defaults to "approle" if empty)
+	RoleID   string
+	SecretID string
+}
+
+// Login authenticates against Vault using an AppRole role ID and secret ID.
+func (a AppRoleAuth) Login(ctx context.Context, client *vaultapi.Client) (string, error) {
+	if client == nil {
+		return "", fmt.Errorf("vaultclient: nil client provided")
+	}
+	if a.RoleID == "" {
+		return "", fmt.Errorf("vaultclient: empty role id provided")
+	}
+	if a.SecretID == "" {
+		return "", fmt.Errorf("vaultclient: empty secret id provided")
+	}
+
+	mount := a.Mount
+	if mount == "" {
+		mount = "approle"
+	}
+	return submitLogin(ctx, client, "approle", mount, map[string]any{
+		"role_id":   a.RoleID,
+		"secret_id": a.SecretID,
+	})
+}
+
+// JWTAuth defines parameters for Vault JWT/OIDC authentication methods.
+type JWTAuth struct {
+	Token string // Raw JWT / SPIFFE SVID string
+	Role  string // Vault JWT auth role name
+	Mount string // Auth method mount path (defaults to "jwt" if empty)
+}
+
+// Login authenticates against Vault using JWT/OIDC credentials.
+func (j JWTAuth) Login(ctx context.Context, client *vaultapi.Client) (string, error) {
+	if client == nil {
+		return "", fmt.Errorf("vaultclient: nil client provided")
+	}
+	if j.Token == "" {
+		return "", fmt.Errorf("vaultclient: empty jwt token provided")
+	}
+	if j.Role == "" {
+		return "", fmt.Errorf("vaultclient: empty role provided")
+	}
+
+	mount := j.Mount
+	if mount == "" {
+		mount = "jwt"
+	}
+	return submitLogin(ctx, client, "jwt", mount, map[string]any{
+		"role": j.Role,
+		"jwt":  j.Token,
+	})
+}
+
+// TokenAuth implements direct token authentication.
+type TokenAuth struct {
+	Token string
+}
+
+// Login returns the configured direct Vault token.
+func (a TokenAuth) Login(ctx context.Context, client *vaultapi.Client) (string, error) {
+	if a.Token == "" {
+		return "", fmt.Errorf("vaultclient: empty token provided")
+	}
+	return a.Token, nil
+}
+
+// SealStatus records reachability, initialization, and seal state for a target Vault instance.
+type SealStatus struct {
+	Reachable   bool
+	Initialized bool
+	Sealed      bool
+}
+
+// InspectStatus queries the Vault instance defined by cfg, reporting reachability, initialization, and seal status.
+func InspectStatus(ctx context.Context, cfg Config) SealStatus {
+	client, err := NewClient(cfg)
+	if err != nil {
+		return SealStatus{}
+	}
+	st, err := probeSealStatus(ctx, client)
+	if err != nil {
+		return SealStatus{}
+	}
+	return SealStatus{
+		Reachable:   true,
+		Initialized: st.Initialized,
+		Sealed:      st.Sealed,
+	}
+}
+
+// ProbeSealState checks whether the target client can query seal status, reporting running and sealed flags.
+func ProbeSealState(ctx context.Context, client *vaultapi.Client) (running, sealed bool, err error) {
 	if client == nil {
 		return false, false, fmt.Errorf("vaultclient: nil client provided")
 	}
@@ -123,36 +163,11 @@ func ProbeState(ctx context.Context, client *vaultapi.Client) (running, sealed b
 	return true, st.Sealed, nil
 }
 
-// ReadKVv2Field reads mountPath/data/secretPath from a KV v2 engine and returns the specified field value.
-func ReadKVv2Field(ctx context.Context, client *vaultapi.Client, mountPath, secretPath, field string) (value string, ok bool) {
-	if client == nil {
-		return "", false
-	}
-	secret, err := client.Logical().ReadWithContext(ctx, mountPath+"/data/"+secretPath)
-	if err != nil || secret == nil {
-		return "", false
-	}
-	data, _ := secret.Data["data"].(map[string]interface{})
-	value, ok = data[field].(string)
-	return value, ok
-}
-
-// ReadTokenFile reads the Vault root token from ~/.vault-token beneath homeDir.
-func ReadTokenFile(homeDir string) string {
-	data, err := os.ReadFile(resolveTokenFile(homeDir))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
-// RemoveTokenFile deletes homeDir/.vault-token, and an absent file counts as removed.
-func RemoveTokenFile(homeDir string) error {
-	err := os.Remove(resolveTokenFile(homeDir))
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("vaultclient: remove %s: %w", resolveTokenFile(homeDir), err)
-	}
-	return nil
+// SecretRef encapsulates the mount path, secret path, and field key for a KV-v2 secret lookup.
+type SecretRef struct {
+	Mount string
+	Path  string
+	Field string
 }
 
 // ResolveTargetContext resolves Vault connection parameters across dev/bastion and prod targets.
@@ -178,66 +193,51 @@ func ResolveTargetContext(ctx context.Context, target string, bastionCfg, prodCf
 	return prodCfg.Address, token, caCert, nil
 }
 
-// Login authenticates against Vault using an AppRole role ID and secret ID.
-func (a AppRoleAuth) Login(ctx context.Context, client *vaultapi.Client) (string, error) {
+// ReadKVv2Field reads mountPath/data/secretPath from a KV v2 engine and returns the specified field value.
+func ReadKVv2Field(ctx context.Context, client *vaultapi.Client, mountPath, secretPath, field string) (value string, ok bool) {
 	if client == nil {
-		return "", fmt.Errorf("vaultclient: nil client provided")
+		return "", false
 	}
-	if a.RoleID == "" {
-		return "", fmt.Errorf("vaultclient: empty role id provided")
+	secret, err := client.Logical().ReadWithContext(ctx, mountPath+"/data/"+secretPath)
+	if err != nil || secret == nil {
+		return "", false
 	}
-	if a.SecretID == "" {
-		return "", fmt.Errorf("vaultclient: empty secret id provided")
-	}
-
-	mount := a.Mount
-	if mount == "" {
-		mount = "approle"
-	}
-	return submitLogin(ctx, client, "approle", mount, map[string]interface{}{
-		"role_id":   a.RoleID,
-		"secret_id": a.SecretID,
-	})
+	data, _ := secret.Data["data"].(map[string]any)
+	value, ok = data[field].(string)
+	return value, ok
 }
 
-// Login authenticates against Vault using JWT/OIDC credentials.
-func (j JWTAuth) Login(ctx context.Context, client *vaultapi.Client) (string, error) {
-	if client == nil {
-		return "", fmt.Errorf("vaultclient: nil client provided")
+// ReadTokenFile reads the Vault root token from ~/.vault-token beneath homeDir.
+func ReadTokenFile(homeDir string) string {
+	data, err := os.ReadFile(resolveTokenFile(homeDir))
+	if err != nil {
+		return ""
 	}
-	if j.Token == "" {
-		return "", fmt.Errorf("vaultclient: empty jwt token provided")
-	}
-	if j.Role == "" {
-		return "", fmt.Errorf("vaultclient: empty role provided")
-	}
-
-	mount := j.Mount
-	if mount == "" {
-		mount = "jwt"
-	}
-	return submitLogin(ctx, client, "jwt", mount, map[string]interface{}{
-		"role": j.Role,
-		"jwt":  j.Token,
-	})
+	return strings.TrimSpace(string(data))
 }
 
-// Login returns the configured direct Vault token.
-func (a TokenAuth) Login(ctx context.Context, client *vaultapi.Client) (string, error) {
-	if a.Token == "" {
-		return "", fmt.Errorf("vaultclient: empty token provided")
+// PersistTokenFile writes token to homeDir/.vault-token at 0600 through a unique temporary file.
+func PersistTokenFile(homeDir, token string) error {
+	return writeTokenFile(resolveTokenFile(homeDir), token)
+}
+
+// RemoveTokenFile deletes homeDir/.vault-token, and an absent file counts as removed.
+func RemoveTokenFile(homeDir string) error {
+	err := os.Remove(resolveTokenFile(homeDir))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("vaultclient: remove %s: %w", resolveTokenFile(homeDir), err)
 	}
-	return a.Token, nil
+	return nil
 }
 
 func finalizeTokenTemp(f *os.File, path, token string) error {
 	tmp := f.Name()
 	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close()
+		_ = f.Close() // Close failure is secondary to the preceding write error.
 		return fmt.Errorf("vaultclient: chmod %s: %w", tmp, err)
 	}
 	if _, err := f.Write([]byte(token)); err != nil {
-		_ = f.Close()
+		_ = f.Close() // Close failure is secondary to the preceding write error.
 		return fmt.Errorf("vaultclient: write %s: %w", tmp, err)
 	}
 	if err := f.Close(); err != nil {
@@ -269,7 +269,7 @@ func resolveTokenFile(homeDir string) string {
 	return filepath.Join(homeDir, tokenFileName)
 }
 
-func submitLogin(ctx context.Context, client *vaultapi.Client, method, mount string, payload map[string]interface{}) (string, error) {
+func submitLogin(ctx context.Context, client *vaultapi.Client, method, mount string, payload map[string]any) (string, error) {
 	secret, err := client.Logical().WriteWithContext(ctx, "auth/"+mount+"/login", payload)
 	if err != nil {
 		return "", fmt.Errorf("vaultclient: %s login: %w", method, err)
@@ -288,6 +288,7 @@ func writeTokenFile(path, token string) error {
 	}
 	tmp := f.Name()
 	if err := finalizeTokenTemp(f, path, token); err != nil {
+		// Temporary file removal on finalization failure is best-effort.
 		_ = os.Remove(tmp)
 		return err
 	}
