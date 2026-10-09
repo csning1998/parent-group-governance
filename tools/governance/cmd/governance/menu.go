@@ -31,8 +31,8 @@ func (a *app) buildMenuOptions() []menuOption {
 		{"[Vault] Initialize Bastion Vault", func(ctx context.Context) error { return a.initVault(ctx) }},
 		{"[Vault] Enable KV-v2 Engine", func(ctx context.Context) error { return a.enableVaultKV(ctx) }},
 		{"[Vault] Unseal Bastion Vault", func(ctx context.Context) error { return a.unsealVault(ctx) }},
-		{"[Vault] Revoke Root Token After Bootstrap", func(ctx context.Context) error { return a.revokeRoot(ctx) }},
-		{"[Vault] Generate Root Token for Break-Glass", func(ctx context.Context) error { return a.generateRoot(ctx) }},
+		{"[Vault] Revoke Root Token After Bootstrap", func(ctx context.Context) error { return a.revokeRootToken(ctx) }},
+		{"[Vault] Generate Root Token for Break-Glass", func(ctx context.Context) error { return a.generateRootToken(ctx) }},
 	}
 	if len(a.credentials) > 0 {
 		options = append(options,

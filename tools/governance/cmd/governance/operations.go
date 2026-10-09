@@ -85,7 +85,7 @@ func (a *app) buildVaultProxyPlaybook() (hostPlaybook, error) {
 		file: "playbooks/workstation_vault_proxy.yaml",
 		extraVars: map[string]any{
 			"workstation_vault_proxy_operator_user": facts.CurrentUname,
-			"workstation_vault_proxy_ca_dir":        a.newVaultPaths().TLSDir(),
+			"workstation_vault_proxy_ca_dir":        a.newVaultPaths().ResolveTLSDir(),
 		},
 		doneMsg: "Workstation Vault Proxies applied.",
 	}, nil
@@ -98,7 +98,7 @@ func (a *app) enableVaultKV(ctx context.Context) error {
 // ensureLocalCA generates the local CA when vault/tls holds none, since a new CA invalidates every issued certificate.
 func (a *app) ensureLocalCA(ctx context.Context) error {
 	p := a.newVaultPaths()
-	if _, err := os.Stat(filepath.Join(p.TLSDir(), "ca.pem")); err == nil {
+	if _, err := os.Stat(filepath.Join(p.ResolveTLSDir(), "ca.pem")); err == nil {
 		return nil
 	}
 	return vaultops.GenerateTLS(ctx, p, a.out)
@@ -113,10 +113,6 @@ func (a *app) executePlaybook(ctx context.Context, pb hostPlaybook, becomePass s
 	}
 	a.out.Print(ui.OK, pb.doneMsg)
 	return nil
-}
-
-func (a *app) generateRoot(ctx context.Context) error {
-	return a.generateRootToken(ctx)
 }
 
 func (a *app) generateRootToken(ctx context.Context) error {
@@ -190,10 +186,6 @@ func (a *app) reconcileCredential(ctx context.Context, key string) error {
 	}
 	a.out.Print(ui.OK, key+": the live service holds the Vault value.")
 	return nil
-}
-
-func (a *app) revokeRoot(ctx context.Context) error {
-	return a.revokeRootToken(ctx)
 }
 
 func (a *app) revokeRootToken(ctx context.Context) error {
@@ -301,7 +293,7 @@ func (a *app) runHostVaultProxyPlaybook(ctx context.Context) error {
 }
 
 func (a *app) unsealVault(ctx context.Context) error {
-	return vaultops.UnsealBastion(ctx, a.newVaultPaths(), a.out)
+	return vaultops.Unseal(ctx, a.newVaultPaths(), a.out)
 }
 
 func (a *app) verifyEnvironment() error {
