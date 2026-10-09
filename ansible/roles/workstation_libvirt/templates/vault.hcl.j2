@@ -1,7 +1,7 @@
 # Rendered by Ansible role workstation_libvirt using listeners defined in workstation-topology.yaml.
 ui            = true
-api_addr      = "https://172.16.0.1:8200"
-cluster_addr  = "https://127.0.0.1:8201"
+api_addr      = "https://{{ bastion_vault.publish_address }}:{{ bastion_vault.port }}"
+cluster_addr  = "https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.cluster_port }}"
 disable_mlock = false
 
 # Unauthenticated generate-root permits break-glass recovery with unseal key quorum after root token revocation.
@@ -14,7 +14,7 @@ storage "raft" {
 
 # Loopback listener serves host-local administrative operations, bootstrap routines, and local CLI tooling.
 listener "tcp" {
-  address       = "127.0.0.1:8200"
+  address       = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.port }}"
   tls_disable   = false
   tls_cert_file = "/opt/vault/tls/vault.pem"
   tls_key_file  = "/opt/vault/tls/vault-key.pem"
@@ -22,7 +22,7 @@ listener "tcp" {
 
 # Publish network listener serves guest virtual machines routed across the hypervisor bridge.
 listener "tcp" {
-  address       = "172.16.0.1:8200"
+  address       = "{{ bastion_vault.publish_address }}:{{ bastion_vault.port }}"
   tls_disable   = false
   tls_cert_file = "/opt/vault/tls/vault.pem"
   tls_key_file  = "/opt/vault/tls/vault-key.pem"
@@ -30,7 +30,7 @@ listener "tcp" {
 
 # Metrics listener permits tokenless Prometheus scraping, restricted by firewalld to authorized scraper CIDRs.
 listener "tcp" {
-  address       = "172.16.0.1:8202"
+  address       = "{{ bastion_vault.publish_address }}:{{ bastion_vault.metrics_port }}"
   tls_disable   = false
   tls_cert_file = "/opt/vault/tls/vault.pem"
   tls_key_file  = "/opt/vault/tls/vault-key.pem"
