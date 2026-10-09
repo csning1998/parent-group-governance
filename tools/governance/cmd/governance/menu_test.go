@@ -18,10 +18,11 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 )
 
-const (
-	labelUnseal        = "[Vault] Unseal Bastion Vault"
-	labelTenantSession = "[Vault] Open Tenant Operator Session"
-)
+// Deprecated: legacy menu labels retained as comments.
+// const (
+// 	labelUnseal        = "[Vault] Unseal Bastion Vault"
+// 	labelTenantSession = "[Vault] Open Tenant Operator Session"
+// )
 
 func TestBuildMenuOptions_EndsWithQuit(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard)}

@@ -13,13 +13,10 @@ func (a *app) resolveHostAnsibleDir() string {
 	return a.ansibleDir
 }
 
-func (a *app) resolveBastionVaultAddr() string {
-	if a.bastionVaultAddr != "" {
-		return a.bastionVaultAddr
-	}
-	// Deprecated: config.KeyBastionVaultAddr is superseded by workstation-topology.yaml.
-	// if a.env != nil {
-	// 	return a.env.Get(config.KeyBastionVaultAddr)
-	// }
-	return ""
-}
+// Deprecated: resolveBastionVaultAddr is superseded by a.topology.BastionVault.
+// func (a *app) resolveBastionVaultAddr() string {
+// 	if a.bastionVaultAddr != "" {
+// 		return a.bastionVaultAddr
+// 	}
+// 	return ""
+// }

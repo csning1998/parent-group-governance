@@ -2,17 +2,17 @@ package vaultops
 
 import (
 	"crypto/x509"
-	"encoding/json"
+	// "encoding/json"
 	"encoding/pem"
 	"io"
-	"net/http"
-	"net/http/httptest"
+	// "net/http"
+	// "net/http/httptest"
 	"os"
-	"strings"
+	// "strings"
 	"sync"
 	"testing"
 
-	vaultapi "github.com/hashicorp/vault/api"
+	// vaultapi "github.com/hashicorp/vault/api"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 )
@@ -67,6 +67,7 @@ func (e *fakeEnv) get(k string) string {
 
 func discardOut() *ui.Printer { return ui.New(io.Discard, io.Discard) }
 
+/* Deprecated: Tenant session test helpers below are superseded by workstation Vault Proxies.
 const (
 	fakeAdminToken    = "s.admin"
 	fakeAmbientToken  = "s.ambient"
@@ -273,3 +274,4 @@ func findTenantCall(calls []tenantCall, suffix string) (tenantCall, bool) {
 	}
 	return tenantCall{}, false
 }
+*/
