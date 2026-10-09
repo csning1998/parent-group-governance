@@ -4,7 +4,7 @@ Description=Vault Proxy of the operator identity %i
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/env vault proxy -config=%h/{{ operator_proxy.config_dir }}/%i/proxy.hcl
+ExecStart=/usr/bin/env vault proxy -config=%h/{{ operator_vault_proxy.user_config_dir }}/%i/proxy.hcl
 Restart=on-failure
 RestartSec=5
 

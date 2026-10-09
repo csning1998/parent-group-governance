@@ -26,7 +26,7 @@ func TestFormSpecDeploySendsFixedFieldNames(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	spec := FormSpec{URL: srv.URL, Login: "admin"}
+	spec := FormSpec{URL: srv.URL, AdminUsername: "admin"}
 	if err := spec.Deploy(context.Background(), "old-pass", "new-pass"); err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestFormSpecDeployNonSuccessStatus(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			spec := FormSpec{URL: srv.URL, Login: "admin"}
+			spec := FormSpec{URL: srv.URL, AdminUsername: "admin"}
 			err := spec.Deploy(context.Background(), "wrong-pass", "new-pass")
 			if err == nil {
 				t.Fatal("Deploy: want error, got nil")
@@ -81,7 +81,7 @@ func TestFormSpecDeployNonSuccessStatus(t *testing.T) {
 }
 
 func TestFormSpecDeployConnectionRefused(t *testing.T) {
-	spec := FormSpec{URL: "http://127.0.0.1:1", Login: "admin"}
+	spec := FormSpec{URL: "http://127.0.0.1:1", AdminUsername: "admin"}
 	err := spec.Deploy(context.Background(), "old-pass", "new-pass")
 	if err == nil {
 		t.Fatal("Deploy: want error, got nil")
@@ -109,7 +109,7 @@ func TestFormSpecDeployDropsCredentialsOnCrossHostRedirect(t *testing.T) {
 	}))
 	defer legit.Close()
 
-	spec := FormSpec{URL: legit.URL, Login: "admin"}
+	spec := FormSpec{URL: legit.URL, AdminUsername: "admin"}
 	_ = spec.Deploy(context.Background(), "super-secret-previous", "new-pass")
 
 	if leaked {
@@ -136,7 +136,7 @@ func TestFormSpecDeployPreservesInjectionAttemptCharactersVerbatim(t *testing.T)
 	}))
 	defer srv.Close()
 
-	spec := FormSpec{URL: srv.URL, Login: "admin"}
+	spec := FormSpec{URL: srv.URL, AdminUsername: "admin"}
 	if err := spec.Deploy(context.Background(), "old-pass", evil); err != nil {
 		t.Fatalf("Deploy: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestFormSpecVerifyReportsWhetherTheServiceAcceptsTheSecret(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	spec := FormSpec{URL: srv.URL + "/change", VerifyURL: srv.URL + "/validate", Login: "admin"}
+	spec := FormSpec{URL: srv.URL + "/change", VerifyURL: srv.URL + "/validate", AdminUsername: "admin"}
 	for secret, want := range map[string]bool{"live-pass": true, "stale-pass": false} {
 		got, err := spec.Verify(context.Background(), secret)
 		if err != nil {
@@ -193,14 +193,14 @@ func TestFormSpecVerifyFailsOnAnInconclusiveAnswer(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			spec := FormSpec{URL: srv.URL, VerifyURL: srv.URL, Login: "admin"}
+			spec := FormSpec{URL: srv.URL, VerifyURL: srv.URL, AdminUsername: "admin"}
 			if _, err := spec.Verify(context.Background(), "any"); err == nil {
 				t.Error("Verify: want an error for an inconclusive answer, got nil")
 			}
 		})
 	}
 
-	if _, err := (FormSpec{URL: "http://127.0.0.1:1", Login: "admin"}).Verify(context.Background(), "any"); err == nil {
+	if _, err := (FormSpec{URL: "http://127.0.0.1:1", AdminUsername: "admin"}).Verify(context.Background(), "any"); err == nil {
 		t.Error("Verify without VerifyURL: want an error, got nil")
 	}
 }

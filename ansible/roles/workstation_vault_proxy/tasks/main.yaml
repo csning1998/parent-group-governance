@@ -7,8 +7,8 @@
       - workstation_vault_proxy_operator_user != "root"
       - workstation_vault_proxy_ca_dir is match('^/.+/vault/tls$')
       - bastion_vault is mapping
-      - operator_proxy is mapping
-      - operator_proxy.identities is mapping
+      - operator_vault_proxy is mapping
+      - operator_vault_proxy.identities is mapping
     fail_msg: >-
       workstation_vault_proxy needs the operator account and the vault/tls directory, which the CLI injects,
       and workstation-topology.yaml, which the playbook loads.
@@ -21,7 +21,7 @@
 
 - name: "Section C. Issue the certificates of each identity from the local CA"
   ansible.builtin.include_tasks: C-certificates.yaml
-  loop: "{{ operator_proxy.identities | dict2items }}"
+  loop: "{{ operator_vault_proxy.identities | dict2items }}"
   loop_control:
     loop_var: _workstation_vault_proxy_identity
     label: "{{ _workstation_vault_proxy_identity.key }}"

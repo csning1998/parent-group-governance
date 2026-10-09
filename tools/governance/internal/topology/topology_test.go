@@ -22,8 +22,8 @@ func TestLoad_DerivesEndpointAndListenerIPs(t *testing.T) {
 	path := writeTopology(t, `bastion_vault:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
-  port: 8200
-operator_proxy:
+  api_port: 8200
+operator_vault_proxy:
   cert_auth_mount: "operator-cert"
 `)
 	got, err := Load(path)
@@ -41,10 +41,10 @@ operator_proxy:
 
 func TestLoad_RejectsIncompleteBastionVault(t *testing.T) {
 	cases := map[string]string{
-		"no publish address": "bastion_vault:\n  loopback_address: \"127.0.0.1\"\n  port: 8200\n",
-		"hostname":           "bastion_vault:\n  loopback_address: \"localhost\"\n  publish_address: \"172.16.0.1\"\n  port: 8200\n",
-		"no port":            "bastion_vault:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n",
-		"port out of range":  "bastion_vault:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n  port: 70000\n",
+		"no publish address": "bastion_vault:\n  loopback_address: \"127.0.0.1\"\n  api_port: 8200\n",
+		"hostname":           "bastion_vault:\n  loopback_address: \"localhost\"\n  publish_address: \"172.16.0.1\"\n  api_port: 8200\n",
+		"no api port":        "bastion_vault:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n",
+		"port out of range":  "bastion_vault:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n  api_port: 70000\n",
 	}
 	for name, content := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -74,17 +74,17 @@ func TestProxyEndpoint_LocatesTheIdentityOfAnAccess(t *testing.T) {
 	path := writeTopology(t, `bastion_vault:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
-  port: 8200
-operator_proxy:
-  config_dir: ".config/vault-proxy"
+  api_port: 8200
+operator_vault_proxy:
+  user_config_dir: ".config/vault-proxy"
   placeholder_token: "proxy-supplied"
   identities:
     governance:
-      port: 8210
-      access: "governance"
+      listen_port: 8210
+      access_tier: "governance"
     service-admin-passwords:
-      port: 8213
-      access: "rotation"
+      listen_port: 8213
+      access_tier: "rotation"
 `)
 	topo, err := Load(path)
 	if err != nil {
@@ -109,9 +109,9 @@ operator_proxy:
 }
 
 func TestProxyEndpoint_RequiresExactlyOneIdentity(t *testing.T) {
-	topo := Topology{OperatorProxy: OperatorProxy{Identities: map[string]ProxyIdentity{
-		"first":  {Port: 1, Access: "rotation"},
-		"second": {Port: 2, Access: "rotation"},
+	topo := Topology{OperatorVaultProxy: OperatorVaultProxy{Identities: map[string]ProxyIdentity{
+		"first":  {ListenPort: 1, AccessTier: "rotation"},
+		"second": {ListenPort: 2, AccessTier: "rotation"},
 	}}}
 	for _, access := range []string{"rotation", "foundation"} {
 		if _, err := topo.ProxyEndpoint("/home/u", access); err == nil {

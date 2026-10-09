@@ -7,42 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 )
 
-func TestPathsHelpers(t *testing.T) {
-	p := Paths{
-		ProjectRoot: "/root",
-		AnsibleDir:  "/ansible",
-		Home:        "/home/u",
-	}
-
-	cases := []struct {
-		name string
-		got  string
-		want string
-	}{
-		{"resolveKeysDir", p.resolveKeysDir(), "/root/vault/keys"},
-		{"resolveTLSDir", p.resolveTLSDir(), "/root/vault/tls"},
-		{"resolveInitFile", p.resolveInitFile(), "/root/vault/keys/init-output.json"},
-		{"resolveUnsealKeyFile", p.resolveUnsealKeyFile(), "/root/vault/keys/unseal.key"},
-		{"resolveRootTokenFile", p.resolveRootTokenFile(), "/home/u/.vault-token"},
-		{"resolveCACertFile", p.resolveCACertFile(), "/root/vault/tls/ca.pem"},
-	}
-	for _, c := range cases {
-		want := filepath.FromSlash(c.want)
-		if c.got != want {
-			t.Errorf("%s = %q, want %q", c.name, c.got, want)
-		}
-	}
-}
-
-func TestResolveBastionAddrDefaultsToLoopback(t *testing.T) {
-	got := (Paths{}).resolveBastionAddr()
-	want := "https://127.0.0.1:8200"
-	if got != want {
-		t.Errorf("resolveBastionAddr() = %q, want %q", got, want)
-	}
-}
+// testBastion carries a publish address apart from the workstation value, hence a hard-coded address fails the tests.
+var testBastion = topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8201}
 
 func TestGenerateCertificateSerialProducesDistinctInRangeValues(t *testing.T) {
 	a, err := generateCertificateSerial()
@@ -65,6 +35,44 @@ func TestGenerateCertificateSerialProducesDistinctInRangeValues(t *testing.T) {
 	limit := new(big.Int).Lsh(big.NewInt(1), 128)
 	if a.Cmp(limit) >= 0 || b.Cmp(limit) >= 0 {
 		t.Error("generateCertificateSerial returned a value >= 2^128")
+	}
+}
+
+func TestNewPathsTakesTheBastionVaultOfTheTopology(t *testing.T) {
+	p := NewPaths("/root", "/ansible", "/home/u", testBastion)
+	if got := p.resolveBastionAddr(); got != "https://127.0.0.1:8201" {
+		t.Errorf("resolveBastionAddr() = %q, want https://127.0.0.1:8201", got)
+	}
+	if got := len(p.listenerIPs); got != 2 {
+		t.Errorf("len(listenerIPs) = %d, want the loopback and the publish address", got)
+	}
+}
+
+func TestPathsHelpers(t *testing.T) {
+	p := Paths{
+		ProjectRoot: "/root",
+		AnsibleDir:  "/ansible",
+		Home:        "/home/u",
+	}
+
+	cases := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"resolveKeysDir", p.resolveKeysDir(), "/root/vault/keys"},
+		{"resolveTLSDir", p.resolveTLSDir(), "/root/vault/tls"},
+		{"TLSDir", p.TLSDir(), "/root/vault/tls"},
+		{"resolveInitFile", p.resolveInitFile(), "/root/vault/keys/init-output.json"},
+		{"resolveUnsealKeyFile", p.resolveUnsealKeyFile(), "/root/vault/keys/unseal.key"},
+		{"resolveRootTokenFile", p.resolveRootTokenFile(), "/home/u/.vault-token"},
+		{"resolveCACertFile", p.resolveCACertFile(), "/root/vault/tls/ca.pem"},
+	}
+	for _, c := range cases {
+		want := filepath.FromSlash(c.want)
+		if c.got != want {
+			t.Errorf("%s = %q, want %q", c.name, c.got, want)
+		}
 	}
 }
 

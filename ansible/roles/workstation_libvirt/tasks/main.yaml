@@ -14,7 +14,7 @@
     that:
       - bastion_vault is mapping
       - bastion_vault.publish_address is string
-      - bastion_vault.port is integer
+      - bastion_vault.api_port is integer
     fail_msg: >-
       bastion_vault is undefined. The playbook MUST load workstation-topology.yaml of the repository root.
 

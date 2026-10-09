@@ -7,14 +7,14 @@ base="{{ _workstation_vault_proxy_base_dir }}"
 identity="${1:-}"
 
 usage() {
-  echo "usage: vault-proxy-env <identity>, where identity is root{% for name in operator_proxy.identities %} or {{ name }}{% endfor %}" >&2
+  echo "usage: vault-proxy-env <identity>, where identity is root{% for name in operator_vault_proxy.identities %} or {{ name }}{% endfor %}" >&2
   exit 2
 }
 
 proxy_port() {
   case "$1" in
-{% for name, spec in operator_proxy.identities.items() %}
-    {{ name }}) echo "{{ spec.port }}" ;;
+{% for name, spec in operator_vault_proxy.identities.items() %}
+    {{ name }}) echo "{{ spec.listen_port }}" ;;
 {% endfor %}
     *) return 1 ;;
   esac
@@ -27,13 +27,13 @@ print_proxy_env() {
   echo "export VAULT_CACERT=${base}/ca.pem"
   echo "export VAULT_CLIENT_CERT=${base}/$1/client.pem"
   echo "export VAULT_CLIENT_KEY=${base}/$1/client-key.pem"
-  echo "export VAULT_TOKEN={{ operator_proxy.placeholder_token }}"
+  echo "export VAULT_TOKEN={{ operator_vault_proxy.placeholder_token }}"
   echo "export TERRAFORM_VAULT_SKIP_CHILD_TOKEN=true"
 }
 
 [ -n "${identity}" ] || usage
 if [ "${identity}" = "root" ]; then
-  echo "export VAULT_ADDR=https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.port }}"
+  echo "export VAULT_ADDR=https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.api_port }}"
   echo "export VAULT_CACERT=${base}/ca.pem"
   echo "unset VAULT_TOKEN VAULT_CLIENT_CERT VAULT_CLIENT_KEY TERRAFORM_VAULT_SKIP_CHILD_TOKEN"
 elif proxy_port "${identity}" >/dev/null; then
@@ -42,14 +42,14 @@ else
   usage
 fi
 
-{% set state_identity = (operator_proxy.identities | dict2items | selectattr('value.access', 'equalto', 'governance') | first).key %}
-{% set state_read = 'vault kv get -mount=' ~ operator_proxy.state_backend.mount ~ ' -field=' ~ operator_proxy.state_backend.field ~ ' ' ~ operator_proxy.state_backend.path %}
+{% set state_identity = (operator_vault_proxy.identities | dict2items | selectattr('value.access_tier', 'equalto', 'governance') | first).key %}
+{% set state_read = 'vault kv get -mount=' ~ operator_vault_proxy.state_backend.vault_kv_mount ~ ' -field=' ~ operator_vault_proxy.state_backend.vault_kv_field ~ ' ' ~ operator_vault_proxy.state_backend.vault_kv_path %}
 # The identity root reads the shared GitLab token with the token helper, since root applies the cert roles which every
 # Proxy needs. Every other identity reads the token through the {{ state_identity }} Proxy.
 if [ "${identity}" = "root" ]; then
-  if ! state_token="$(export VAULT_ADDR=https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.port }} VAULT_CACERT="${base}/ca.pem" && unset VAULT_TOKEN VAULT_CLIENT_CERT VAULT_CLIENT_KEY && {{ state_read }} 2>/dev/null)"; then
+  if ! state_token="$(export VAULT_ADDR=https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.api_port }} VAULT_CACERT="${base}/ca.pem" && unset VAULT_TOKEN VAULT_CLIENT_CERT VAULT_CLIENT_KEY && {{ state_read }} 2>/dev/null)"; then
     echo "vault-proxy-env: the Bastion Vault returned no state backend token to the root token of ~/.vault-token." >&2
-    echo "vault-proxy-env: unseal the Bastion Vault, then write the field {{ operator_proxy.state_backend.field }} at {{ operator_proxy.state_backend.mount }}/{{ operator_proxy.state_backend.path }}." >&2
+    echo "vault-proxy-env: unseal the Bastion Vault, then write the field {{ operator_vault_proxy.state_backend.vault_kv_field }} at {{ operator_vault_proxy.state_backend.vault_kv_mount }}/{{ operator_vault_proxy.state_backend.vault_kv_path }}." >&2
     echo "vault-proxy-env: after revoke-root, the root identity serves break-glass alone, and ./governance vault generate-root restores the token." >&2
     exit 1
   fi
@@ -70,5 +70,5 @@ else
     sleep 1
   done
 fi
-echo "export TF_HTTP_USERNAME={{ operator_proxy.state_backend.username }}"
+echo "export TF_HTTP_USERNAME={{ operator_vault_proxy.state_backend.terraform_http_username }}"
 echo "export TF_HTTP_PASSWORD='${state_token}'"

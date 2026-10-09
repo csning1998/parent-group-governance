@@ -10,7 +10,7 @@
     _workstation_vault_proxy_uid: "{{ ansible_facts.getent_passwd[workstation_vault_proxy_operator_user][1] }}"
     _workstation_vault_proxy_shell: "{{ ansible_facts.getent_passwd[workstation_vault_proxy_operator_user][5] | basename }}"
     _workstation_vault_proxy_base_dir: >-
-      {{ ansible_facts.getent_passwd[workstation_vault_proxy_operator_user][4] }}/{{ operator_proxy.config_dir }}
+      {{ ansible_facts.getent_passwd[workstation_vault_proxy_operator_user][4] }}/{{ operator_vault_proxy.user_config_dir }}
 
 - name: "A3. Create the Proxy directory of each identity, readable by the operator alone"
   ansible.builtin.file:
@@ -22,7 +22,7 @@
   loop: >-
     {{
       [_workstation_vault_proxy_base_dir] +
-      (operator_proxy.identities.keys() | map('regex_replace', '^', _workstation_vault_proxy_base_dir ~ '/') | list)
+      (operator_vault_proxy.identities.keys() | map('regex_replace', '^', _workstation_vault_proxy_base_dir ~ '/') | list)
     }}
 
 # The copy keeps every caller off the repository path, and the source stays authoritative.
