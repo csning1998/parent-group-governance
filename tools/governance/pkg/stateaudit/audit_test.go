@@ -19,46 +19,15 @@ type fakeSource struct {
 	missing  string
 }
 
-func (s fakeSource) FetchCurrent(_ context.Context, address string) ([]byte, error) {
-	if address == s.failing {
-		return nil, errors.New("backend returned 503")
+func TestAuditAppliesIgnores(t *testing.T) {
+	cfg := twoLayerConfig()
+	cfg.Ignores = []Ignore{
+		{Layer: "b", Address: "gitlab_user_runner.shared", Path: "token", Reason: "test"},
+		{Layer: "a", Address: "x.y", Path: "z", Reason: "stale"},
 	}
-	if address == s.missing {
-		return nil, ErrStateMissing
-	}
-	return s.current[address], nil
-}
-
-func (s fakeSource) FetchVersion(_ context.Context, address string, serial int) ([]byte, error) {
-	document, ok := s.versions[address][serial]
-	if !ok {
-		return nil, ErrVersionMissing
-	}
-	return document, nil
-}
-
-func cleanState(serial string) []byte {
-	return []byte(`{"version": 4, "serial": ` + serial + `, "resources": []}`)
-}
-
-func runnerState(serial string) []byte {
-	return []byte(`{"version": 4, "serial": ` + serial + `, "resources": [
-  {"mode": "managed", "type": "gitlab_user_runner", "name": "shared", "instances": [
-    {"attributes": {"token": "` + fakeRunner + `"}, "sensitive_attributes": [[{"type": "get_attr", "value": "token"}]]}
-  ]}
-]}`)
-}
-
-func twoLayerConfig() Config {
-	return Config{
-		Layers: []Layer{{Name: "a", Address: "https://state/a"}, {Name: "b", Address: "https://state/b"}},
-		Source: fakeSource{
-			current: map[string][]byte{"https://state/a": cleanState("3"), "https://state/b": runnerState("1")},
-			versions: map[string]map[int][]byte{
-				"https://state/a": {2: runnerState("2")},
-			},
-		},
-		Detector: prefixDetector{},
+	report, err := Audit(context.Background(), cfg)
+	if err != nil || len(report.Findings) != 0 || !slices.Equal(report.UnusedIgnores, cfg.Ignores[1:]) {
+		t.Errorf("Audit = %+v, %v, want no finding and the stale entry unused", report, err)
 	}
 }
 
@@ -89,15 +58,15 @@ func TestAuditHistory(t *testing.T) {
 	}
 }
 
-func TestAuditAppliesIgnores(t *testing.T) {
+func TestAuditSkipsALayerWithoutState(t *testing.T) {
 	cfg := twoLayerConfig()
-	cfg.Ignores = []Ignore{
-		{Layer: "b", Address: "gitlab_user_runner.shared", Path: "token", Reason: "test"},
-		{Layer: "a", Address: "x.y", Path: "z", Reason: "stale"},
-	}
+	source := cfg.Source.(fakeSource)
+	source.missing = "https://state/a"
+	cfg.Source = source
+
 	report, err := Audit(context.Background(), cfg)
-	if err != nil || len(report.Findings) != 0 || !slices.Equal(report.UnusedIgnores, cfg.Ignores[1:]) {
-		t.Errorf("Audit = %+v, %v, want no finding and the stale entry unused", report, err)
+	if err != nil || !slices.Equal(report.Scanned, []string{"b@current"}) {
+		t.Errorf("Audit = %+v, %v, want layer a skipped and b scanned", report, err)
 	}
 }
 
@@ -113,34 +82,19 @@ func TestAuditStopsOnSourceFailure(t *testing.T) {
 	}
 }
 
-func TestRun(t *testing.T) {
-	cases := []struct {
-		name    string
-		cfg     func() Config
-		wantErr error
-		want    string
-	}{
-		{"finding", twoLayerConfig, ErrFindings, "gitlab_user_runner.shared"},
-		{"clean", func() Config {
-			cfg := twoLayerConfig()
-			cfg.Layers = cfg.Layers[:1]
-			return cfg
-		}, nil, "0 finding"},
-		{"unused ignore", func() Config {
-			cfg := twoLayerConfig()
-			cfg.Layers = cfg.Layers[:1]
-			cfg.Ignores = []Ignore{{Layer: "a", Address: "x.y", Path: "z", Reason: "stale"}}
-			return cfg
-		}, ErrFindings, "x.y"},
+func TestCheckRevealOutputRefusesPipesAndCI(t *testing.T) {
+	noCI := func(string) string { return "" }
+	if err := checkRevealOutput(&bytes.Buffer{}, noCI); !errors.Is(err, ErrRevealRefused) {
+		t.Errorf("buffer error = %v, want ErrRevealRefused", err)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			var out bytes.Buffer
-			err := Run(context.Background(), c.cfg(), &out)
-			if !errors.Is(err, c.wantErr) || !strings.Contains(out.String(), c.want) {
-				t.Errorf("Run = %v with %q, want %v with %q", err, out.String(), c.wantErr, c.want)
-			}
-		})
+	inCI := func(key string) string {
+		if key == "CI" {
+			return "true"
+		}
+		return ""
+	}
+	if err := checkRevealOutput(os.Stdout, inCI); !errors.Is(err, ErrRevealRefused) {
+		t.Errorf("CI error = %v, want ErrRevealRefused", err)
 	}
 }
 
@@ -183,9 +137,9 @@ func TestConfigFromEnvRequiresCredentials(t *testing.T) {
 }
 
 func TestNewCommand(t *testing.T) {
-	var gotHistory []bool
-	cmd := NewCommand(func(history bool) (Config, error) {
-		gotHistory = append(gotHistory, history)
+	var got []Options
+	cmd := NewCommand(func(opts Options) (Config, error) {
+		got = append(got, opts)
 		cfg := twoLayerConfig()
 		cfg.Layers = cfg.Layers[:1]
 		return cfg, nil
@@ -194,18 +148,38 @@ func TestNewCommand(t *testing.T) {
 	if cmd.Name() != "state-audit" || flag == nil || flag.DefValue != "false" {
 		t.Fatalf("command %q, flag %v, want state-audit with --history defaulting to false", cmd.Name(), flag)
 	}
+	dirFlag := cmd.Flags().Lookup("terraform-dir")
+	if dirFlag == nil || dirFlag.DefValue != "" {
+		t.Fatalf("flag %v, want --terraform-dir defaulting to empty", dirFlag)
+	}
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"--history"})
+	cmd.SetArgs([]string{"--history", "--terraform-dir", "/repos/example-platform/terraform"})
 	err := cmd.Execute()
-	if err != nil || !slices.Equal(gotHistory, []bool{true}) || !strings.Contains(out.String(), "0 finding") {
-		t.Errorf("Execute = %v, history %v, output %q", err, gotHistory, out.String())
+	want := []Options{{History: true, TerraformDir: "/repos/example-platform/terraform"}}
+	if err != nil || !slices.Equal(got, want) || !strings.Contains(out.String(), "0 finding") {
+		t.Errorf("Execute = %v, options %+v, output %q", err, got, out.String())
+	}
+}
+
+func TestNewCommandRefusesRevealBeforeReadingStates(t *testing.T) {
+	resolved := false
+	cmd := NewCommand(func(Options) (Config, error) {
+		resolved = true
+		return twoLayerConfig(), nil
+	})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"--reveal"})
+	err := cmd.Execute()
+	if !errors.Is(err, ErrRevealRefused) || resolved {
+		t.Errorf("Execute = %v, resolved %v, want ErrRevealRefused before resolve", err, resolved)
 	}
 }
 
 func TestNewCommandReturnsTheResolveFailure(t *testing.T) {
-	cmd := NewCommand(func(bool) (Config, error) { return Config{}, ErrCredentialsMissing })
+	cmd := NewCommand(func(Options) (Config, error) { return Config{}, ErrCredentialsMissing })
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs(nil)
@@ -215,15 +189,34 @@ func TestNewCommandReturnsTheResolveFailure(t *testing.T) {
 	}
 }
 
-func TestAuditSkipsALayerWithoutState(t *testing.T) {
-	cfg := twoLayerConfig()
-	source := cfg.Source.(fakeSource)
-	source.missing = "https://state/a"
-	cfg.Source = source
-
-	report, err := Audit(context.Background(), cfg)
-	if err != nil || !slices.Equal(report.Scanned, []string{"b@current"}) {
-		t.Errorf("Audit = %+v, %v, want layer a skipped and b scanned", report, err)
+func TestRun(t *testing.T) {
+	cases := []struct {
+		name    string
+		cfg     func() Config
+		wantErr error
+		want    string
+	}{
+		{"finding", twoLayerConfig, ErrFindings, "gitlab_user_runner.shared"},
+		{"clean", func() Config {
+			cfg := twoLayerConfig()
+			cfg.Layers = cfg.Layers[:1]
+			return cfg
+		}, nil, "0 finding"},
+		{"unused ignore", func() Config {
+			cfg := twoLayerConfig()
+			cfg.Layers = cfg.Layers[:1]
+			cfg.Ignores = []Ignore{{Layer: "a", Address: "x.y", Path: "z", Reason: "stale"}}
+			return cfg
+		}, ErrFindings, "x.y"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := Run(context.Background(), c.cfg(), &out)
+			if !errors.Is(err, c.wantErr) || !strings.Contains(out.String(), c.want) {
+				t.Errorf("Run = %v with %q, want %v with %q", err, out.String(), c.wantErr, c.want)
+			}
+		})
 	}
 }
 
@@ -239,33 +232,45 @@ func TestRunRevealsValuesOnRequestAlone(t *testing.T) {
 	}
 }
 
-func TestCheckRevealOutputRefusesPipesAndCI(t *testing.T) {
-	noCI := func(string) string { return "" }
-	if err := checkRevealOutput(&bytes.Buffer{}, noCI); !errors.Is(err, ErrRevealRefused) {
-		t.Errorf("buffer error = %v, want ErrRevealRefused", err)
+func (s fakeSource) FetchCurrent(_ context.Context, address string) ([]byte, error) {
+	if address == s.failing {
+		return nil, errors.New("backend returned 503")
 	}
-	inCI := func(key string) string {
-		if key == "CI" {
-			return "true"
-		}
-		return ""
+	if address == s.missing {
+		return nil, ErrStateMissing
 	}
-	if err := checkRevealOutput(os.Stdout, inCI); !errors.Is(err, ErrRevealRefused) {
-		t.Errorf("CI error = %v, want ErrRevealRefused", err)
-	}
+	return s.current[address], nil
 }
 
-func TestNewCommandRefusesRevealBeforeReadingStates(t *testing.T) {
-	resolved := false
-	cmd := NewCommand(func(bool) (Config, error) {
-		resolved = true
-		return twoLayerConfig(), nil
-	})
-	cmd.SetOut(&bytes.Buffer{})
-	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"--reveal"})
-	err := cmd.Execute()
-	if !errors.Is(err, ErrRevealRefused) || resolved {
-		t.Errorf("Execute = %v, resolved %v, want ErrRevealRefused before resolve", err, resolved)
+func (s fakeSource) FetchVersion(_ context.Context, address string, serial int) ([]byte, error) {
+	document, ok := s.versions[address][serial]
+	if !ok {
+		return nil, ErrVersionMissing
+	}
+	return document, nil
+}
+
+func cleanState(serial string) []byte {
+	return []byte(`{"version": 4, "serial": ` + serial + `, "resources": []}`)
+}
+
+func runnerState(serial string) []byte {
+	return []byte(`{"version": 4, "serial": ` + serial + `, "resources": [
+  {"mode": "managed", "type": "gitlab_user_runner", "name": "shared", "instances": [
+    {"attributes": {"token": "` + fakeRunner + `"}, "sensitive_attributes": [[{"type": "get_attr", "value": "token"}]]}
+  ]}
+]}`)
+}
+
+func twoLayerConfig() Config {
+	return Config{
+		Layers: []Layer{{Name: "a", Address: "https://state/a"}, {Name: "b", Address: "https://state/b"}},
+		Source: fakeSource{
+			current: map[string][]byte{"https://state/a": cleanState("3"), "https://state/b": runnerState("1")},
+			versions: map[string]map[int][]byte{
+				"https://state/a": {2: runnerState("2")},
+			},
+		},
+		Detector: prefixDetector{},
 	}
 }

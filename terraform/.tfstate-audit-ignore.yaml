@@ -18,7 +18,7 @@ ignores:
         - data_json.spire_trust_domains
       reason: The registry republishes the platform trust facts.
 
-    - address: vault_kv_secret_v2.registry_tenant_bastion["meta-platform"]
+    - address: vault_kv_secret_v2.registry_tenant_bastion["platform-foundation"]
       paths:
         - data_json.assignable_policies
         - data_json.pki
