@@ -46,6 +46,10 @@ resource "terraform_data" "operator_identities_validation" {
       error_message = "workstation-topology.yaml MUST declare exactly one foundation identity and exactly one rotation identity."
     }
     precondition {
+      condition     = length(local.operator_governance_identities) == 1
+      error_message = "workstation-topology.yaml MUST declare exactly one governance identity, since vault-proxy-env assumes a single governance Proxy mediates the state-backend token."
+    }
+    precondition {
       condition     = alltrue([for name in keys(local.operator_tenant_identities) : contains(keys(local.tenants), name)])
       error_message = "A tenant identity of workstation-topology.yaml MUST name a tenant of access-tenant.tf."
     }

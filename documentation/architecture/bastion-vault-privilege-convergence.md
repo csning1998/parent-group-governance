@@ -135,7 +135,7 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 | `token_max_ttl`        | 14400s                                                                                                                                      | The Proxy logs in again after the maximum TTL.                                                                                  |
 | `token_bound_cidrs`    | `127.0.0.1/32`                                                                                                                              | The Proxies connect through the loopback listener, and a token presented from any other source fails.                           |
 
-`terraform_data.operator_identities_validation` stops the plan when an identity declares an access other than `governance`, `tenant`, `foundation`, or `rotation`, when there is not exactly one `foundation` identity and one `rotation` identity, or when a tenant identity names no tenant of `access-tenant.tf`. Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
+`terraform_data.operator_identities_validation` stops the plan when an identity declares an access other than `governance`, `tenant`, `foundation`, or `rotation`, when there is not exactly one `governance` identity, exactly one `foundation` identity, and exactly one `rotation` identity, or when a tenant identity names no tenant of `access-tenant.tf`. Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
 
 #### Item D.2 Workflow of the Operator Vault Proxy
 
