@@ -105,9 +105,3 @@ variable "azure_federation" {
     error_message = "azure_federation.openai_endpoint must be an HTTPS URL."
   }
 }
-
-variable "vault_kv_mount_path" {
-  description = "Specifies the Vault KV-v2 engine mount path."
-  type        = string
-  default     = "secret"
-}

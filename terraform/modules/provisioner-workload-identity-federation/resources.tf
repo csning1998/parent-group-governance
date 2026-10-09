@@ -194,11 +194,3 @@ resource "gitlab_project_variable" "ci_variable" {
   raw       = true
   protected = false
 }
-
-resource "vault_kv_secret_v2" "binding" {
-  for_each = local.bindings
-
-  mount     = var.vault_kv_mount_path
-  name      = "${var.gitlab_project.code}/workload-identity-federation/${each.key}"
-  data_json = jsonencode(each.value.document)
-}

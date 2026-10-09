@@ -2,7 +2,7 @@
 
 ## Section 1. Purpose
 
-Workload Identity Federation is a cryptographic identity exchange mechanism which authorizes GitLab CI/CD pipelines to access cloud provider APIs without static credentials. A workload federation provisioner is a Terraform module which registers per-project federated identities, assigns least-privilege cloud access roles, publishes pipeline environment variables, and records federation contract documents in Bastion Vault.
+Workload Identity Federation is a cryptographic identity exchange mechanism which authorizes GitLab CI/CD pipelines to access cloud provider APIs without static credentials. A workload federation provisioner is a Terraform module which registers per-project federated identities, assigns least-privilege cloud access roles, and publishes pipeline environment variables.
 
 This module provides the authoritative implementation for provisioning multi-cloud Workload Identity Federation across `csning1998-lab` projects. Every consuming project layer MUST invoke this module to establish identity federation bindings for Anthropic, Google Cloud Platform, and Microsoft Azure OpenAI.
 
@@ -13,11 +13,7 @@ This module provides the authoritative implementation for provisioning multi-clo
 ```hcl
 module "workload_identity_federation" {
   source  = "gitlab.com/csning1998-lab/provisioner-workload-identity-federation/gitlab"
-  version = "~> 0.3.0"
-
-  providers = {
-    vault = vault.bastion
-  }
+  version = "~> 0.4.0"
 
   gitlab_project = {
     id   = module.provisioner_gitlab_project.project_id
@@ -106,10 +102,6 @@ The variable `azure_federation` defines the federation configuration for Microso
 | `subjects`             | `optional(list(string))` | `["project_path:<path>:ref_type:...:main"]` | List of permitted subject assertion strings.        |
 | `roles`                | `optional(list(string))` | `["Cognitive Services OpenAI User"]`        | Role definitions assigned to the service principal. |
 
-#### Item B.5. Variable `vault_kv_mount_path`
-
-The variable `vault_kv_mount_path` defines the mount path of the KV-v2 secrets engine in Bastion Vault. The default value is `"secret"`.
-
 ### Item C. Outputs
 
 The module publishes the following outputs:
@@ -159,9 +151,9 @@ The Terraform operator MUST possess permissions to create Microsoft Entra ID App
 
 The module provisions a Microsoft Entra ID application, a service principal, and federated identity credentials. When `azure_federation.subjects` is not specified, the module provisions a credential restricted to the `main` branch.
 
-### Item D. Bastion Vault and GitLab CI Operational Contracts
+### Item D. GitLab CI Operational Contracts
 
-The consuming layer MUST configure a `vault` provider alias pointing to Bastion Vault. The module writes a federation document to `${var.vault_kv_mount_path}/${var.gitlab_project.code}/workload-identity-federation/<provider>` for each enabled provider.
+The module declares no Vault resource and requires no `vault` provider. The identifiers of each binding are the outputs of Item C and the CI/CD variables below, and no reader consumes a copy in Vault.
 
 The module provisions non-sensitive CI/CD project variables in GitLab for each enabled provider:
 

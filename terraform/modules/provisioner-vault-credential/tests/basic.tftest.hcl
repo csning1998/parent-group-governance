@@ -2,13 +2,13 @@
 mock_provider "vault" {}
 mock_provider "random" {}
 
-# meta-platform/terraform/layers/security-credentials: module.keepalived_credential
+# Mirrors the module.keepalived_credential call of a security-credentials layer.
 run "keepalived_credential" {
   command = plan
 
   variables {
     vault_credential_context = {
-      kv_namespace = "meta-platform/haproxy-frontend"
+      kv_namespace = "example-platform/haproxy-frontend"
       domain       = "haproxy"
       component    = "frontend"
       generate = {
@@ -23,18 +23,18 @@ run "keepalived_credential" {
   }
 
   assert {
-    condition     = vault_kv_secret_v2.this.name == "meta-platform/haproxy-frontend/haproxy/frontend"
+    condition     = vault_kv_secret_v2.this.name == "example-platform/haproxy-frontend/haproxy/frontend"
     error_message = "secret path must compose kv_namespace/domain/component"
   }
 }
 
-# meta-platform/terraform/layers/security-credentials: module.keycloak_frontend
+# Mirrors the module.keycloak_frontend call of a security-credentials layer.
 run "keycloak_frontend" {
   command = plan
 
   variables {
     vault_credential_context = {
-      kv_namespace = "meta-platform/keycloak-frontend"
+      kv_namespace = "example-platform/keycloak-frontend"
       domain       = "keycloak"
       component    = "frontend"
       static = {
@@ -49,14 +49,14 @@ run "keycloak_frontend" {
   }
 }
 
-# meta-platform/terraform/layers/security-vault-guest-identity: module.service_identity, the
+# Mirrors the module.service_identity call of a security-vault-guest-identity layer, the
 # for_each case where generate falls back to {} (lookup default) for a key with no password.
 run "service_identity_empty_generate" {
   command = plan
 
   variables {
     vault_credential_context = {
-      kv_namespace = "meta-platform/ssh-identity"
+      kv_namespace = "example-platform/ssh-identity"
       domain       = "gitlab-runner"
       component    = "frontend"
       static = {

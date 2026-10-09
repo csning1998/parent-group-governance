@@ -29,7 +29,6 @@ mock_provider "google" {
     }
   }
 }
-mock_provider "vault" {}
 
 variables {
   gitlab_project = {
@@ -48,8 +47,8 @@ run "disabled_provider_creates_nothing" {
   }
 
   assert {
-    condition     = length(gitlab_project_variable.ci_variable) == 0 && length(vault_kv_secret_v2.binding) == 0
-    error_message = "null provider objects must publish no variables and no Vault document"
+    condition     = length(gitlab_project_variable.ci_variable) == 0 && length(output.federation_bindings) == 0
+    error_message = "null provider objects must publish no variables and no binding"
   }
 }
 
@@ -159,14 +158,10 @@ run "anthropic_identifiers_are_published" {
     error_message = "identifiers are not secrets and must not be masked"
   }
 
-  assert {
-    condition     = vault_kv_secret_v2.binding["anthropic"].name == "example-app/workload-identity-federation/anthropic"
-    error_message = "the Vault document must live under the project code and the provider name"
-  }
 
   assert {
-    condition     = jsondecode(vault_kv_secret_v2.binding["anthropic"].data_json).organization_id == "abcdef01-2345-4678-89ab-cdef01234567"
-    error_message = "the Vault document must carry the identifiers"
+    condition     = output.federation_bindings["anthropic"].organization_id == "abcdef01-2345-4678-89ab-cdef01234567"
+    error_message = "the anthropic binding must carry the identifiers"
   }
 }
 
@@ -330,14 +325,10 @@ run "google_identifiers_are_published" {
     error_message = "the workload identity provider identifier must match the expected resource path and not be masked"
   }
 
-  assert {
-    condition     = vault_kv_secret_v2.binding["google"].name == "example-app/workload-identity-federation/google"
-    error_message = "the Vault document for google must live under the project code and google provider name"
-  }
 
   assert {
-    condition     = jsondecode(vault_kv_secret_v2.binding["google"].data_json).project_id == "test-gcp-project" && jsondecode(vault_kv_secret_v2.binding["google"].data_json).pool_id == "gitlab-pool"
-    error_message = "the Vault document must carry the google federation identifiers"
+    condition     = output.federation_bindings["google"].project_id == "test-gcp-project" && output.federation_bindings["google"].pool_id == "gitlab-pool"
+    error_message = "the google binding must carry the federation identifiers"
   }
 }
 
@@ -462,14 +453,10 @@ run "azure_identifiers_are_published" {
     error_message = "azure tenant id must not be masked"
   }
 
-  assert {
-    condition     = vault_kv_secret_v2.binding["azure"].name == "example-app/workload-identity-federation/azure"
-    error_message = "the Vault document for azure must live under the project code and azure provider name"
-  }
 
   assert {
-    condition     = jsondecode(vault_kv_secret_v2.binding["azure"].data_json).tenant_id == "11111111-2222-3333-4444-555555555555" && jsondecode(vault_kv_secret_v2.binding["azure"].data_json).openai_endpoint == "https://oai-test-account.openai.azure.com/"
-    error_message = "the Vault document must carry the azure federation identifiers"
+    condition     = output.federation_bindings["azure"].tenant_id == "11111111-2222-3333-4444-555555555555" && output.federation_bindings["azure"].openai_endpoint == "https://oai-test-account.openai.azure.com/"
+    error_message = "the azure binding must carry the federation identifiers"
   }
 }
 
