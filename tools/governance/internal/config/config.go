@@ -10,23 +10,16 @@ import (
 	"strings"
 )
 
+var envLineRe = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*("(?:[^"\\]|\\.)*"|[^\r\n]*)\s*$`)
+
+var envRefRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
 // Env represents an environment configuration file structure, preserving key declaration
 // order via a slice and mapping key-value pairs using double-quoted KEY="VALUE" formatting.
 type Env struct {
 	path   string
 	order  []string
 	values map[string]string
-}
-
-var envLineRe = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*("(?:[^"\\]|\\.)*"|[^\r\n]*)\s*$`)
-
-func decodeValue(raw string) string {
-	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
-		if unquoted, err := strconv.Unquote(raw); err == nil {
-			return unquoted
-		}
-	}
-	return raw
 }
 
 // Load parses the environment configuration file at path. Non-existent target paths return
@@ -41,6 +34,7 @@ func Load(path string) (*Env, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: open %s: %w", path, err)
 	}
+	// Closing a read-only file handle safely ignores any late close error.
 	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
@@ -57,45 +51,6 @@ func Load(path string) (*Env, error) {
 	}
 	return e, nil
 }
-
-func (e *Env) set(key, value string) {
-	if _, exists := e.values[key]; !exists {
-		e.order = append(e.order, key)
-	}
-	e.values[key] = value
-}
-
-// Get returns the value associated with key, or an empty string if undefined.
-func (e *Env) Get(key string) string {
-	if e == nil || e.values == nil {
-		return ""
-	}
-	return e.values[key]
-}
-
-// Set mutates key to value in place, inserting key into ordering sequence if previously undefined.
-func (e *Env) Set(key, value string) {
-	e.set(key, value)
-}
-
-// Save atomically writes all key-value pairs back to path in insertion order using KEY="VALUE" format.
-func (e *Env) Save() error {
-	var b strings.Builder
-	for _, key := range e.order {
-		fmt.Fprintf(&b, "%s=%q\n", key, e.values[key])
-	}
-
-	tmp := e.path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(b.String()), 0o600); err != nil {
-		return fmt.Errorf("config: write %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, e.path); err != nil {
-		return fmt.Errorf("config: replace %s: %w", e.path, err)
-	}
-	return nil
-}
-
-var envRefRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 // Environ expands variable references within key-value pairs against local configuration keys and
 // host environment variables, returning a formatted KEY=value slice.
@@ -115,4 +70,50 @@ func (e *Env) Environ() []string {
 		out = append(out, key+"="+expanded)
 	}
 	return out
+}
+
+// Get returns the value associated with key, or an empty string if undefined.
+func (e *Env) Get(key string) string {
+	if e == nil || e.values == nil {
+		return ""
+	}
+	return e.values[key]
+}
+
+// Save atomically writes all key-value pairs back to path in insertion order using KEY="VALUE" format.
+func (e *Env) Save() error {
+	var b strings.Builder
+	for _, key := range e.order {
+		fmt.Fprintf(&b, "%s=%q\n", key, e.values[key])
+	}
+
+	tmp := e.path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(b.String()), 0o600); err != nil {
+		return fmt.Errorf("config: write %s: %w", tmp, err)
+	}
+	if err := os.Rename(tmp, e.path); err != nil {
+		return fmt.Errorf("config: replace %s: %w", e.path, err)
+	}
+	return nil
+}
+
+// Set mutates key to value in place, inserting key into ordering sequence if previously undefined.
+func (e *Env) Set(key, value string) {
+	e.set(key, value)
+}
+
+func decodeValue(raw string) string {
+	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
+		if unquoted, err := strconv.Unquote(raw); err == nil {
+			return unquoted
+		}
+	}
+	return raw
+}
+
+func (e *Env) set(key, value string) {
+	if _, exists := e.values[key]; !exists {
+		e.order = append(e.order, key)
+	}
+	e.values[key] = value
 }
