@@ -24,9 +24,7 @@ terraform {
   }
 }
 
-# The target Vault being configured (Bastion Vault)
+# The Bastion Vault. The .envrc of terraform/ supplies VAULT_ADDR and VAULT_CACERT, and the token helper file the root token.
 provider "vault" {
-  alias        = "bastion"
-  address      = module.local_credential_contexts.bastion_vault_config.endpoint
-  ca_cert_file = module.local_credential_contexts.bastion_vault_config.ca_cert_path
+  alias = "bastion"
 }

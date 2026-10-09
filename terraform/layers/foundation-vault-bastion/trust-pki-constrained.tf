@@ -5,7 +5,7 @@ locals {
   constrained_intermediates = {
     # The mount signs the SPIRE Parent CA, which signs the SPIRE Child CA.
     "pki-spire" = {
-      owner                 = "meta-platform"
+      owner                 = local.platform_tenant
       common_name           = "On-prem SPIRE Upstream Intermediate CA"
       max_path_length       = 2
       permitted_dns_domains = local.spire_trust_domains
@@ -22,7 +22,7 @@ locals {
     }
     # The subtree of the Downstream Vault CA excludes the Bastion listener names and the SPIFFE trust domain.
     "pki-downstream" = {
-      owner                 = "meta-platform"
+      owner                 = local.platform_tenant
       common_name           = "On-prem Downstream Vault Intermediate CA"
       max_path_length       = 2
       permitted_dns_domains = concat([local.platform_trust.domain_suffix], local.platform_trust.downstream_extra_dns_domains)
@@ -35,7 +35,7 @@ locals {
     }
     # The mount issues leaf certificates alone, since the zero path length forbids a subordinate CA.
     "pki-platform" = {
-      owner                 = "meta-platform"
+      owner                 = local.platform_tenant
       common_name           = "On-prem Platform Leaf Intermediate CA"
       max_path_length       = 0
       permitted_dns_domains = [local.platform_trust.domain_suffix, local.platform_trust.kubernetes_cluster_domain]
@@ -150,8 +150,8 @@ resource "vault_pki_secret_backend_config_urls" "pki_constrained_urls" {
   provider = vault.bastion
   backend  = vault_mount.pki_constrained[each.key].path
 
-  issuing_certificates    = ["${module.local_credential_contexts.bastion_vault_config.endpoint}/v1/${vault_mount.pki_constrained[each.key].path}/ca"]
-  crl_distribution_points = ["${module.local_credential_contexts.bastion_vault_config.endpoint}/v1/${vault_mount.pki_constrained[each.key].path}/crl"]
+  issuing_certificates    = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_constrained[each.key].path}/ca"]
+  crl_distribution_points = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_constrained[each.key].path}/crl"]
 }
 
 resource "vault_pki_secret_backend_config_issuers" "pki_constrained_default" {

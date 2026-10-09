@@ -1,0 +1,36 @@
+# Rendered by the parent-group-governance role workstation_vault_proxy for the operator identity {{ _workstation_vault_proxy_identity_name }}.
+{% set dir = _workstation_vault_proxy_base_dir ~ '/' ~ _workstation_vault_proxy_identity_name %}
+vault {
+  address = "https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.port }}"
+  ca_cert = "{{ _workstation_vault_proxy_base_dir }}/ca.pem"
+}
+
+# The client certificate is the long-lived credential. The token of the login exists inside this process alone.
+auto_auth {
+  method "cert" {
+    mount_path  = "auth/{{ operator_proxy.cert_auth_mount }}"
+    min_backoff = "1s"
+    max_backoff = "{{ workstation_vault_proxy_login_retry_seconds }}s"
+    config = {
+      name        = "operator-{{ _workstation_vault_proxy_identity_name }}"
+      ca_cert     = "{{ _workstation_vault_proxy_base_dir }}/ca.pem"
+      client_cert = "{{ dir }}/client.pem"
+      client_key  = "{{ dir }}/client-key.pem"
+      reload      = true
+    }
+  }
+}
+
+# Every forwarded request carries the token of this Proxy, which overwrites the token of the caller.
+api_proxy {
+  use_auto_auth_token = "force"
+}
+
+# A caller MUST present the client certificate of this identity, hence only processes which read the key reach the Proxy.
+listener "tcp" {
+  address                            = "{{ bastion_vault.loopback_address }}:{{ operator_proxy.identities[_workstation_vault_proxy_identity_name].port }}"
+  tls_cert_file                      = "{{ dir }}/listener.pem"
+  tls_key_file                       = "{{ dir }}/listener-key.pem"
+  tls_require_and_verify_client_cert = true
+  tls_client_ca_file                 = "{{ _workstation_vault_proxy_base_dir }}/ca.pem"
+}

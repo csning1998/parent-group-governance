@@ -1,0 +1,74 @@
+#!/bin/sh
+# Rendered by workstation_vault_proxy from workstation-topology.yaml. Prints the environment of one operator identity.
+# Usage: eval "$(vault-proxy-env <identity>)". The identity root reads the token helper file ~/.vault-token.
+set -eu
+
+base="{{ _workstation_vault_proxy_base_dir }}"
+identity="${1:-}"
+
+usage() {
+  echo "usage: vault-proxy-env <identity>, where identity is root{% for name in operator_proxy.identities %} or {{ name }}{% endfor %}" >&2
+  exit 2
+}
+
+proxy_port() {
+  case "$1" in
+{% for name, spec in operator_proxy.identities.items() %}
+    {{ name }}) echo "{{ spec.port }}" ;;
+{% endfor %}
+    *) return 1 ;;
+  esac
+}
+
+# Prints the variables which route the Vault CLI, the Terraform provider, and Ansible through the Proxy of $1.
+print_proxy_env() {
+  port="$(proxy_port "$1")"
+  echo "export VAULT_ADDR=https://{{ bastion_vault.loopback_address }}:${port}"
+  echo "export VAULT_CACERT=${base}/ca.pem"
+  echo "export VAULT_CLIENT_CERT=${base}/$1/client.pem"
+  echo "export VAULT_CLIENT_KEY=${base}/$1/client-key.pem"
+  echo "export VAULT_TOKEN={{ operator_proxy.placeholder_token }}"
+  echo "export TERRAFORM_VAULT_SKIP_CHILD_TOKEN=true"
+}
+
+[ -n "${identity}" ] || usage
+if [ "${identity}" = "root" ]; then
+  echo "export VAULT_ADDR=https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.port }}"
+  echo "export VAULT_CACERT=${base}/ca.pem"
+  echo "unset VAULT_TOKEN VAULT_CLIENT_CERT VAULT_CLIENT_KEY TERRAFORM_VAULT_SKIP_CHILD_TOKEN"
+elif proxy_port "${identity}" >/dev/null; then
+  print_proxy_env "${identity}"
+else
+  usage
+fi
+
+{% set state_identity = (operator_proxy.identities | dict2items | selectattr('value.access', 'equalto', 'governance') | first).key %}
+{% set state_read = 'vault kv get -mount=' ~ operator_proxy.state_backend.mount ~ ' -field=' ~ operator_proxy.state_backend.field ~ ' ' ~ operator_proxy.state_backend.path %}
+# The identity root reads the shared GitLab token with the token helper, since root applies the cert roles which every
+# Proxy needs. Every other identity reads the token through the {{ state_identity }} Proxy.
+if [ "${identity}" = "root" ]; then
+  if ! state_token="$(export VAULT_ADDR=https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.port }} VAULT_CACERT="${base}/ca.pem" && unset VAULT_TOKEN VAULT_CLIENT_CERT VAULT_CLIENT_KEY && {{ state_read }} 2>/dev/null)"; then
+    echo "vault-proxy-env: the Bastion Vault returned no state backend token to the root token of ~/.vault-token." >&2
+    echo "vault-proxy-env: unseal the Bastion Vault, then write the field {{ operator_proxy.state_backend.field }} at {{ operator_proxy.state_backend.mount }}/{{ operator_proxy.state_backend.path }}." >&2
+    echo "vault-proxy-env: after revoke-root, the root identity serves break-glass alone, and ./governance vault generate-root restores the token." >&2
+    exit 1
+  fi
+else
+  if ! systemctl --user is-active --quiet vault-proxy@{{ state_identity }}.service; then
+    echo "vault-proxy-env: vault-proxy@{{ state_identity }}.service is not running. Run the first menu item of ./governance." >&2
+    exit 1
+  fi
+  # A Proxy which started before the cert roles existed logs in within the retry bound of its configuration.
+  attempt=0
+  until state_token="$(eval "$(print_proxy_env {{ state_identity }})" && {{ state_read }} 2>/dev/null)"; do
+    attempt=$((attempt + 1))
+    if [ "${attempt}" -gt {{ workstation_vault_proxy_login_retry_seconds + 1 }} ]; then
+      echo "vault-proxy-env: the {{ state_identity }} Proxy runs but holds no login, or the token lacks read on the state backend." >&2
+      echo "vault-proxy-env: journalctl --user -u vault-proxy@{{ state_identity }}.service names the login error. A missing cert role needs foundation-vault-bastion applied with vault-proxy-env root." >&2
+      exit 1
+    fi
+    sleep 1
+  done
+fi
+echo "export TF_HTTP_USERNAME={{ operator_proxy.state_backend.username }}"
+echo "export TF_HTTP_PASSWORD='${state_token}'"

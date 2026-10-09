@@ -1,0 +1,15 @@
+---
+# Public contract. The CLI injects every value below, and the playbook loads workstation-topology.yaml,
+# which declares bastion_vault and operator_proxy.
+workstation_vault_proxy_operator_user: ""
+# The absolute path of vault/tls in the repository, which holds the local CA certificate and key.
+workstation_vault_proxy_ca_dir: ""
+
+# Days of validity of each issued certificate, and the remaining days below which the role issues a new one.
+workstation_vault_proxy_cert:
+  valid_days: 365
+  renew_days: 30
+
+# The upper bound in seconds between two login attempts of a Proxy. A Proxy which starts before the cert roles exist
+# logs in within this bound after the apply of foundation-vault-bastion, and vault-proxy-env waits as long.
+workstation_vault_proxy_login_retry_seconds: 5

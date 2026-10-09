@@ -7,8 +7,6 @@ modules:
     dir: "terraform/modules/provisioner-gitlab-project"
   - name: "provisioner-vault-credential"
     dir: "terraform/modules/provisioner-vault-credential"
-  - name: "contexts-local-credential"
-    dir: "terraform/modules/contexts-local-credential"
   - name: "provisioner-workload-identity-federation"
     dir: "terraform/modules/provisioner-workload-identity-federation"
   - name: "provisioner-github-mirror"

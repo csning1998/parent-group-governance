@@ -17,12 +17,6 @@ include:
       tag_prefix: "provisioner-vault-credential-"
   - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.1
     inputs:
-      module_dir: "${CI_PROJECT_DIR}/terraform/modules/contexts-local-credential"
-      module_name: "contexts-local-credential"
-      module_system: "gitlab"
-      tag_prefix: "contexts-local-credential-"
-  - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/iac-terraform-module@1.7.1
-    inputs:
       module_dir: "${CI_PROJECT_DIR}/terraform/modules/provisioner-workload-identity-federation"
       module_name: "provisioner-workload-identity-federation"
       module_system: "gitlab"

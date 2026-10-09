@@ -10,25 +10,18 @@ locals {
     kv_data      = ["create", "read", "update", "delete"]
     kv_metadata  = ["create", "read", "update", "list", "delete"]
     kv_version   = ["update"]
+    kv_rotate    = ["create", "read", "update", "patch"]
+    administer   = ["create", "read", "update", "delete", "list", "sudo"]
+    list_sudo    = ["read", "sudo"]
   }
 
   # Every grant outside the tenant prefix names its path and its reason.
   acl_cross_tenant_grants = {
-    "meta-platform" = [
-      {
-        path       = "secret/data/parent-group-governance/terraform/state-backend"
-        capability = "read"
-        reason     = "governance-gitlab-project reads the token which authenticates against the upstream Terraform state."
-      },
-      {
-        path       = "secret/data/parent-group-governance/github/publication"
-        capability = "read"
-        reason     = "governance-gitlab-project reads the GitHub credential which publishes the project mirror."
-      },
+    (local.platform_tenant) = [
       {
         path       = "${vault_mount.pki_constrained["pki-downstream"].path}/root/sign-intermediate"
         capability = "issue"
-        reason     = "security-vault-downstream-pki signs the Downstream Vault intermediate CA inside a tenant session."
+        reason     = "security-vault-downstream-pki signs the Downstream Vault intermediate CA through the platform-foundation Vault Proxy."
       },
     ]
   }

@@ -1,0 +1,24 @@
+---
+- name: "B1. Install direnv"
+  ansible.builtin.dnf:
+    name: direnv
+    state: present
+
+- name: "B2. Require a shell which direnv hooks"
+  ansible.builtin.assert:
+    that:
+      - _workstation_vault_proxy_shell in ['zsh', 'bash']
+    fail_msg: >-
+      The login shell of {{ workstation_vault_proxy_operator_user }} is {{ _workstation_vault_proxy_shell }}.
+      The role hooks direnv into zsh and bash alone.
+
+# The hook loads the .envrc of each repository on cd, after the operator runs direnv allow once per file.
+- name: "B3. Hook direnv into the login shell of the operator"
+  ansible.builtin.blockinfile:
+    path: "{{ _workstation_vault_proxy_home }}/.{{ _workstation_vault_proxy_shell }}rc"
+    marker: "# {mark} parent-group-governance direnv hook"
+    block: 'eval "$(direnv hook {{ _workstation_vault_proxy_shell }})"'
+    create: true
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0644"

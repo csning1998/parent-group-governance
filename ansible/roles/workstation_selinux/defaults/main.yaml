@@ -5,6 +5,8 @@
 workstation_selinux_home: ""
 workstation_selinux_gitlab_root: "{{ workstation_selinux_home }}/GitLab"
 workstation_selinux_lab_root: "{{ workstation_selinux_gitlab_root }}/csning1998-lab"
+workstation_selinux_platform_foundation_root: >-
+  {{ workstation_selinux_lab_root }}/platform-engineering-lab/platform-foundation
 workstation_selinux_user_uid: "{{ ansible_facts['user_uid'] }}"
 workstation_selinux_local_dir: "/etc/selinux/local"
 workstation_selinux_policy_modules:
@@ -42,9 +44,9 @@ workstation_selinux_fcontext_present:
     ftype: a
   - target: "{{ workstation_selinux_lab_root }}/parent-group-governance/.gitleaks.toml"
     ftype: f
-  - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/(vault|sonarqube|runner-config)(/.*)?"
+  - target: "{{ workstation_selinux_platform_foundation_root }}/(vault|sonarqube|runner-config)(/.*)?"
     ftype: a
-  - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/.git(/.*)?"
+  - target: "{{ workstation_selinux_platform_foundation_root }}/.git(/.*)?"
     ftype: a
   - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/generic-agent-criteria-source/.git(/.*)?"
     ftype: a
@@ -83,6 +85,8 @@ workstation_selinux_fcontext_absent:
   - target: "{{ workstation_selinux_lab_root }}/parent-group-governance/(vault|sonarqube|runner-config)(/.*)?"
   - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/credentials/.git(/.*)?"
   - target: "{{ workstation_selinux_gitlab_root }}/csning1998/.git(/.*)?"
+  - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/(vault|sonarqube|runner-config)(/.*)?"
+  - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/.git(/.*)?"
   - target: "{{ workstation_selinux_gitlab_root }}/meta-platform/(vault|sonarqube|runner-config)(/.*)?"
   - target: "{{ workstation_selinux_gitlab_root }}/meta-platform/.git(/.*)?"
   - target: "{{ workstation_selinux_gitlab_root }}/parent-group-governance/.git(/.*)?"
@@ -124,10 +128,10 @@ workstation_selinux_restorecon_paths:
   - "{{ workstation_selinux_lab_root }}/parent-group-governance/sonarqube"
   - "{{ workstation_selinux_lab_root }}/parent-group-governance/.git"
   - "{{ workstation_selinux_lab_root }}/parent-group-governance/.gitleaks.toml"
-  - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/vault"
-  - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/sonarqube"
-  - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/runner-config"
-  - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/.git"
+  - "{{ workstation_selinux_platform_foundation_root }}/vault"
+  - "{{ workstation_selinux_platform_foundation_root }}/sonarqube"
+  - "{{ workstation_selinux_platform_foundation_root }}/runner-config"
+  - "{{ workstation_selinux_platform_foundation_root }}/.git"
   - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/generic-agent-criteria-source/.git"
   - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/Terraform/terraform-provider-sshclient/.git"
   - "{{ workstation_selinux_lab_root }}/platform-engineering-lab/on-premise-agent"

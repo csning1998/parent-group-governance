@@ -1,0 +1,12 @@
+# Rendered by the parent-group-governance role workstation_vault_proxy. The instance name is the operator identity.
+[Unit]
+Description=Vault Proxy of the operator identity %i
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/env vault proxy -config=%h/{{ operator_proxy.config_dir }}/%i/proxy.hcl
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
