@@ -6,17 +6,17 @@
   community.libvirt.virt_net:
     uri: qemu:///system
     command: define
-    name: "{{ workstation_libvirt_publish_network_name }}"
+    name: "{{ workstation_libvirt_publish_network.name }}"
     xml: "{{ lookup('template', 'publish-network.xml.j2') }}"
 
 - name: "B2. Ensure Bastion Vault publish network is active"
   community.libvirt.virt_net:
     uri: qemu:///system
     state: active
-    name: "{{ workstation_libvirt_publish_network_name }}"
+    name: "{{ workstation_libvirt_publish_network.name }}"
 
 - name: "B3. Ensure Bastion Vault publish network autostarts"
   community.libvirt.virt_net:
     uri: qemu:///system
     autostart: true
-    name: "{{ workstation_libvirt_publish_network_name }}"
+    name: "{{ workstation_libvirt_publish_network.name }}"

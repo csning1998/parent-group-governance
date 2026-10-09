@@ -7,14 +7,28 @@ workstation_libvirt_operator_user: ""
 # Bastion Vault guest-reachability segment. Lives outside service_catalog:
 # cidr_index must exceed cidr_nat_offset (124), leaving octet 0 of
 # 172.16.0.0/24 outside the expressible range of the catalog.
-workstation_libvirt_publish_network_name: "vault-bastion-publish"
-workstation_libvirt_publish_network_address: "172.16.0.1"
-workstation_libvirt_publish_network_netmask: "255.255.255.0"
+# The bridge address is bastion_vault.publish_address of workstation-topology.yaml.
+workstation_libvirt_publish_network:
+  name: "vault-bastion-publish"
+  netmask: "255.255.255.0"
+  # The full RFC 1918 class B private address space. Guests on any service
+  # segment reach Bastion Vault through the routed publish network.
+  source_cidr: "172.16.0.0/12"
 
-# The full RFC 1918 class B private address space. Guests on any service
-# segment reach Bastion Vault through the routed publish network.
-workstation_libvirt_publish_source_cidr: "172.16.0.0/12"
-workstation_libvirt_vault_port: 8200
+# vault.hcl.j2 renders the listeners of bastion_vault in workstation-topology.yaml, which the playbook loads.
+# The CLI injects workstation_libvirt_vault_config_path.
+workstation_libvirt_vault:
+  config_path: "{{ workstation_libvirt_vault_config_path | default('') }}"
+
+# The scrapers read the Bastion Vault metrics listener and the host exporters which the inventory declares.
+# A scraper reaches the host through the gateway of its own segment, hence the rules restrict the source alone.
+# An empty scraper_source_cidrs keeps every scrape port closed.
+workstation_libvirt_exporter:
+  scraper_source_cidrs: []
+  host_exporter_ports: []
+
+workstation_libvirt_scrape_ports: >-
+  {{ [bastion_vault.metrics_port] + (workstation_libvirt_exporter.host_exporter_ports | default([])) }}
 
 # Seconds which virtnetworkd waits at start for firewalld to report the running state.
 workstation_libvirt_firewalld_ready_timeout: 120

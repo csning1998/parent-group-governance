@@ -9,6 +9,15 @@
       workstation_libvirt_operator_user must be the operator account name.
       become: true gathers facts as root. The CLI injects this extra var.
 
+- name: "Section 0. Require the workstation topology"
+  ansible.builtin.assert:
+    that:
+      - bastion_vault is mapping
+      - bastion_vault.publish_address is string
+      - bastion_vault.port is integer
+    fail_msg: >-
+      bastion_vault is undefined. The playbook MUST load workstation-topology.yaml of the repository root.
+
 # The publish network requires a running virtnetworkd. A host which enables only
 # the socket unit never starts the daemon at boot, which skips libvirt autostart.
 - name: "Section A. Enable the libvirt network daemon after firewalld"
@@ -22,3 +31,6 @@
 
 - name: "Section D. Grant memlock to the operator user"
   ansible.builtin.include_tasks: D-memlock.yaml
+
+- name: "Section E. Render the Bastion Vault configuration"
+  ansible.builtin.include_tasks: E-vault-config.yaml

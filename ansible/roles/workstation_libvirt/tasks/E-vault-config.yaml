@@ -1,0 +1,18 @@
+---
+- name: "E1. Require the Vault configuration path extra var"
+  ansible.builtin.assert:
+    that:
+      - workstation_libvirt_vault.config_path is string
+      - workstation_libvirt_vault.config_path is match('^/.+/vault\.hcl$')
+    fail_msg: >-
+      workstation_libvirt_vault.config_path must be the absolute path of vault/vault.hcl in the repository.
+      The CLI injects this extra var.
+
+# The container reads the file at start, hence a changed listener takes effect after the next restart of vault-server.
+- name: "E2. Render the Bastion Vault configuration from the declared listeners"
+  ansible.builtin.template:
+    src: vault.hcl.j2
+    dest: "{{ workstation_libvirt_vault.config_path }}"
+    owner: "{{ workstation_libvirt_operator_user }}"
+    group: "{{ workstation_libvirt_operator_user }}"
+    mode: "0644"

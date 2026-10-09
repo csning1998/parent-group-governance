@@ -11,9 +11,18 @@
   <service name="dhcpv6"/>
   <service name="dns"/>
   <rule family="ipv4">
-    <source address="{{ workstation_libvirt_publish_source_cidr }}"/>
-    <destination address="{{ workstation_libvirt_publish_network_address }}"/>
-    <port protocol="tcp" port="{{ workstation_libvirt_vault_port }}"/>
+    <source address="{{ workstation_libvirt_publish_network.source_cidr }}"/>
+    <destination address="{{ bastion_vault.publish_address }}"/>
+    <port protocol="tcp" port="{{ bastion_vault.port }}"/>
     <accept/>
   </rule>
+{% for cidr in workstation_libvirt_exporter.scraper_source_cidrs | default([]) %}
+{% for port in workstation_libvirt_scrape_ports %}
+  <rule family="ipv4">
+    <source address="{{ cidr }}"/>
+    <port protocol="tcp" port="{{ port }}"/>
+    <accept/>
+  </rule>
+{% endfor %}
+{% endfor %}
 </policy>

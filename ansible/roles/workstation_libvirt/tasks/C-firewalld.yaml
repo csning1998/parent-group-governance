@@ -68,7 +68,20 @@
   ansible.builtin.assert:
     that:
       - _workstation_libvirt_policy_info.stdout is search('^\s*services:\s*dhcp dhcpv6 dns\s*$', multiline=true)
-      - _workstation_libvirt_policy_info.stdout is search('port="' ~ workstation_libvirt_vault_port ~ '"')
+      - _workstation_libvirt_policy_info.stdout is search('port="' ~ bastion_vault.port ~ '"')
     fail_msg: >-
       The runtime policy libvirt-to-host does not match the declared service set (dhcp, dhcpv6, dns) and the
       Bastion Vault rich rule. Compare against the rendered libvirt-to-host.xml.j2 and rerun C1 and C3.
+
+# Each scrape port appears once per declared scraper segment, and never without a declared segment.
+- name: "C10. Assert each scrape port admits exactly the declared scraper segments"
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_workstation_libvirt_policy_info.stdout | regex_findall('port="' ~ item ~ '"') | length)
+        == (workstation_libvirt_exporter.scraper_source_cidrs | default([]) | length)
+    fail_msg: >-
+      The runtime policy libvirt-to-host admits port {{ item }} for a segment set other than
+      workstation_libvirt_exporter.scraper_source_cidrs. Compare against the rendered
+      libvirt-to-host.xml.j2 and rerun C1 and C3.
+  loop: "{{ workstation_libvirt_scrape_ports }}"
