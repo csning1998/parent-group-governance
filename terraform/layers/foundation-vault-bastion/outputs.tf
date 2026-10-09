@@ -3,9 +3,8 @@
 output "bastion_vault" {
   description = "Connection facts of the Bastion Vault instance."
   value = {
-    endpoint              = module.local_credential_contexts.bastion_vault_config.endpoint
-    listener_ca_cert_path = abspath(local_file.bastion_vault_ca_copy.filename)
-    listener_ca_cert_pem  = data.local_file.bastion_vault_ca.content
+    endpoint             = local.bastion_vault_endpoint
+    listener_ca_cert_pem = data.local_file.bastion_vault_ca.content
   }
 }
 
@@ -34,13 +33,10 @@ output "bastion_vault_auth" {
 }
 
 output "bastion_vault_tenant" {
-  description = "Owner codes of the tenants registered on the Bastion Vault, the KV v2 secret to which each tenant writes its policy requests, and the AppRole identity with which the Terraform operator of each tenant logs in to the Bastion Vault, keyed by owner code."
+  description = "Owner codes of the tenants registered on the Bastion Vault, and the cert role through which the operator Vault Proxy of each tenant logs in, keyed by owner code."
   value = {
-    owner_codes = keys(local.tenants)
-    terraform_operator = {
-      role_names = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_name }
-      role_ids   = { for code, role in vault_approle_auth_backend_role.tenant_terraform_operator : code => role.role_id }
-    }
+    owner_codes   = keys(local.tenants)
+    operator_role = { for code, role in vault_cert_auth_backend_role.operator : code => role.name if contains(keys(local.tenants), code) }
   }
 }
 

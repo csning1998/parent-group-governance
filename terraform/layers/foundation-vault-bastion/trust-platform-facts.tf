@@ -33,6 +33,11 @@ locals {
     cidrhost("${split("/", local.platform_trust.bastion_publish_cidr)[0]}/${split("/", local.platform_trust.network_cidr)[1]}", 0) == cidrhost(local.platform_trust.network_cidr, 0)
   ) : false
 
+  # The publish listener of workstation-topology.yaml lies inside the Bastion publish network of the trust facts.
+  topology_publish_inside_network = can(cidrnetmask(local.platform_trust.bastion_publish_cidr)) ? (
+    cidrhost("${local.workstation.bastion_vault.publish_address}/${split("/", local.platform_trust.bastion_publish_cidr)[1]}", 0) == cidrhost(local.platform_trust.bastion_publish_cidr, 0)
+  ) : false
+
   platform_trust_valid = alltrue([
     can(regex(local.dns_name_pattern, local.platform_trust.domain_suffix)),
     length(local.platform_trust.stages) > 0,
@@ -51,6 +56,10 @@ resource "terraform_data" "platform_trust_validation" {
     precondition {
       condition     = local.platform_trust_valid
       error_message = "secret/parent-group-governance/platform-trust MUST hold a DNS domain_suffix, a JSON list of DNS label stages, and IPv4 network_cidr and bastion_publish_cidr, with bastion_publish_cidr inside network_cidr."
+    }
+    precondition {
+      condition     = local.topology_publish_inside_network
+      error_message = "bastion_vault.publish_address of workstation-topology.yaml MUST lie inside bastion_publish_cidr of secret/parent-group-governance/platform-trust."
     }
   }
 }

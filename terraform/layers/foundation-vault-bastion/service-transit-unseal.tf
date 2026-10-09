@@ -3,7 +3,7 @@
 # The tenant cannot rewrite the policy, because the tenant ACL does not grant any write on sys/policies/acl.
 locals {
   transit_unseal_consumers = {
-    "meta-platform-vault-downstream" = { owner = "meta-platform" }
+    "${local.platform_tenant}-vault-downstream" = { owner = local.platform_tenant }
   }
 }
 

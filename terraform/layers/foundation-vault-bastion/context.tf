@@ -1,14 +1,10 @@
 
-module "local_credential_contexts" {
-  source = "../../modules/contexts-local-credential"
-
-  # This layer is the true source. The module default reads state from this layer via terraform_remote_state.
-  # This override avoids a self-referential state read.
-  bastion_vault_config = {
-    ca_cert_path = "${path.root}/../../../vault/tls/ca.pem"
-  }
+# The workstation topology and the local CA of the repository, which this layer reads as files.
+locals {
+  workstation            = yamldecode(file("${path.root}/../../../workstation-topology.yaml"))
+  bastion_vault_endpoint = "https://${local.workstation.bastion_vault.publish_address}:${local.workstation.bastion_vault.port}"
 }
 
 data "local_file" "bastion_vault_ca" {
-  filename = module.local_credential_contexts.bastion_vault_config.ca_cert_path
+  filename = "${path.root}/../../../vault/tls/ca.pem"
 }
