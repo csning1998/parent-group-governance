@@ -1,0 +1,60 @@
+---
+# Central topology defining Bastion Vault endpoints, operator proxies, and rotatable credentials.
+# Shared across Ansible, Terraform, and the governance CLI as the single source of truth.
+
+bastion_vault:
+  loopback_address: "127.0.0.1"
+  publish_address: "172.16.0.1"
+  port: 8200
+  cluster_port: 8201
+  metrics_port: 8202
+
+operator_proxy:
+  # Cert auth mount path and role mapping on Bastion Vault (matching CN operator-<identity>).
+  cert_auth_mount: "operator-cert"
+  # Configuration directory under the user home directory storing mTLS client certificates.
+  config_dir: ".config/vault-proxy"
+  # Placeholder token sent by callers; replaced with authenticated tokens by the local proxy.
+  placeholder_token: "proxy-supplied"
+  # Shared GitLab credential used by Terraform HTTP remote state backends across layers.
+  state_backend:
+    mount: "secret"
+    path: "parent-group-governance/terraform/state-backend"
+    field: "token"
+    username: "gitlab-ci-token"
+  identities:
+    # Dedicated proxy for group-level governance layers, granting read-only access to state and bot tokens.
+    governance:
+      port: 8210
+      access: "governance"
+      reads:
+        - "parent-group-governance/ai-provider-console/anthropic"
+        - "parent-group-governance/github/publication"
+        - "parent-group-governance/sonarqube/ci-analysis-bot"
+        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+    # Proxy for platform-foundation Terraform layers, granting tenant ACL and registry read permissions.
+    platform-foundation:
+      port: 8211
+      access: "tenant"
+    # Proxy for parent-group-governance post-bootstrap layers, managing Vault root objects and policies.
+    parent-group-governance:
+      port: 8212
+      access: "foundation"
+    # Proxy for governance CLI credential rotation, scoped strictly to rotatable service secrets.
+    service-admin-passwords:
+      port: 8213
+      access: "rotation"
+
+# Declarative registry of infrastructure service credentials rotated by the governance CLI.
+service_admin_passwords:
+  - key: sonarqube-admin-password
+    vault_kv_mount: secret
+    vault_kv_path: parent-group-governance/sonarqube/admin-account
+    length: 24
+    service:
+      mechanism: http_form
+      endpoint: http://127.0.0.1:9000/api/users/change_password
+      verify_endpoint: http://127.0.0.1:9000/api/authentication/validate
+      login: admin
+      factory_default_password: admin
