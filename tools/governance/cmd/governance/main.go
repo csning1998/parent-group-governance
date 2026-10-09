@@ -18,37 +18,14 @@ import (
 )
 
 type app struct {
-	root             string
-	home             string
-	ansibleDir       string
-	topology         topology.Topology
-	bastionVaultAddr string
-	credentials      []credentials.Credential
-	env              *config.Env
-	out              *ui.Printer
-	in               *bufio.Reader
-}
-
-func main() {
-	os.Exit(execute(os.Args[1:]))
-}
-
-func resolveProjectRoot(start string) (string, error) {
-	dir := start
-	for {
-		_, err := os.Stat(filepath.Join(dir, ".git"))
-		if err == nil {
-			return dir, nil
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return "", err
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", errors.New("no .git entry found upward from " + start)
-		}
-		dir = parent
-	}
+	root        string
+	home        string
+	ansibleDir  string
+	topology    topology.Topology
+	credentials []credentials.Credential
+	env         *config.Env
+	out         *ui.Printer
+	in          *bufio.Reader
 }
 
 func execute(args []string) int {
@@ -91,7 +68,6 @@ func execute(args []string) int {
 		out.Print(ui.Fatal, err.Error())
 		return 1
 	}
-	a.bastionVaultAddr = topo.BastionVault.Endpoint()
 	a.topology = topo
 
 	credsConfig, err := credentials.Load(topologyPath)
@@ -105,10 +81,6 @@ func execute(args []string) int {
 		return 1
 	}
 	a.credentials = creds
-	// Deprecated: credentials.yaml is superseded by workstation-topology.yaml.
-	// if credsConfig.Vault.Address != "" {
-	// 	a.bastionVaultAddr = credsConfig.Vault.Address
-	// }
 
 	var rootCmd *cobra.Command
 	rootCmd = &cobra.Command{
@@ -125,7 +97,6 @@ func execute(args []string) int {
 				return err
 			}
 			a.env = env
-			a.applyEnvPaths()
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -134,10 +105,12 @@ func execute(args []string) int {
 	}
 
 	rootCmd.AddCommand(
+		a.newHostCmd(),
 		a.newVaultCmd(),
-		a.newAnsibleCmd(),
-		a.newEnvCmd(),
+		a.newCredentialsCmd(),
+		a.newTerraformCmd(),
 		a.newStateAuditCmd(),
+		a.newEnvCmd(),
 	)
 
 	rootCmd.SetArgs(args)
@@ -148,12 +121,24 @@ func execute(args []string) int {
 	return 0
 }
 
-func (a *app) applyEnvPaths() {
-	if a.env == nil {
-		return
+func main() {
+	os.Exit(execute(os.Args[1:]))
+}
+
+func resolveProjectRoot(start string) (string, error) {
+	dir := start
+	for {
+		_, err := os.Stat(filepath.Join(dir, ".git"))
+		if err == nil {
+			return dir, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errors.New("no .git entry found upward from " + start)
+		}
+		dir = parent
 	}
-	// Deprecated: KeyBastionVaultAddr superseded by topology discovery.
-	// if a.bastionVaultAddr == "" {
-	// 	a.bastionVaultAddr = a.env.Get(config.KeyBastionVaultAddr)
-	// }
 }
