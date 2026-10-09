@@ -21,7 +21,7 @@ func matchAuthRoute(r *http.Request, path string) bool {
 	return isAllowedMethod && r.URL.Path == path
 }
 
-func matchAuthPayload(payload map[string]interface{}, wantRole, wantJWT string) bool {
+func matchAuthPayload(payload map[string]any, wantRole, wantJWT string) bool {
 	if wantRole != "" && payload["role"] != wantRole {
 		return false
 	}
@@ -37,11 +37,11 @@ func writeJWTResponse(w http.ResponseWriter, resp mockJWTResponse) {
 		w.WriteHeader(resp.statusCode)
 	}
 	if len(resp.errors) > 0 {
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"errors": resp.errors})
+		_ = json.NewEncoder(w).Encode(map[string]any{"errors": resp.errors})
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"auth": map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"auth": map[string]any{
 			"client_token": resp.clientToken,
 		},
 	})
@@ -59,7 +59,7 @@ func newMockJWTServer(t *testing.T, mount, wantRole, wantJWT string, resp mockJW
 			http.NotFound(w, r)
 			return
 		}
-		var payload map[string]interface{}
+		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

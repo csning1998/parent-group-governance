@@ -60,9 +60,8 @@ func TestPathsHelpers(t *testing.T) {
 		got  string
 		want string
 	}{
+		{"ResolveTLSDir", p.ResolveTLSDir(), "/root/vault/tls"},
 		{"resolveKeysDir", p.resolveKeysDir(), "/root/vault/keys"},
-		{"resolveTLSDir", p.resolveTLSDir(), "/root/vault/tls"},
-		{"TLSDir", p.TLSDir(), "/root/vault/tls"},
 		{"resolveInitFile", p.resolveInitFile(), "/root/vault/keys/init-output.json"},
 		{"resolveUnsealKeyFile", p.resolveUnsealKeyFile(), "/root/vault/keys/unseal.key"},
 		{"resolveRootTokenFile", p.resolveRootTokenFile(), "/home/u/.vault-token"},

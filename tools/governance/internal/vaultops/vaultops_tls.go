@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
-	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -20,7 +19,10 @@ import (
 
 // GenerateTLS creates a fresh CA and server certificate under the vault/tls directory.
 func GenerateTLS(ctx context.Context, p Paths, out *ui.Printer) error {
-	resolveTLSDir := p.resolveTLSDir()
+	if len(p.listenerIPs) == 0 {
+		return fmt.Errorf("vaultops: the listener certificate needs the Bastion Vault addresses of workstation-topology.yaml")
+	}
+	resolveTLSDir := p.ResolveTLSDir()
 	if err := os.RemoveAll(resolveTLSDir); err != nil {
 		return fmt.Errorf("vaultops: remove %s: %w", resolveTLSDir, err)
 	}
@@ -66,7 +68,7 @@ func GenerateTLS(ctx context.Context, p Paths, out *ui.Printer) error {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:     []string{"localhost"},
-		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("172.16.0.1")},
+		IPAddresses:  p.listenerIPs,
 	}
 	caCert, err := x509.ParseCertificate(caDER)
 	if err != nil {
@@ -103,6 +105,18 @@ func generateCertificateSerial() (*big.Int, error) {
 	return serial, nil
 }
 
+func writePEMFile(path, blockType string, der []byte, mode os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return fmt.Errorf("vaultops: open %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() /* WHY: Secondary cleanup error is unactionable once pem.Encode finishes. */ }()
+	if err := pem.Encode(f, &pem.Block{Type: blockType, Bytes: der}); err != nil {
+		return fmt.Errorf("vaultops: encode %s: %w", path, err)
+	}
+	return nil
+}
+
 // writePrivateKeyFile stores the key as PKCS #8, which Vault and OpenSSL read for every key algorithm.
 func writePrivateKeyFile(path string, key *ecdsa.PrivateKey) error {
 	der, err := x509.MarshalPKCS8PrivateKey(key)
@@ -110,16 +124,4 @@ func writePrivateKeyFile(path string, key *ecdsa.PrivateKey) error {
 		return fmt.Errorf("vaultops: marshal %s: %w", path, err)
 	}
 	return writePEMFile(path, "PRIVATE KEY", der, 0o600)
-}
-
-func writePEMFile(path, blockType string, der []byte, mode os.FileMode) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
-	if err != nil {
-		return fmt.Errorf("vaultops: open %s: %w", path, err)
-	}
-	defer func() { _ = f.Close() }()
-	if err := pem.Encode(f, &pem.Block{Type: blockType, Bytes: der}); err != nil {
-		return fmt.Errorf("vaultops: encode %s: %w", path, err)
-	}
-	return nil
 }

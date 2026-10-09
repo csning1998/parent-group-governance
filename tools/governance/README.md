@@ -1,6 +1,6 @@
 # tools/governance 設計文件
 
-這份文件依照真實執行 DAG 說明 `tools/governance` 整支工具，範圍涵蓋 `cmd/governance`、`internal/config`、`internal/vaultops`、`internal/ui`、`internal/ansibleops`、`pkg/credentials`、`pkg/secretgen`、`pkg/httprotate`、`pkg/secretrotate` 九個套件
+這份文件依照真實執行 DAG 說明 `tools/governance` 整支工具，範圍涵蓋 `cmd/governance`、`internal/config`、`internal/vaultops`、`internal/ui`、`internal/ansibleops`、`internal/topology`、`internal/vaultenv`、`pkg/credentials`、`pkg/secretgen`、`pkg/httprotate`、`pkg/secretrotate`、`pkg/stateaudit`、`pkg/tokensource`、`pkg/vaultclient` 共十四個套件。
 
 ## Section 1. Domain Terminology and Package Overview
 
@@ -41,36 +41,48 @@
 - `Commit`：把已經驗證過的結果正式寫回 Vault 主要欄位
 - `Acquire`：透過 CAS 條件寫入以取得一把互斥鎖
 - `Release`：確認鎖的持有者是自己之後，透過 CAS 條件重置互斥鎖
-- `Recover`：從上一輪中斷的紀錄裡判斷要接受還是放棄此紀錄，得以使流程回到一致狀態
+- `Recover`：從上一輪中斷的紀錄裡判斷要接受還是放棄這筆紀錄，讓流程回到一致狀態
 - `Generate`：依照字元類別限制產生一組隨機密碼
 
 ### Item B. Package Boundaries and Responsibilities
 
-- `cmd/governance` 是 entry point 與 Golang Cobra 組裝層，本身不含業務邏輯。主要功能是負責建立 `app`、組出 cobra 指令樹與互動選單，並把控制權交接到對應的操作函數。詳見 Section 2 與 Section 9
-- `internal/config` 主要管理 `.env` 檔案的生命週期，並在啟動時補齊主機身份欄位、檢查 Terraform 與 Vault 與 Ansible 是否在 PATH 上。詳見 Section 2
-- `internal/vaultops` 主要管理 Bastion Vault 本身的生命週期，包含產生 TLS 憑證、初始化、解封印、啟用 KV 引擎、同步 root token 等。詳見 Section 4
-- `internal/ui` 是終端機格式化輸出與互動輸入，包含選單、確認提示、密碼提示。詳見 Section 9
-- `internal/ansibleops` 透過薄封裝的 `go-ansible` 執行 playbook 並注入 `ANSIBLE_CONFIG`。詳見 Section 9
-- `pkg/credentials` 負責解析 `credentials.yaml` 宣告檔，轉換為一組可執行的 `Credential`。詳見 Section 3
-- `pkg/secretgen` 會依照呼叫端指定的字元類別產生隨機密碼，保證每個要求的類別至少出現一次。詳見 Section 6
-- `pkg/httprotate` 是 `DeployFunc` 與 `VerifyFunc` 的其中一種實作，把外部服務的換密碼介面包成一個 Basic Auth 表單 POST，把驗證介面包成一個 Basic Auth GET。詳見 Section 6
-- `pkg/secretrotate` 是整個工具的主軸，負責狀態機排程、雙重寫入防護、CAS 建議鎖與 reconcile 等。詳見 Section 5 到 Section 7 Item D
+- `cmd/governance` 是 entry point 與 Golang Cobra 組裝層，本身不含業務邏輯。負責建立 `app`、組出 cobra 指令樹與互動選單，並把控制權交接到對應的操作函數。詳見 _Section 2_ 與 _Section 9_
+- `internal/config` 主要管理 `.env` 檔案的生命週期，並在啟動時補齊主機身分欄位、檢查 Terraform 與 Vault 與 Ansible 是否在 PATH 上。詳見 _Section 2_
+- `internal/vaultops` 主要管理 Bastion Vault 本身的生命週期，包含產生 TLS 憑證、初始化、解封印、啟用 KV 引擎，以及 root token 的撤銷與緊急產生。詳見 _Section 4_
+- `internal/ui` 是終端機格式化輸出與互動輸入，包含層級化紀錄、選單、確認提示、密碼遮蔽輸入。詳見 _Section 9_
+- `internal/ansibleops` 透過薄封裝的 `go-ansible` 執行 playbook 並注入 `ANSIBLE_CONFIG`。詳見 _Section 9_
+- `internal/topology` 負責解析 `workstation-topology.yaml` 的 `bastion_vault`，產出 `VaultTopology` 物件，提供 Bastion Vault 的 API 端點位址（`APIEndpoint()`）與 listener 憑證的 IP。詳見 _Section 2 Item E_
+- `internal/vaultenv` 專門清除程序環境中殘留的 Vault API 環境變數（如 `VAULT_ADDR`、`VAULT_CACERT`、`VAULT_TOKEN` 等共 21 個變數），確保客戶端僅遵循明確指定的組態。詳見 _Section 2_
+- `pkg/credentials` 負責解析 `workstation-topology.yaml` 的 `service_admin_passwords`，轉換為一組可執行的 `Credential`。詳見 _Section 3_
+- `pkg/secretgen` 會依照呼叫端指定的字元類別產生隨機密碼，保證每個要求的類別至少出現一次。詳見 _Section 6_
+- `pkg/httprotate` 是 `DeployFunc` 與 `VerifyFunc` 的其中一種實作，把外部服務的變更密碼介面包成 Basic Auth 表單 POST，把驗證介面包成 Basic Auth GET。詳見 _Section 6_
+- `pkg/secretrotate` 是整個工具的核心引擎，負責密碼輪替狀態機排程、雙重寫入防護、CAS 互斥鎖與 reconcile 等，底層儲存與 CAS 邏輯拆分於 `storage.go`。詳見 _Section 5_ 到 _Section 8_
+- `pkg/vaultclient` 提供共用的 Vault API 客戶端建置（支援 AppRole、JWT/OIDC、Token 驗證與 mTLS）、健康度與封印狀態探測（`InspectStatus`、`ProbeSealState`）、多環境上下文解析（`ResolveTargetContext`）以及安全的權杖檔案管理（`~/.vault-token`）。詳見 _Section 4 Item G_
+- `pkg/tokensource` 提供憑證 Token Provider 介面，支援靜態憑證與透過 Vault JWT Auth 交換 KV-v2 機密（`VaultKV`），供 CI 與自動化作業換取機密權杖。
+- `pkg/stateaudit` 負責 Terraform state 機密稽核，結合 sensitive 標記與 gitleaks 規則，支援歷史版本比對、`.tfstate-audit-ignore.yaml` 規則豁免與互動終端展示（`--reveal`）。詳見 _Section 11_
 
 ### Item C. Package Dependency Overview
 
-套件的相依關係可以參考下圖
+套件的相依關係可以參考下圖：
 
 ```mermaid
 flowchart TD
-    CLI["cmd/governance"] --> ConfigPkg["internal/config"]
+    CLI["cmd/governance"] --> VaultEnv["internal/vaultenv"]
+    CLI --> ConfigPkg["internal/config"]
+    CLI --> TopologyPkg["internal/topology"]
     CLI --> VaultOpsPkg["internal/vaultops"]
     CLI --> UIPkg["internal/ui"]
     CLI --> AnsiblePkg["internal/ansibleops"]
     CLI --> CredPkg["pkg/credentials"]
     CLI --> RotatePkg["pkg/secretrotate"]
+    CLI --> StateAuditPkg["pkg/stateaudit"]
+    CLI --> VaultClientPkg["pkg/vaultclient"]
 
-    CredPkg --> HTTPPkg["pkg/httprotate"]
+    VaultOpsPkg --> VaultClientPkg
+    RotatePkg --> VaultClientPkg
     RotatePkg --> GenPkg["pkg/secretgen"]
+    RotatePkg --> StoragePkg["pkg/secretrotate/storage.go"]
+    CredPkg --> HTTPPkg["pkg/httprotate"]
     HTTPPkg -.->|"DeployFunc 與 VerifyFunc 合約"| RotatePkg
 ```
 
@@ -80,31 +92,40 @@ flowchart TD
 - `httprotate.FormSpec.Verify` 的簽章必須滿足 `secretrotate.VerifyFunc`
 - `pkg/secretrotate` 完全不需要 import `pkg/httprotate`
 
-兩者的耦合只在執行期由 `pkg/credentials` 的 `resolveServiceFuncs` 進行組裝。詳情可參考 Section 3 Item A.3 的說明
+兩者的耦合只在執行期由 `pkg/credentials` 的 `resolveServiceFuncs` 進行組裝。詳情可參考 _Section 3 Item A.3_ 的說明。
 
 ## Section 2. 進入點與執行環境
 
-程式從 `main()` 進入後，在讀到 `credentials.yaml` 之前必須先解決
+程式從 `main()` 進入後，在讀到 `workstation-topology.yaml` 之前必須先依序處理：
 
-1.  專案根目錄位置
-2.  `.env` 是否備妥
+1. 清除環境殘留的 Vault API 環境變數（呼叫 `vaultenv.Clear()`，避免過期憑證或跳過驗證旗標干擾）
+2. 專案根目錄位置（呼叫 `resolveProjectRoot` 向上定位 `.git`）
+3. 取得使用者家目錄（`os.UserHomeDir()`）
+4. 載入工作站 Vault 拓撲（`topology.Load` 取得 `VaultTopology`）
+5. 載入憑證組態（`credentials.Load` 並建置 `[]Credential`）
+6. 依執行模式備妥 `.env`（子指令透過 `PersistentPreRunE`，選單透過 `runMenu` 呼叫 `config.BootstrapEnv`）
 
-這些會決定後續的函數取用檔案的路徑、以及需要連接到的 Vault 位址，且進入點順序不能調換。有關 Section 2 內容，可以參考以下時序圖
+這些會決定後續的函數取用檔案的路徑、以及需要連接到的 Vault 位址，且進入點順序不能調換。有關 _Section 2_ 內容，可以參考以下時序圖：
 
 ```mermaid
 sequenceDiagram
     participant Main as main() 與 execute()
+    participant VaultEnv as internal/vaultenv
     participant FS as 檔案系統
+    participant Topology as internal/topology
     participant Credentials as pkg/credentials
     participant Cobra as cobra 指令樹
     participant Config as internal/config
     participant Op as operations
 
+    Main->>VaultEnv: vaultenv.Clear() 清除環境變數殘留
     Main->>FS: os.Getwd()
     Main->>FS: resolveProjectRoot 往上尋找 .git
     FS-->>Main: 專案根目錄
     Main->>FS: os.UserHomeDir()
-    Main->>Credentials: Load(root/credentials.yaml)
+    Main->>Topology: Load(root/workstation-topology.yaml)
+    Topology-->>Main: VaultTopology
+    Main->>Credentials: Load(root/workstation-topology.yaml)
     Credentials-->>Main: Config
     Main->>Credentials: Config.BuildCredentials()
     Credentials-->>Main: []Credential
@@ -124,7 +145,7 @@ sequenceDiagram
 
 ### Item A. 專案根目錄的定位
 
-`execute()` 能直接拿到的只有當前工作目錄，但工具真正需要的是專案根目錄，因為 `credentials.yaml`、`.env`、`vault/tls/`、`vault/keys/`、`ansible/` 全部都以根目錄為基準。`resolveProjectRoot` 負責把前者換算成後者：
+`execute()` 能直接拿到的只有當前工作目錄，但工具真正需要的是專案根目錄，因為 `workstation-topology.yaml`、`.env`、`vault/tls/`、`vault/keys/`、`ansible/` 全部都以根目錄為基準。`resolveProjectRoot` 負責把前者換算成後者：
 
 ```go
 func resolveProjectRoot(start string) (string, error) {
@@ -146,7 +167,7 @@ func resolveProjectRoot(start string) (string, error) {
 }
 ```
 
-錨點選擇 `.git` 而不是 `credentials.yaml` 或 `go.mod`，兩個替代方案各自會失敗：`credentials.yaml` 在還沒採用密碼輪替的專案裡本來就不存在，這是 Section 3 Item A 第 2 點刻意保留的情境，拿不存在的檔案當錨點會讓工具在那些專案裡直接中止；`go.mod` 在 `tools/governance/` 底下也有一份，往上找會停在工具自己的目錄，得到的根目錄會比預期淺一層，後續所有路徑都會算錯。
+錨點選擇 `.git` 而不是 `workstation-topology.yaml` 或 `go.mod`，兩個替代方案各自會失敗：拿 `workstation-topology.yaml` 當錨點，會把「找不到專案根目錄」與「拓撲檔缺漏」兩種錯誤混成同一個訊息，操作者無從判斷該修哪一個；`go.mod` 在 `tools/governance/` 底下也有一份，往上找會停在工具自己的目錄，得到的根目錄會比預期淺一層，後續所有路徑都會算錯。
 
 三個終止條件分別對應三種不同的狀況，不能合併處理。`err == nil` 代表找到了。`errors.Is(err, fs.ErrNotExist)` 代表這一層確實沒有 `.git`，可以安全地往上一層繼續找。其餘的 `err` 直接回傳而不繼續往上，因為權限不足或讀取失敗跟「這層沒有」是兩件事：如果把它們一律當成沒有而繼續往上爬，工具會在一個其實有 `.git` 但當下讀不到的目錄上方繼續尋找，最後回報一個與真實原因無關的「找不到」，操作者會往錯誤的方向排查。
 
@@ -209,7 +230,7 @@ func (e *Env) Save() error {
 }
 ```
 
-先寫暫存檔再 `os.Rename` 是因為同一個檔案系統上的換名是原子操作。如果直接覆寫原檔，在寫入途中斷電或程序被中止，`.env` 會變成一份只有前半段的檔案，而這份檔案裡存著 `VAULT_TOKEN` 與 `SONARQUBE_DB_PASSWORD`，截斷的後果是操作者失去 Vault 的存取權，同時資料庫密碼變成一個沒有任何地方記載的值。權限固定為 `0o600` 也是同一個理由：這個檔案存的是明文憑證，不應該讓同一台機器上的其他帳號讀到。
+先寫暫存檔再 `os.Rename` 是因為同一個檔案系統上的換名是原子操作。如果直接覆寫原檔，在寫入途中斷電或程序被中止，`.env` 會變成一份只有前半段的檔案，而這份檔案裡存著 `SONARQUBE_DB_PASSWORD`，截斷的後果是資料庫密碼變成一個沒有任何地方記載的值。權限固定為 `0o600` 也是同一個理由：這個檔案存的是明文憑證，不應該讓同一台機器上的其他帳號讀到。
 
 最後是把 `.env` 展開成子行程環境變數的路徑：
 
@@ -233,7 +254,7 @@ func (e *Env) Environ() []string {
 }
 ```
 
-`${VAR}` 的解析有一個順序上的限制必須說清楚：`resolved` 是隨著迴圈逐步填入的，所以只有宣告在自己前面的鍵才查得到，引用一個宣告在自己後面的鍵會落到 `os.Getenv`，通常得到空字串。這個限制直接決定了 Item C 裡 `populateNewEnv` 的鍵順序不能任意調換，`BASTION_VAULT_CACERT` 的值是 `${PROJECT_ROOT}/vault/tls/ca.pem`，`PROJECT_ROOT` 必須排在它前面才會被展開成實際路徑。相對地 `UHOME` 的值 `${HOME}` 永遠取自主機環境變數，因為 `.env` 裡沒有 `HOME` 這個鍵。
+`${VAR}` 的解析有一個順序上的限制必須說清楚：`resolved` 是隨著迴圈逐步填入的，所以只有宣告在自己前面的鍵才查得到，引用一個宣告在自己後面的鍵會落到 `os.Getenv`，通常得到空字串。這個限制直接決定了 _Item C_ 裡 `populateNewEnv` 的鍵順序不能任意調換，引用 `${PROJECT_ROOT}` 的鍵必須排在 `PROJECT_ROOT` 後面才會被展開成實際路徑。相對地 `UHOME` 的值 `${HOME}` 永遠取自主機環境變數，因為 `.env` 裡沒有 `HOME` 這個鍵。
 
 ### Item C. `.env` 的補齊流程
 
@@ -280,12 +301,6 @@ func patchExistingEnv(e *Env, root string, facts HostFacts, out *ui.Printer) err
     e.Set(KeyHostUID, strconv.Itoa(facts.CurrentUID))
     e.Set(KeyHostGID, strconv.Itoa(facts.CurrentGID))
     e.Set(KeyProjectRoot, root)
-    if e.Get(KeyDevVaultAddr) == "" {
-        e.Set(KeyDevVaultAddr, "https://172.16.0.1:8200")
-    }
-    if e.Get(KeyDevVaultCACert) == "" {
-        e.Set(KeyDevVaultCACert, "${PROJECT_ROOT}/vault/tls/ca.pem")
-    }
     if e.Get(KeySonarQubeDBPassword) == "" {
         sonarDBPassword, err := generateRandomHexToken(24)
         if err != nil {
@@ -300,9 +315,9 @@ func patchExistingEnv(e *Env, root string, facts HostFacts, out *ui.Printer) err
 
 `HOST_UID`、`HOST_GID`、`PROJECT_ROOT` 這三個每次都無條件覆寫，因為它們描述的是「現在這台機器、現在這份 checkout」，不是操作者的選擇。Compose 檔案用 `${HOST_UID}:${HOST_GID}` 決定容器內的執行身份，如果沿用另一台機器或另一個帳號留下的舊值，掛載出來的檔案擁有者會是錯的；`PROJECT_ROOT` 同理，把儲存庫換個位置 clone 之後，舊值會讓所有衍生路徑指向一個已經不存在的目錄。
 
-其餘欄位只在空值時補上，因為它們可能是操作者刻意設定的。`BASTION_VAULT_ADDR` 指向哪一台 Vault、`SONARQUBE_DB_PASSWORD` 是哪一組密碼，都屬於一旦被每次執行無條件覆寫就會造成實害的值：前者會讓工具連到錯誤的 Vault，後者會讓 `.env` 裡的密碼與資料庫裡已經持久化的密碼永久脫節，而資料庫本身沒有第二份紀錄可以還原。
+其餘欄位只在空值時補上。`SONARQUBE_DB_PASSWORD` 一旦被每次執行無條件覆寫，`.env` 裡的密碼就會與資料庫裡已經持久化的密碼永久脫節，而資料庫本身沒有第二份紀錄可以還原。`.env` 不保存 Bastion Vault 的位址，位址由 `workstation-topology.yaml` 宣告，理由見 _Item E_。
 
-`SONARQUBE_DB_PASSWORD` 在這裡鑄造而不是交給 `secretrotate`，是因為它沒有可以認證的對象。Section 6 的輪替流程建立在「用舊密碼登入外部服務、順勢換成新密碼」這個前提上，而這組密碼的消費者是 Compose 啟動容器時讀取的環境變數，不存在一個可以驗證舊值的線上端點。它只需要在第一次啟動時被鑄造一次，之後由 `.env` 自己保管。
+`SONARQUBE_DB_PASSWORD` 在這裡鑄造而不是交給 `secretrotate`，是因為它沒有可以認證的對象。_Section 6_ 的輪替流程建立在「用舊密碼登入外部服務、順勢換成新密碼」這個前提上，而這組密碼的消費者是 Compose 啟動容器時讀取的環境變數，不存在一個可以驗證舊值的線上端點。它只需要在第一次啟動時被鑄造一次，之後由 `.env` 自己保管。
 
 主機身份的來源是 `DetectHostFacts`：
 
@@ -342,7 +357,7 @@ func generateRandomHexToken(nBytes int) (string, error) {
 
 ### Item D. 外部工具檢查
 
-`VerifyHostEnvironment` 對應選單與 `governance env verify` 子指令，用來在真正動手之前確認三個外部執行檔存在：
+`VerifyHostEnvironment` 對應選單與 `governance host verify` 子指令，用來在真正動手之前確認三個外部執行檔存在：
 
 ```go
 var hostTools = []requiredTool{
@@ -361,7 +376,7 @@ func VerifyHostEnvironment() []ToolCheck {
 }
 ```
 
-這個函數回傳的是一份完整的檢查結果清單，不是遇到第一個缺失就中止的錯誤。差別在於操作者拿到的資訊量：一次列出三個工具各自的狀態，操作者可以一次把缺的都裝好；遇到第一個就回傳錯誤，操作者會被迫重跑三次才能發現三個都沒裝。把「判斷有沒有裝」跟「要怎麼呈現與是否視為失敗」分開，也讓呼叫端可以自己決定要印成報表還是轉成錯誤，這部分在 Section 9 說明。
+這個函數回傳的是一份完整的檢查結果清單，不是遇到第一個缺失就中止的錯誤。差別在於操作者拿到的資訊量：一次列出三個工具各自的狀態，操作者可以一次把缺的都裝好；遇到第一個就回傳錯誤，操作者會被迫重跑三次才能發現三個都沒裝。把「判斷有沒有裝」跟「要怎麼呈現與是否視為失敗」分開，也讓呼叫端可以自己決定要印成報表還是轉成錯誤，這部分在 _Section 9_ 說明。
 
 注意這裡檢查的是 PATH 上有沒有這個執行檔，不是版本是否相容。版本相容性沒有在程式層面驗證。
 
@@ -381,7 +396,6 @@ PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
         return err
     }
     a.env = env
-    a.applyEnvPaths()
     return nil
 },
 RunE: func(cmd *cobra.Command, args []string) error {
@@ -391,48 +405,31 @@ RunE: func(cmd *cobra.Command, args []string) error {
 
 `cmd == rootCmd` 這個守衛存在的理由是 `runMenu` 自己也會呼叫一次 `BootstrapEnv`。cobra 在執行根指令自身的 `RunE` 之前，一樣會先跑 `PersistentPreRunE`，如果不排除這個情況，互動選單這條路徑會把 `.env` 的讀取、補齊、寫回整個流程跑兩遍。兩遍的結果雖然一致，但是多一次不必要的檔案寫入，而 `Save` 是會實際改動磁碟內容的動作。
 
-執行子指令的路徑則一定會經過這個守衛之外的分支，因為此時 `cmd` 是子指令而不是根指令。這個安排讓每一條路徑都恰好補齊一次 `.env`。
+執行子指令的路徑則一定會經過這個守衛之外的分支，因為這時 `cmd` 是子指令而不是根指令。這個安排讓每一條路徑都恰好補齊一次 `.env`。
 
-補齊完成後由 `applyEnvPaths` 決定 Vault 位址：
-
-```go
-func (a *app) applyEnvPaths() {
-    if a.env == nil {
-        return
-    }
-    if a.bastionVaultAddr == "" {
-        a.bastionVaultAddr = a.env.Get(config.KeyDevVaultAddr)
-    }
-}
-```
-
-只在 `a.bastionVaultAddr` 仍為空時才從 `.env` 取值，代表 `credentials.yaml` 的 `vault.address` 優先於 `.env`。這個優先順序的理由是宣告檔的層級比環境檔高：`.env` 描述的是這台機器的預設環境，`credentials.yaml` 描述的是這個專案的憑證要寫到哪裡去，後者是專案層級的決定，不應該被機器層級的預設值蓋掉。
-
-完整的位址解析是一條三段式退回鏈，三段分別由不同套件負責：
+Vault 位址不經過 `.env`，而是在進入指令樹之前由 `workstation-topology.yaml` 決定：
 
 ```go
-func (a *app) resolveBastionVaultAddr() string {
-    if a.bastionVaultAddr != "" {
-        return a.bastionVaultAddr
-    }
-    if a.env != nil {
-        return a.env.Get(config.KeyDevVaultAddr)
-    }
-    return ""
+topologyPath := filepath.Join(root, topology.FileName)
+topo, err := topology.Load(topologyPath)
+if err != nil {
+    out.Print(ui.Fatal, err.Error())
+    return 1
 }
+a.topology = topo
 ```
 
-這個函數回傳空字串時，最後一段退回發生在 `vaultops` 內部的 `Paths.resolveBastionAddr`，由它補上寫死的預設位址，詳見 Section 4 Item A。同一個預設位址字面值目前同時存在於 `internal/config/bootstrap.go` 的 `populateNewEnv` 與 `patchExistingEnv`，以及 `internal/vaultops/vaultops.go` 的 `resolveBastionAddr`，三處必須一起修改才會一致。
+`topology.Load` 回傳 `topology.VaultTopology`，要求 `bastion_vault` 同時宣告 `loopback_address`、`publish_address` 兩個 IP 與一個合法的 `port`，缺任何一項就讓工具在啟動時中止。`APIEndpoint()` 組出 `https://<loopback_address>:<port>`，`ListenerIPs()` 回傳 listener 憑證必須列入的兩個 IP。同一份檔案也是 Ansible 渲染 `vault.hcl` 與防火牆規則、Terraform 建立 cert role 的來源，所以位址只在一處宣告。
+
+這個設計取代了舊的三段式退回鏈：`credentials.yaml` 的 `vault.address`、`.env` 的 `BASTION_VAULT_ADDR`、`vaultops` 寫死的預設值。三處各自持有同一個位址字面值，修改時必須同步，漏改的那一處只會在執行到那條路徑時才失敗。現在 `vaultops.NewPaths` 直接接收 `topology.BastionVault`，沒有任何預設值可以退回。
 
 ## Section 3. 宣告式設定解析
 
-### Item A. `credentials.yaml` 宣告與 `Config`
+### Item A. `service_admin_passwords` 宣告與 `Config`
 
-這檔案是宣告所有開發者在 Host 機容器上要做密碼輪替的服務，所有密碼 key 都會以 list 宣告在 credentials 之下。可以設定的欄位如下：
+`workstation-topology.yaml` 的 `service_admin_passwords` 宣告所有開發者在 Host 機容器上要做密碼輪替的服務管理員密碼，每一筆是 list 的一個元素。Bastion Vault 的位址由同一份檔案的 `bastion_vault` 決定，見 _Section 2 Item E_。可以設定的欄位如下：
 
-- `vault`
-    - `address`：宣告要寫入的 Vault 的位置，因為這通常在專案中是唯一的
-- `credentials`
+- `service_admin_passwords`
     - `key`：憑證的唯一識別名稱，會把連字號轉換成底線，作為 Vault 的欄位名稱
     - `vault_kv_mount`：Vault KV2 的掛載點名稱
     - `vault_kv_path`：Vault KV2 的路徑，跟 `vault_kv_mount` 一起定位存放這組密碼的 Document
@@ -441,29 +438,20 @@ func (a *app) resolveBastionVaultAddr() string {
     - `service.endpoint`：外部服務的變更密碼 API 位址
     - `service.verify_endpoint`：外部服務的密碼驗證 API 位址，`http_form` 必填，以唯讀方式確認服務目前接受的密碼
     - `service.login`：外部服務的帳號名稱
-    - `service.factory_default_password`：服務出廠預設密碼，選填，`Rotate` 與 `Reconcile` 都會把它當成候選值驗證，用來處理剛重建的服務
+    - `service.factory_default_password`：服務出廠預設密碼，選填。`Rotate` 與 `Reconcile` 都會把它當成候選值驗證，`./governance vault init` 也以它確認服務仍是全新狀態，見 _Section 4 Item C_
 
 新增一筆憑證只需要編輯 YAML 即可，不需要改程式碼邏輯。有關檔案處理的行為如下：
 
-1.  有關相關程式碼的型別定義如下，依照 YAML 巢狀層次由外到內排列：
-    - 型別 `Config` 是 `Load` 解析整份 YAML 之後的根節點，對應 `credentials.yaml` 最外層的 `vault:` 與 `credentials:` 兩個鍵
+1. 有關相關程式碼的型別定義如下，依照 YAML 巢狀層次由外到內排列：
+    - 型別 `Config` 是 `Load` 解析整份 YAML 之後的根節點，只對應 `service_admin_passwords` 一個鍵，其餘鍵由 `internal/topology`、Ansible 與 Terraform 讀取
 
         ```go
         type Config struct {
-            Vault       VaultOverride      `yaml:"vault"`
-            Credentials []credentialConfig `yaml:"credentials"`
+            Credentials []credentialConfig `yaml:"service_admin_passwords"`
         }
         ```
 
         可以注意到每個欄位都會有 `yaml:` tag，用途僅限負責映射檔案格式，不夾帶任何轉換邏輯
-
-    - 型別 `VaultOverride` 沒有把 `Address` 直接攤平到 `Config` 內，空字串代表未覆寫
-
-        ```go
-        type VaultOverride struct {
-            Address string `yaml:"address"`
-        }
-        ```
 
     - `credentialConfig` 作為套件內部的解析中繼型別，負責組合密碼存在 Vault 對應的路徑
 
@@ -490,7 +478,7 @@ func (a *app) resolveBastionVaultAddr() string {
         }
         ```
 
-2.  讀取 `credentials.yaml` 對應處理的函數為 `credentials`，主要是將內容解析成一組可執行的 `Credential`
+2. 讀取 `service_admin_passwords` 對應處理的函數為 `credentials.Load`，主要是將內容解析成一組可執行的 `Credential`
 
     ```go
     func Load(path string) (Config, error) {
@@ -509,9 +497,9 @@ func (a *app) resolveBastionVaultAddr() string {
     }
     ```
 
-    `Load` 遇到檔案不存在時，就直接視為「目前沒有任何憑證需要輪替」而回傳空的 `Config`。因為一個還沒有採用密碼輪替功能的專案，不需要放一個空白的佔位檔案
+    `Load` 遇到檔案不存在時回傳空的 `Config`。實際執行時 `topology.Load` 已經先要求同一份檔案存在，所以這個分支只服務單元測試；檔案存在但沒有 `service_admin_passwords` 時同樣得到空的 `Config`，代表目前沒有任何密碼需要輪替
 
-3.  在 `credentials.yaml` 中，每一筆宣告只需要寫 Vault 的位置、密碼長度、要用哪個換密碼機制，這樣 `resolveServiceFuncs` 就可以負責把機制名稱解析成實際的 `DeployFunc` 與 `VerifyFunc`。`DeployFunc` 以舊密碼通過認證後，佈署新的輪替密碼。`VerifyFunc` 以唯讀請求回報服務是否接受某個密碼，回答不足以判斷時必須回傳錯誤，不得回傳 `false`
+3. 在 `service_admin_passwords` 中，每一筆宣告只需要寫 Vault 的位置、密碼長度、要用哪個換密碼機制，這樣 `resolveServiceFuncs` 就可以負責把機制名稱解析成實際的 `DeployFunc` 與 `VerifyFunc`。`DeployFunc` 以舊密碼通過認證後，佈署新的輪替密碼。`VerifyFunc` 以唯讀請求回報服務是否接受某個密碼，回答不足以判斷時必須回傳錯誤，不得回傳 `false`
 
     ```go
     type DeployFunc func(ctx context.Context, previous, next string) error
@@ -536,7 +524,7 @@ func (a *app) resolveBastionVaultAddr() string {
 
     目前只有 `http_form` 一種內建機制，對應 `httprotate.FormSpec`。新增一種機制只需要在這個 `switch` 裡多加一個 `case`，並同時提供換密碼與驗證兩個函數。少了 `verify_endpoint` 的宣告在載入時就被拒絕，因為輪替與調諧都必須先觀察服務目前接受的密碼
 
-4.  在 Repo 體系規範中，Vault 欄位名稱一律是 snake_case 宣告，但為了兼容慣例，會透過 `formatVaultFieldName` 把 kebab-case 的憑證 `Key` 轉成 snake_case 的 Vault 欄位名稱：
+4. 在 Repo 體系規範中，Vault 欄位名稱一律是 snake_case 宣告，但為了兼容慣例，會透過 `formatVaultFieldName` 把 kebab-case 的憑證 `Key` 轉成 snake_case 的 Vault 欄位名稱：
 
     ```go
     func formatVaultFieldName(key string) string {
@@ -544,9 +532,9 @@ func (a *app) resolveBastionVaultAddr() string {
     }
     ```
 
-    這樣無論 `Key` 本身用的是哪種命名慣例，憑證撰寫者都不需要在 YAML 裡額外重複宣告一次欄位名稱。但要注意兩個拼法不同的 `Key`，例如 `sonar-qube-password` 跟 `sonar_qube_password`，在經過 `formatVaultFieldName` 轉換後，有可能會定位在同一個 Vault 欄位上。如果沒有針對這情況進行攔截，就會導致兩筆宣告各自跑一次 `Rotate`，而透過 Section 5 的 `patchOrInitDocument` 各自合併寫入同一個欄位。這樣就會導致密碼被覆蓋，而且不會有任何錯誤訊息
+    這樣無論 `Key` 本身用的是哪種命名慣例，憑證撰寫者都不需要在 YAML 裡額外重複宣告一次欄位名稱。但要注意兩個拼法不同的 `Key`，例如 `sonar-qube-password` 跟 `sonar_qube_password`，在經過 `formatVaultFieldName` 轉換後，有可能會定位在同一個 Vault 欄位上。如果沒有針對這情況進行攔截，就會導致兩筆宣告各自跑一次 `Rotate`，而透過 _Section 5_ 的 `patchOrInitDocument` 各自合併寫入同一個欄位。這樣就會導致密碼被覆蓋，而且不會有任何錯誤訊息
 
-5.  基於以上，需要 `BuildCredentials` 在建立密碼階段時，就用一個 `owners` map 追蹤每個 Vault 位置的第一個宣告者，一旦出現名稱碰撞就會立刻回傳錯誤
+5. 基於以上，需要 `BuildCredentials` 在建立密碼階段時，就用一個 `owners` map 追蹤每個 Vault 位置的第一個宣告者，一旦出現名稱碰撞就會立刻回傳錯誤
 
     ```go
     func (c Config) BuildCredentials() ([]Credential, error) {
@@ -572,7 +560,7 @@ func (a *app) resolveBastionVaultAddr() string {
 
 ### Item B. `toCredential` 與輸出型別
 
-`toCredential` 是 Item A 那四個輸入型別的匯流點，負責把解析結果轉成後續流程真正使用的 `Credential`：
+`toCredential` 是 _Item A_ 那四個輸入型別的匯流點，負責把解析結果轉成後續流程真正使用的 `Credential`：
 
 ```go
 func (c credentialConfig) toCredential() (Credential, error) {
@@ -628,9 +616,9 @@ type Spec struct {
 }
 ```
 
-八個欄位的來源分成三類。`Mount` 與 `Path` 與 `Length` 是從 `credentialConfig` 直接複製；`Field` 由 `formatVaultFieldName` 轉換而來，`Deploy` 與 `Verify` 由 `resolveServiceFuncs` 轉換而來；`Classes` 則完全不來自 YAML，理由在下一段。`FactoryDefaultPassword` 從 `serviceConfig` 取得，`Rotate` 與 `Reconcile` 都把它當成候選值交給 `Verify`，用法在 Section 6 Item F 與 Section 8 說明。
+八個欄位的來源分成三類。`Mount` 與 `Path` 與 `Length` 是從 `credentialConfig` 直接複製；`Field` 由 `formatVaultFieldName` 轉換而來，`Deploy` 與 `Verify` 由 `resolveServiceFuncs` 轉換而來；`Classes` 則完全不來自 YAML，理由在下一段。`FactoryDefaultPassword` 從 `serviceConfig` 取得，`Rotate` 與 `Reconcile` 都把它當成候選值交給 `Verify`，用法在 _Section 6 Item F_ 與 _Section 8_ 說明。
 
-要特別點出的是 `Deploy` 的型別是函數而不是機制名稱字串。字串到函數的解析發生在 `pkg/credentials`，`pkg/secretrotate` 拿到 `Spec` 的時候已經是一個可以直接呼叫的函數值，因此不需要知道系統裡總共有幾種機制、將來會不會新增。這是 Section 1 Item C 提到的那條虛線的具體形式：新增一種換密碼機制只會改動 `pkg/credentials` 與新的實作套件，`pkg/secretrotate` 不會有任何一行需要跟著改。
+要特別點出的是 `Deploy` 的型別是函數而不是機制名稱字串。字串到函數的解析發生在 `pkg/credentials`，`pkg/secretrotate` 拿到 `Spec` 的時候已經是一個可以直接呼叫的函數值，因此不需要知道系統裡總共有幾種機制、將來會不會新增。這是 _Section 1 Item C_ 提到的那條虛線的具體形式：新增一種換密碼機制只會改動 `pkg/credentials` 與新的實作套件，`pkg/secretrotate` 不會有任何一行需要跟著改。
 
 `Classes` 不開放在 YAML 裡調整：
 
@@ -644,7 +632,7 @@ var fullComplexityClasses = []secretgen.CharClass{
 
 ## Section 4. Bastion Vault 生命週期
 
-Section 3 產出的 `Credential` 清單描述的是「要把密碼寫到哪裡」，但在能夠寫進去之前，Vault 本身必須先經過一串一次性的建置步驟。這串步驟由 `internal/vaultops` 負責，彼此之間有嚴格的先後順序，跳過任何一步後面都會失敗。
+_Section 3_ 產出的 `Credential` 清單描述的是「要把密碼寫到哪裡」，但在能夠寫進去之前，Vault 本身必須先經過一串一次性的建置步驟。這串步驟由 `internal/vaultops` 負責，彼此之間有嚴格的先後順序，跳過任何一步後面都會失敗。
 
 ```mermaid
 sequenceDiagram
@@ -660,13 +648,13 @@ sequenceDiagram
     VaultOps->>Vault: sys/init 要求 5 把金鑰門檻 3
     Vault-->>VaultOps: 金鑰與 root token
     VaultOps->>Disk: 寫入 init-output.json 與 unseal.key
-    VaultOps->>Disk: SyncVaultToken 寫入 ~/.vault-token
-    VaultOps->>Vault: UnsealBastion 逐把送出金鑰
+    VaultOps->>Disk: persistBootstrapRootToken 寫入 ~/.vault-token
+    VaultOps->>Vault: Unseal 逐把送出金鑰
 
     Op->>VaultOps: EnableKVEngine
     VaultOps->>Vault: 掛載 kv-v2 於 secret/
 
-    Note over Op,Vault: 以上完成之後，Section 6 的每一次 Rotate<br/>才能經由 NewAuthenticatedBastionClient 取得可用的 client
+    Note over Op,Vault: bootstrap 結束後以 RevokeRoot 撤銷 root，<br/>Section 6 的 Rotate 經 rotation 身分的 Vault Proxy 取得 client
 ```
 
 ### Item A. `Paths` 與檔案位置的集中解析
@@ -679,44 +667,48 @@ type Paths struct {
     AnsibleDir       string
     Home             string
     bastionVaultAddr string
+    listenerIPs      []net.IP
 }
 
 func (p Paths) resolveKeysDir() string       { return filepath.Join(p.ProjectRoot, "vault", "keys") }
-func (p Paths) resolveTLSDir() string        { return filepath.Join(p.ProjectRoot, "vault", "tls") }
+func (p Paths) ResolveTLSDir() string        { return filepath.Join(p.ProjectRoot, "vault", "tls") }
 func (p Paths) resolveInitFile() string      { return filepath.Join(p.resolveKeysDir(), "init-output.json") }
 func (p Paths) resolveUnsealKeyFile() string { return filepath.Join(p.resolveKeysDir(), "unseal.key") }
 func (p Paths) resolveRootTokenFile() string { return filepath.Join(p.Home, ".vault-token") }
-func (p Paths) resolveCACertFile() string    { return filepath.Join(p.resolveTLSDir(), "ca.pem") }
+func (p Paths) resolveCACertFile() string    { return filepath.Join(p.ResolveTLSDir(), "ca.pem") }
 ```
 
-集中的效果是目錄配置只有一個定義點。`Init` 寫入的 `init-output.json`、`UnsealBastion` 讀取的 `unseal.key`、`newClient` 驗證用的 `ca.pem` 分屬三個不同的流程，如果各自用字面值組路徑，調整 `vault/` 底下的配置就必須同時改動三處，而漏改的那一處只會在執行到那條路徑時才失敗。
+集中的效果是目錄配置只有一個定義點。`Init` 寫入的 `init-output.json`、`Unseal` 讀取的 `unseal.key`、`newClient` 驗證用的 `ca.pem` 分屬三個不同的流程，如果各自用字面值組路徑，調整 `vault/` 底下的配置就必須同時改動三處，而漏改的那一處只會在執行到那條路徑時才失敗。
 
 `resolveRootTokenFile` 指向 `~/.vault-token` 而不是專案目錄底下，理由跟其他路徑不同：這是 Vault 官方命令列工具預設讀取的位置。把 token 寫在這裡，操作者在這支工具跑完之後可以直接下 `vault kv get` 之類的指令排查，不需要額外設定環境變數。
 
-四個欄位裡只有 `bastionVaultAddr` 是未匯出的，其餘三個都可以直接讀。差別在於這個欄位是唯一帶有預設值的：
+`bastionVaultAddr` 與 `listenerIPs` 是未匯出的，兩者只能經由 `NewPaths` 從 `topology.BastionVault` 取得：
 
 ```go
-func (p Paths) resolveBastionAddr() string {
-    if p.bastionVaultAddr != "" {
-        return p.bastionVaultAddr
+func NewPaths(projectRoot, ansibleDir, home string, bastion topology.BastionVault) Paths {
+    return Paths{
+        ProjectRoot:      projectRoot,
+        AnsibleDir:       ansibleDir,
+        Home:             home,
+        bastionVaultAddr: bastion.APIEndpoint(),
+        listenerIPs:      bastion.ListenerIPs(),
     }
-    return "https://172.16.0.1:8200"
 }
 ```
 
-如果把它匯出，套件外就能直接讀到一個空字串並拿去用，退回機制形同虛設。改成未匯出之後，唯一的取值管道是這個方法，空值一定會被補上預設位址。這也是 Section 2 Item E 那條三段式退回鏈的最後一段。
+不匯出的理由是兩個值必須來自同一份拓撲宣告。套件外如果能直接組出 `Paths`，就能塞入一個與 `vault.hcl` listener 不一致的位址，或讓 `GenerateTLS` 簽出一張缺 IP 的憑證。`Paths` 沒有任何預設位址，`GenerateTLS` 在 `listenerIPs` 為空時直接拒絕。
 
 ### Item B. TLS 憑證的產生
 
 `GenerateTLS` 產生一組自簽的憑證授權單位（CA）與一張由它簽發的伺服器憑證，兩者都放在 `vault/tls/` 底下。第一個動作是把整個目錄清空：
 
 ```go
-resolveTLSDir := p.resolveTLSDir()
-if err := os.RemoveAll(resolveTLSDir); err != nil {
-    return fmt.Errorf("vaultops: remove %s: %w", resolveTLSDir, err)
+tlsDir := p.ResolveTLSDir()
+if err := os.RemoveAll(tlsDir); err != nil {
+    return fmt.Errorf("vaultops: remove %s: %w", tlsDir, err)
 }
-if err := os.MkdirAll(resolveTLSDir, 0o755); err != nil {
-    return fmt.Errorf("vaultops: mkdir %s: %w", resolveTLSDir, err)
+if err := os.MkdirAll(tlsDir, 0o755); err != nil {
+    return fmt.Errorf("vaultops: mkdir %s: %w", tlsDir, err)
 }
 ```
 
@@ -749,13 +741,13 @@ serverTemplate := &x509.Certificate{
     KeyUsage:     x509.KeyUsageDigitalSignature,
     ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
     DNSNames:     []string{"localhost"},
-    IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("172.16.0.1")},
+    IPAddresses:  p.listenerIPs,
 }
 ```
 
-CA 與伺服器的金鑰都是 ECDSA P-256，由 `ecdsa.GenerateKey(elliptic.P256(), rand.Reader)` 產生。ECDSA 金鑰不做金鑰加密，因此伺服器憑證的 `KeyUsage` 只有 `DigitalSignature`。演算法的取捨與實測數據見 `documentation/architecture/bastion-vault-privilege-convergence.md` Section 7 Item H。
+CA 與伺服器的金鑰都是 ECDSA P-256，由 `ecdsa.GenerateKey(elliptic.P256(), rand.Reader)` 產生。ECDSA 金鑰不做金鑰加密，因此伺服器憑證的 `KeyUsage` 只有 `DigitalSignature`。演算法的取捨與實測數據見 `documentation/architecture/bastion-vault-privilege-convergence.md` _Section 7 Item H_。
 
-`DNSNames` 與 `IPAddresses` 同時列出三個名稱，因為同一台 Vault 會被用不同的形式連上：容器內部走 `localhost`，主機透過迴環位址走 `127.0.0.1`，其他容器或虛擬機走橋接網段的 `172.16.0.1`。現行的 TLS 驗證只看主體替代名稱而不再參考 `CommonName`，任何一個沒有列進去的形式都會在握手時被判定為名稱不符。第三個位址與 Item A 的預設位址是同一個，兩者必須一起維護。
+`DNSNames` 與 `IPAddresses` 同時列出三個名稱，因為同一台 Vault 會被用不同的形式連上：容器內部走 `localhost`，主機上的 CLI、Terraform 與 Vault Proxy 走 `loopback_address`，虛擬機走 publish 網段的 `publish_address`。現行的 TLS 驗證只看主體替代名稱而不再參考 `CommonName`，任何一個沒有列進去的形式都會在握手時被判定為名稱不符。兩個 IP 都來自 `workstation-topology.yaml`，與 `vault.hcl` 的 listener 同源，所以不需要另外維護。
 
 序號取自密碼學亂數而不是遞增計數：
 
@@ -792,6 +784,8 @@ if _, err := os.Stat(p.resolveInitFile()); err == nil {
 
 重複初始化是這支工具能犯下的最嚴重錯誤。Vault 初始化會產生一組全新的主金鑰，舊的加密資料在新主金鑰之下完全無法解開，而舊的解封金鑰與 root token 會在同一個流程裡被覆寫掉。這個檢查放在最前面而不是等 Vault 回報錯誤，是因為要在任何檔案被覆寫之前就中止。
 
+命令層的 `initVault` 在呼叫 `Init` 之前，對每一筆宣告 `service.factory_default_password` 的密碼呼叫 `secretrotate.AwaitFactoryDefault`，每 5 秒經由 `VerifyFunc` 詢問服務一次，最多等待 5 分鐘。服務在等待期間仍未回應時回傳 `secretrotate.ErrServiceNotReady`；服務拒絕出廠預設密碼時回傳 `errRetainedServiceState` 並列出憑證，不送出任何 Vault 請求。理由是全新的 Bastion Vault 不持有保留資料所接受的密碼，服務端只存雜湊，沒有工具能取回明文，保留下來的資料只會讓後續的 `Rotate` 回報 `ErrNoLiveCredential`。服務與 Vault 由 Compose 同時啟動，這項等待讓 bootstrap 依 DAG 線性執行，不需要分段啟動或記錄資料目錄。
+
 初始化參數採用五把金鑰、門檻三把：
 
 ```go
@@ -825,30 +819,30 @@ func persistInitOutput(p Paths, resp *vaultapi.InitResponse) error {
 }
 ```
 
-完整回應先落地成 `init-output.json`，之後才檢查金鑰是否存在。順序反過來看起來比較直覺，但會造成一個無法挽回的後果：初始化在 Vault 那一側已經完成，主金鑰已經產生，如果程式在回應形狀不如預期時直接中止而不落地，這組金鑰就永遠消失了，而 Vault 已經處於初始化狀態、無法再初始化一次。先寫檔再驗證，至少保證操作者手上有一份原始回應可以人工救援。
+流程中會先將 API 的完整回應寫入磁碟保存為 `init-output.json`，之後才檢查金鑰欄位是否存在。若將順序反過來先做結構檢查再存檔，雖然看似直覺，卻會帶來嚴重的系統風險：Vault 伺服器端這時已經實質完成初始化並生成主金鑰，若客戶端程式在解析回應時因欄位格式非預期而直接中斷拋錯、未將回應寫入檔案，這組剛生成的主金鑰與解封憑證就會徹底遺失；而且因為 Vault 伺服器已經進入初始化狀態，無法再次重新執行初始化。因此採取「先寫檔持久化、再進行資料檢查」的防禦性順序，確保即使後續流程中斷，操作者仍保有原始的回應內容可以手動復原。
 
 目錄權限是 `0o700`、兩個檔案是 `0o600`，因為這裡存的是解封金鑰與 root token，等同於整座 Vault 的完整存取權。
 
 `unseal.key` 與 `init-output.json` 內容重疊，前者只是把 base64 金鑰一行一個攤平。分成兩個檔案的理由是消費者不同：`init-output.json` 保留完整回應供人工排查，`unseal.key` 給 `applyUnsealKeys` 用最單純的格式逐行讀取，不需要每次解封都重新解析 JSON 結構。
 
-`Init` 的後半段依序是持久化、同步 token、自動解封：
+`Init` 的後半段依序是持久化、寫出 bootstrap 用的 root token、自動解封：
 
 ```go
 out.Print(ui.Info, "Keys saved to "+p.resolveKeysDir())
 
-if _, err := SyncVaultToken(p, env); err != nil {
+if err := persistBootstrapRootToken(p); err != nil {
     return err
 }
-if err := UnsealBastion(ctx, p, out, env); err != nil {
+if err := Unseal(ctx, p, out); err != nil {
     return fmt.Errorf("vaultops: auto-unseal after init: %w", err)
 }
 ```
 
-同步 token 排在解封之前，雖然解封本身不需要 token。理由是先把無法重建的東西存下來：解封失敗是可以重試的，但 root token 只在初始化回應裡出現這一次，如果在解封失敗時一併遺失，操作者會得到一座解不開也登不進去的 Vault。
+寫出 root token 排在解封之前，雖然解封本身不需要 token。理由是先把無法重建的東西存下來：解封失敗是可以重試的，但 root token 只在初始化回應裡出現這一次，如果在解封失敗時一併遺失，操作者會得到一座解不開也登不進去的 Vault。
 
 ### Item D. 解封流程
 
-`UnsealBastion` 的前兩個動作都是提早退出的檢查：
+`Unseal` 的前兩個動作都是提早退出的檢查：
 
 ```go
 keysRaw, err := os.ReadFile(p.resolveUnsealKeyFile())
@@ -856,7 +850,7 @@ if err != nil {
     return fmt.Errorf("vaultops: unseal keys not found at %s, run Init first: %w", p.resolveUnsealKeyFile(), err)
 }
 
-if _, sealed, err := ProbeBastionState(ctx, p); err == nil && !sealed {
+if _, sealed, err := ProbeBastionSealState(ctx, p); err == nil && !sealed {
     out.Print(ui.Info, "Bastion Vault is already unsealed.")
     return nil
 }
@@ -891,7 +885,7 @@ func applyUnsealKeys(ctx context.Context, client *vaultapi.Client, keysRaw []byt
 func waitUntilUnsealed(ctx context.Context, p Paths, timeout time.Duration) error {
     deadline := time.Now().Add(timeout)
     for time.Now().Before(deadline) {
-        if _, sealed, err := ProbeBastionState(ctx, p); err == nil && !sealed {
+        if _, sealed, err := ProbeBastionSealState(ctx, p); err == nil && !sealed {
             return nil
         }
         time.Sleep(500 * time.Millisecond)
@@ -925,112 +919,53 @@ if err := client.Sys().MountWithContext(ctx, "secret", &vaultapi.MountInput{Type
 
 查詢的鍵是 `secret/` 而不是 `secret`，因為 Vault 回傳的掛載點名稱一律帶尾端斜線。
 
-列舉失敗時不中止而是繼續往下嘗試掛載，這是 `if err == nil` 這個外層條件的效果。理由是列舉需要的權限與掛載需要的權限不同，一個只被授予掛載權限的 token 會在列舉時被拒絕；此時直接進行掛載，由掛載本身回報真正的結果，比在列舉階段就放棄來得準確。
+列舉失敗時不中止而是繼續往下嘗試掛載，這是 `if err == nil` 這個外層條件的效果。理由是列舉需要的權限與掛載需要的權限不同，一個只被授予掛載權限的 token 會在列舉時被拒絕；這時直接進行掛載，由掛載本身回報真正的結果，比在列舉階段就放棄來得準確。
 
-### Item F. Root token 的同步與認證用的 client
+### Item F. Root token 的生命週期與輪替用的 client
 
-`SyncVaultToken` 負責把 root token 收斂到兩個地方，`.env` 與 `~/.vault-token`：
+root token 只服務 bootstrap。`persistBootstrapRootToken` 在 `Init` 時把 `init-output.json` 的 `root_token` 寫到 token helper 檔 `~/.vault-token`，供 `enable-kv`、首次寫入 state backend token 與平台信任事實、首次套用 `foundation-vault-bastion` 使用。解封不再同步 token，`.env` 也不保存 token，理由是撤銷之後任何自動同步都會把已撤銷或不該存在的 token 寫回磁碟。
 
-```go
-func SyncVaultToken(p Paths, env interface{ Set(string, string) }) (string, error) {
-    var token string
+`RevokeRoot` 結束 bootstrap，執行順序如下：
 
-    if data, err := os.ReadFile(p.resolveInitFile()); err == nil {
-        var init struct {
-            RootToken string `json:"root_token"`
-        }
-        if err := json.Unmarshal(data, &init); err != nil {
-            return "", fmt.Errorf("vaultops: parse %s: %w", p.resolveInitFile(), err)
-        }
-        token = init.RootToken
-    } else if data, err := os.ReadFile(p.resolveRootTokenFile()); err == nil {
-        token = strings.TrimSpace(string(data))
-    } else {
-        return "", nil
-    }
-    ...
-}
-```
+1. `~/.vault-token` 沒有 token 時回傳 `ErrNoRootToken`。
+2. 經 foundation 身分的 Vault Proxy 呼叫 `auth/token/lookup-self`，token 必須持有該身分的 policy，否則回傳 `ErrFoundationNotReady`。這個前置條件防止撤銷後 Bastion Vault 沒有任何管理者。
+3. 以 root token 呼叫 `lookup-self`，policy 必須包含 `root`，避免誤撤其他 token。
+4. 呼叫 `auth/token/revoke-self`，接著刪除 `~/.vault-token`，並把 `init-output.json` 的 `root_token` 清空，unseal key 保留。
 
-兩個來源有優先順序：先看 `init-output.json`，找不到才退回 `~/.vault-token`。`init-output.json` 只在初始化之後存在，而且裡面的 token 是權威來源；`~/.vault-token` 則是這個函數自己寫出去的副本，可能被其他工具改動過。以權威來源優先，可以讓一次重新同步就修正被改壞的副本。
+`GenerateRoot` 是緊急處置。`~/.vault-token` 已有 token 時回傳 `ErrRootTokenPresent`，已有進行中的嘗試時回傳 `ErrGenerateRootInProgress`。之後以 Vault 回傳的一次性密碼啟動嘗試，逐把送出 `unseal.key` 的金鑰直到完成，未達門檻時取消嘗試。Vault 以一次性密碼 XOR token 後做無填充的標準 base64 編碼，`decodeRootToken` 依相同規則還原。Vault 2 預設要求 generate-root 端點認證，`vault.hcl` 因此宣告 `enable_unauthenticated_access = ["generate-root"]`，讓緊急處置只依賴 unseal key 門檻，不依賴任何可能已損壞的身分。
 
-兩個檔案都不存在時回傳空字串與 `nil` 錯誤，不當成失敗。因為 Section 9 的狀態橫幅會在每次進入選單時呼叫這個函數，而一份還沒初始化的環境本來就兩個檔案都沒有，把這個情況當成錯誤會讓選單在最常見的初始狀態下顯示紅字。
-
-參數型別是 `interface{ Set(string, string) }` 而不是 `*config.Env`：
-
-```go
-env.Set("VAULT_TOKEN", token)
-```
-
-用結構化型別約束而不是具體型別，讓 `internal/vaultops` 不需要 import `internal/config`。代價是鍵名在這裡寫成字面值而不能引用 `config.KeyVaultToken` 常數，換來的是兩個套件之間沒有相依關係，`internal/config` 將來要調整型別或拆分都不會波及 `vaultops`。
-
-寫入副本的方式與 Section 2 Item B 的 `Env.Save` 同一套：
-
-```go
-tmp := p.resolveRootTokenFile() + fmt.Sprintf(".tmp%d", time.Now().UnixNano())
-if err := os.WriteFile(tmp, []byte(token), 0o600); err != nil {
-    return "", fmt.Errorf("vaultops: write %s: %w", tmp, err)
-}
-if err := os.Rename(tmp, p.resolveRootTokenFile()); err != nil {
-    return "", fmt.Errorf("vaultops: replace %s: %w", p.resolveRootTokenFile(), err)
-}
-```
-
-差別在於暫存檔名多帶一個奈秒時戳。`~/.vault-token` 位於家目錄，同一個使用者可能同時在不同的專案目錄下執行這支工具，固定的暫存檔名會讓兩個行程互相覆寫對方寫到一半的內容。加上時戳之後，每個行程各自寫自己的暫存檔，最後由換名決定誰的版本留下，不會出現內容交錯。
-
-後續每一次密碼操作取得 client 的管道只有一個：
-
-```go
-func NewAuthenticatedBastionClient(p Paths) (*vaultapi.Client, error) {
-    tokenRaw, err := os.ReadFile(p.resolveRootTokenFile())
-    if err != nil {
-        return nil, fmt.Errorf("vaultops: root token not found at %s: %w", p.resolveRootTokenFile(), err)
-    }
-    return p.newBastionClientWithToken(strings.TrimSpace(string(tokenRaw)))
-}
-```
-
-函數名稱帶上 `Authenticated`，是為了讓呼叫端在閱讀時就看得出這個建構子隱含一個磁碟相依：它會去讀檔案，而且檔案不存在就會失敗。同套件內另有一個 `newBastionClientWithToken` 接受呼叫端自備的 token，`Init` 與 `UnsealBastion` 用它傳入空字串，因為 `sys/init` 與 `sys/unseal` 這兩個端點本來就不需要認證。
+服務管理員密碼的輪替與調諧不使用 root token。`newRotationClient` 由 `topology.ProxyEndpoint` 找出權限類別 `rotation` 的唯一身分，以該身分的 client 憑證連到其 Vault Proxy，token 只送佔位值，由 Proxy 覆寫。該身分的 policy 由 `service_admin_passwords` 推導，只能讀寫宣告的路徑。
 
 ### Item G. 狀態探測與呈現
 
 同一件事有兩個查詢函數，回傳形狀不同，對應兩種不同的用途：
 
 ```go
-func InspectTargetStatus(ctx context.Context, addr, caCert string) SealStatus {
-    client, err := newClient(addr, caCert, "")
-    if err != nil {
-        return SealStatus{}
-    }
-    st, err := client.Sys().SealStatusWithContext(ctx)
-    if err != nil {
-        return SealStatus{}
-    }
-    return SealStatus{Reachable: true, Initialized: st.Initialized, Sealed: st.Sealed}
+func InspectBastionStatus(ctx context.Context, p Paths) vaultclient.SealStatus {
+    return vaultclient.InspectStatus(ctx, vaultclient.Config{
+        Address:    p.bastionVaultAddr,
+        CACertPath: p.resolveCACertFile(),
+    })
 }
 ```
 
-`InspectTargetStatus` 完全不回傳錯誤，任何失敗都收斂成零值，而零值的意義是 `Reachable` 為否。這是因為它的消費者是 Section 9 的狀態橫幅，橫幅要做的事情是把 Vault 目前的狀況顯示成四種狀態之一，而「連不上」本身就是其中一種正常要顯示的狀態，不是應該中斷選單的例外。
+`InspectBastionStatus` 委託 `vaultclient.InspectStatus` 進行探測，完全不回傳錯誤，任何失敗都收斂成零值，而零值的意義是 `Reachable` 為否。這是因為它的消費者是 _Section 9_ 的狀態橫幅，橫幅要做的事情是把 Vault 目前的狀況顯示成四種狀態之一，而「連不上」本身就是其中一種正常要顯示的狀態，不是應該中斷選單的例外。
 
 ```go
-func ProbeBastionState(ctx context.Context, p Paths) (running, sealed bool, err error) {
+func ProbeBastionSealState(ctx context.Context, p Paths) (running, sealed bool, err error) {
     client, err := p.newBastionClientWithToken("")
     if err != nil {
         return false, false, err
     }
-    st, err := client.Sys().SealStatusWithContext(ctx)
-    if err != nil {
-        return false, false, nil
-    }
-    return true, st.Sealed, nil
+    return vaultclient.ProbeSealState(ctx, client)
 }
 ```
 
-`ProbeBastionState` 的消費者是 Item D 的解封流程控制，需要的是「現在還封著嗎」這個布林判斷。它只在 client 建構失敗時回傳錯誤，查詢失敗則以 `running` 為否表示，同樣不當成錯誤。這個區分讓 `waitUntilUnsealed` 的輪詢迴圈可以用同一個條件式處理「還連不上」與「連得上但還封著」兩種都應該繼續等待的情況。
+`ProbeBastionSealState` 的消費者是 _Item D_ 的解封流程控制，需要的是「現在還封著嗎」這個布林判斷。它只在 client 建構失敗時回傳錯誤，查詢失敗則以 `running` 為否表示，同樣不當成錯誤。這個區分讓 `waitUntilUnsealed` 的輪詢迴圈可以用同一個條件式處理「還連不上」與「連得上但還封著」兩種都應該繼續等待的情況。
 
 ## Section 5. Vault 儲存佈局與讀寫原語
 
-Section 4 把 Vault 帶到可用狀態之後，`pkg/secretrotate` 才開始對它讀寫。這一節說明的是最底層那一圈原語：怎麼定址、怎麼讀出一份可以用來做 CAS 的快照、怎麼在不破壞別人資料的前提下寫入。Section 6 與 Section 7 的狀態機完全建立在這些原語之上。
+_Section 4_ 把 Vault 帶到可用狀態之後，`pkg/secretrotate` 才開始對它讀寫。這一節說明的是最底層的儲存原語：如何定址、如何讀出一份可用於 CAS 的快照、以及如何在不影響同路徑其他欄位資料的前提下進行寫入。為滿足單檔行數限制（< 390 行），底層的文件快照讀取、CAS 寫入、建議鎖與 staging 儲存原語完整拆分於 `pkg/secretrotate/storage.go`，上層狀態機排程則保留於 `pkg/secretrotate/secretrotate.go`。_Section 6_ 與 _Section 7_ 的狀態機完全建立在這些原語之上。
 
 ### Item A. KV2 的定址規則
 
@@ -1042,7 +977,7 @@ func resolveDataPath(mount, path string) string { return mount + "/data/" + path
 
 命令列工具 `vault kv get secret/foo` 會自動補上這個區段，但程式走的 `client.Logical()` 介面不會。`secret/foo` 與 `secret/data/foo` 在這個介面底下是兩個不同的端點，前者會落到 KV 第一版的語意上，讀到的內容與版本資訊都不是預期的形狀。所有讀寫都經過這個函數而不是各自串接字串，就是為了讓這個轉換只有一個定義點。
 
-版本歷史走的是另一個區段，格式是 `mount + "/metadata/" + path`，只在 Section 6 Item A 的銷毀偵測裡用到一次，因此沒有另外抽成函數。
+版本歷史走的是另一個區段，格式是 `mount + "/metadata/" + path`，只在 _Section 6 Item A_ 的銷毀偵測裡用到一次，因此沒有另外抽成函數。
 
 ### Item B. 文件快照與讀取原語
 
@@ -1050,7 +985,7 @@ CAS 需要把「讀到的內容」與「讀到的版本號」綁在一起，所�
 
 ```go
 type documentSnapshot struct {
-    fields  map[string]interface{}
+    fields  map[string]any
     version int
 }
 
@@ -1059,9 +994,9 @@ func readDocument(ctx context.Context, client *vaultapi.Client, mount, path stri
     if err != nil || secret == nil {
         return documentSnapshot{}, false
     }
-    fields, _ := secret.Data["data"].(map[string]interface{})
+    fields, _ := secret.Data["data"].(map[string]any)
     version := 0
-    if meta, ok := secret.Data["metadata"].(map[string]interface{}); ok {
+    if meta, ok := secret.Data["metadata"].(map[string]any); ok {
         version = parseVersionNumber(meta["version"])
     }
     return documentSnapshot{fields: fields, version: version}, true
@@ -1077,7 +1012,7 @@ KV2 把使用者資料包在 `data` 鍵底下、版本資訊包在 `metadata` �
 版本號的解析必須同時接受兩種型別：
 
 ```go
-func parseVersionNumber(raw interface{}) int {
+func parseVersionNumber(raw any) int {
     switch v := raw.(type) {
     case float64:
         return int(v)
@@ -1090,7 +1025,7 @@ func parseVersionNumber(raw interface{}) int {
 }
 ```
 
-Go 的 JSON 解碼預設把數字轉成 `float64`，但解碼器可以被設定成改用 `json.Number` 保留原始表示。Vault 客戶端函數庫的設定會影響實際拿到哪一種，只處理其中一種的話，另一種會落到 `default` 得到零。這個零特別危險，因為 Item C 的 CAS 寫入會把版本零解讀成「只有在文件不存在時才寫入」，一個本來要更新既有文件的操作會因此被 Vault 拒絕，而錯誤訊息指向的是版本衝突，與真正的原因無關。
+Go 的 JSON 解碼預設把數字轉成 `float64`，但解碼器可以被設定成改用 `json.Number` 保留原始表示。Vault 客戶端函數庫的設定會影響實際拿到哪一種，只處理其中一種的話，另一種會落到 `default` 得到零。這個零特別危險，因為 _Item C_ 的 CAS 寫入會把版本零解讀成「只有在文件不存在時才寫入」，一個本來要更新既有文件的操作會因此被 Vault 拒絕，而錯誤訊息指向的是版本衝突，與真正的原因無關。
 
 上層的兩個讀取函數都建立在快照之上：
 
@@ -1109,7 +1044,7 @@ func readField(ctx context.Context, client *vaultapi.Client, mount, path, field 
 }
 ```
 
-`readStringField` 掛在快照上而不是每次重新查詢，讓同一份快照可以連續取出多個欄位，這在 Section 6 Item B 同時需要主要欄位與鎖欄位的時候用得到。型別斷言失敗一律當成沒有這個欄位，因為一個不是字串的密碼欄位無論如何都不能拿去用。
+`readStringField` 掛在快照上而不是每次重新查詢，讓同一份快照可以連續取出多個欄位，這在 _Section 6 Item B_ 同時需要主要欄位與鎖欄位的時候用得到。型別斷言失敗一律當成沒有這個欄位，因為一個不是字串的密碼欄位無論如何都不能拿去用。
 
 另外有一個只問存不存在、不取值的版本：
 
@@ -1120,16 +1055,16 @@ func hasDocument(ctx context.Context, client *vaultapi.Client, mount, path strin
 }
 ```
 
-判斷的對象是整份文件而不是單一欄位，這個差別在 Section 6 Item A 的銷毀偵測裡是關鍵，因為 Vault 的版本歷史也是以整份文件為單位。
+判斷的對象是整份文件而不是單一欄位，這個差別在 _Section 6 Item A_ 的銷毀偵測裡是關鍵，因為 Vault 的版本歷史也是以整份文件為單位。
 
 ### Item C. 合併寫入與首次建立
 
-一組憑證在 Vault 裡對應到一個主要欄位，欄位名稱是憑證名稱轉成 snake_case 的結果。輪替過程中用到的兩個附屬欄位都跟主要欄位共用同一個路徑：`<field>_rotation` 存放 Section 7 提到的 staging 紀錄，`<field>_lock` 存放 Section 6 提到的併發鎖。
+一組憑證在 Vault 裡對應到一個主要欄位，欄位名稱是憑證名稱轉成 snake*case 的結果。輪替過程中用到的兩個附屬欄位都跟主要欄位共用同一個路徑：`<field>_rotation` 存放 \_Section 7* 提到的 staging 紀錄，`<field>_lock` 存放 _Section 6_ 提到的併發鎖。
 
 所有對 Vault 的合併式寫入都透過同一個 `patchOrInitDocument` 函數：
 
 ```go
-func patchOrInitDocument(ctx context.Context, client *vaultapi.Client, mount, path string, body map[string]interface{}) error {
+func patchOrInitDocument(ctx context.Context, client *vaultapi.Client, mount, path string, body map[string]any) error {
     writePath := resolveDataPath(mount, path)
     if _, err := client.Logical().JSONMergePatch(ctx, writePath, body); err != nil {
         if !isMissingDocument(err) {
@@ -1162,11 +1097,11 @@ func isMissingDocument(err error) bool {
 
 ```go
 func writeField(ctx context.Context, client *vaultapi.Client, mount, path, field, value string) error {
-    return patchOrInitDocument(ctx, client, mount, path, map[string]interface{}{"data": map[string]interface{}{field: value}})
+    return patchOrInitDocument(ctx, client, mount, path, map[string]any{"data": map[string]any{field: value}})
 }
 ```
 
-外層的 `data` 鍵對應 Item B 提到的 KV2 包裝，寫入時同樣要自己補上。
+外層的 `data` 鍵對應 _Item B_ 提到的 KV2 包裝，寫入時同樣要自己補上。
 
 ### Item D. 三個欄位共用同一份文件
 
@@ -1176,9 +1111,9 @@ func writeField(ctx context.Context, client *vaultapi.Client, mount, path, field
 func formatRotationStateField(field string) string { return field + "_rotation" }
 ```
 
-鎖欄位的名稱則在使用處直接以 `field+"_lock"` 組成。三者共用同一個 Document，不是為了節省路徑數量，而是因為 KV2 的版本號是以整份文件為單位遞增的。鎖寫進同一份文件，代表任何人取得鎖的動作都會讓文件版本前進，而版本前進正是 Section 6 Item B 的 CAS 互斥能夠成立的機制；如果把鎖放到另一個路徑，對主要欄位的寫入與對鎖的寫入會分屬兩條互不影響的版本序列，CAS 就管不到真正要保護的那個欄位。
+鎖欄位的名稱則在使用處直接以 `field+"_lock"` 組成。三者共用同一個 Document，不是為了節省路徑數量，而是因為 KV2 的版本號是以整份文件為單位遞增的。鎖寫進同一份文件，代表任何人取得鎖的動作都會讓文件版本前進，而版本前進正是 _Section 6 Item B_ 的 CAS 互斥能夠成立的機制；如果把鎖放到另一個路徑，對主要欄位的寫入與對鎖的寫入會分屬兩條互不影響的版本序列，CAS 就管不到真正要保護的那個欄位。
 
-同樣的設計帶來一個必須遵守的順序限制：取鎖本身會在路徑上寫入資料，所以任何「這個路徑目前是不是空的」的判斷都必須在取鎖之前完成，否則判斷結果會被自己的鎖污染。這個限制的完整說明在 Section 6 Item A。
+同樣的設計帶來一個必須遵守的順序限制：取鎖本身會在路徑上寫入資料，所以任何「這個路徑目前是不是空的」的判斷都必須在取鎖之前完成，否則判斷結果會被自己的鎖污染。這個限制的完整說明在 _Section 6 Item A_。
 
 ## Section 6. Rotate 執行序列前段
 
@@ -1186,7 +1121,7 @@ func formatRotationStateField(field string) string { return field + "_rotation" 
 
 這個直覺流程有一個結構性的問題：呼叫外部服務跟寫回 Vault 是兩個分開的動作，中間沒有任何機制保證兩者要嘛一起成功、要嘛一起失敗。如果 `Deploy` 已經把外部服務的密碼換成新值，但緊接著寫回 Vault 這一步因為當機、網路中斷、或任何原因沒有完成，Vault 裡記錄的還是舊密碼，而外部服務實際持有的是那組從未被儲存過、也從未被記錄在任何地方的新密碼。下一次不管是重跑 `Rotate` 還是靠人工去猜密碼，都對不上外部服務真正的狀態，形同永久遺失這組密碼。這正是分散式系統裡常見的雙寫非原子性問題：兩個獨立系統的狀態需要保持一致，卻沒有任何交易機制把兩次寫入綁在一起。
 
-`Rotate` 的完整骨架如下，本節與 Section 7 依照這個順序逐段展開：
+`Rotate` 的完整骨架如下，這一節與 _Section 7_ 依照這個順序逐段展開：
 
 ```go
 func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(string)) (string, error) {
@@ -1258,9 +1193,9 @@ func resolveLiveCredential(ctx context.Context, spec Spec, candidates []string) 
 
 這個設計涵蓋三種狀況。Vault 與服務同步時，Vault 的值通過驗證。服務被重建時，Vault 的值被拒絕，出廠預設值通過驗證。Vault 被重建時，Vault 沒有值，出廠預設值通過驗證。沒有任何候選值通過時，`Rotate` 回傳 `ErrNoLiveCredential`，不呼叫 `Deploy`，也不寫入 Vault，Vault 因此永遠不會記錄一組服務沒有拿到的密碼。`Verify` 回傳錯誤時同樣停止，因為傳輸失敗無法證明任何事。`Spec.Verify` 為 `nil` 時，`Rotate` 在取鎖之前就回傳錯誤。
 
-### Item A. 路徑遭到外部破壞的偵測
+### Item A. 帶外刪除偵測（Out-of-Band Wipe Detection）
 
-密碼可能不是透過這個工具被清除的。操作者可能直接對 Vault 下 `vault kv delete` 或 `vault kv destroy`，把某個路徑底下的資料清空：
+在實際維運情境中，Vault 內的密碼資料可能並非透過 governance 工具進行異動，而是維運人員直接透過 Vault CLI 執行 `vault kv delete` 或 `vault kv destroy` 將特定路徑下的資料刪除：
 
 ```go
 func isPathDestroyedOutOfBand(ctx context.Context, client *vaultapi.Client, mount, path string) bool {
@@ -1268,7 +1203,7 @@ func isPathDestroyedOutOfBand(ctx context.Context, client *vaultapi.Client, moun
 }
 ```
 
-其中 `hasVersionHistory` 查的是 Section 5 Item A 提到的 metadata 端點，而不是資料端點：
+其中 `hasVersionHistory` 查詢的是 _Section 5 Item A_ 說明的 metadata 端點，而非一般的 data 端點：
 
 ```go
 func hasVersionHistory(ctx context.Context, client *vaultapi.Client, mount, path string) bool {
@@ -1280,29 +1215,32 @@ func hasVersionHistory(ctx context.Context, client *vaultapi.Client, mount, path
 }
 ```
 
-`Rotate` 需要能夠分辨這個欄位從來沒被設定過，跟這個欄位本來有值、後來被人從 Vault 那一側直接清掉，因為這兩種情況該有的行為完全不同：前者代表這是第一次建立，直接產生新密碼寫進去是安全的；後者如果一樣直接產生新密碼寫進去，會讓 Vault 裡的密碼跟外部服務實際持有的密碼徹底對不上，而且沒有任何錯誤訊息提醒操作者發生了這件事。
+`Rotate` 在執行時，必須嚴格區分「該欄位從未建立過」與「該欄位曾有歷史紀錄，但機密資料遭到外部帶外刪除（out-of-band deletion）」這兩種情境。這兩者的系統狀態與處理邏輯完全不同：
 
-Vault KV2 的版本紀錄是以整份文件為單位，不是以單一欄位為單位。同一個路徑底下如果有好幾個欄位分別屬於不同的擁有者（例如這個工具管理密碼欄位，另一個 Terraform 層管理 token 欄位），Vault 的版本歷史只會告訴你這個路徑曾經有過資料，不會告訴你這個特定欄位曾經有過資料。因此 `isPathDestroyedOutOfBand` 採取保守的作法：只有在目前欄位讀不到值（`hasDocument` 為 false），而且 Vault 的 metadata 顯示這個路徑曾經存在過版本（`hasVersionHistory` 為 true），兩個條件同時成立的情況下，才會判定這是一次遭到外部破壞的刪除並拒絕自動產生新密碼。只要路徑底下還留著任何其他欄位的資料，`hasDocument` 就會是 true，一律當成第一次建立處理，避免對共用路徑的正常情境產生誤判。
+- 若屬於「從未建立過」，代表這是首次初始化流程，工具直接產生新密碼並寫入 Vault 是安全的操作。
+- 若屬於「曾有資料但遭到外部刪除」，代表外部服務當前仍在運行且持有先前設定的密碼，但 Vault 端的資料已經遺失。如果工具這時誤把它當成首次建立而直接鑄造全新密碼寫入，會導致 Vault 記錄的密碼與線上服務實際使用的密碼徹底脫節，而且過程中不會觸發任何服務驗證錯誤來提醒操作者。因此 `Rotate` 在偵測到這種情況時會直接中斷並回報錯誤，拒絕在未向服務核對前產生新值。
 
-這個偵測必須在鎖被取得之前完成，順序不能顛倒：`acquireLock` 成功時一定會在同一個路徑寫入一筆鎖記錄，這個寫入動作本身就會讓路徑重新出現資料，把路徑目前完全空白這個判斷條件洗掉，導致 `hasDocument` 從此恆為 true，`isPathDestroyedOutOfBand` 永遠判斷成沒有被破壞。
+由於 Vault KV2 的版本紀錄是以整份 Document 為單位維護，並非針對個別欄位。當同一個路徑下有多個欄位分屬不同系統管理時（例如 governance 工具管理密碼欄位，Terraform 管理 token 欄位），Vault 的 metadata 版本歷史只能得知該路徑整體曾經寫入過資料，無法辨識特定欄位的歷史狀態。基於這項限制，`isPathDestroyedOutOfBand` 採取了保守的判斷策略：只有在目標路徑完全讀取不到任何資料（`hasDocument` 為 false），且 metadata 顯示該路徑曾存在版本紀錄（`hasVersionHistory` 為 true）時，才會判定為遭到帶外刪除並拒絕自動產生新密碼。只要路徑下仍殘留其他欄位的資料，`hasDocument` 便為 true，流程會視為正常的初次建立處理，避免誤判共用路徑的正常情境。
 
-這個判斷方式仍然有兩層已知邊界，都不是這裡的邏輯能夠關閉的：
+這項偵測必須嚴格安排在取得鎖之前執行。因為 `acquireLock` 一旦成功取得鎖，就必定會在該路徑下寫入鎖紀錄（`<field>_lock`），這個寫入動作會使該路徑重新產生資料，進而使 `hasDocument` 恆為 true，導致後續的 `isPathDestroyedOutOfBand` 永遠無法辨別出資料是否遭到外部刪除。
 
-- 如果操作者對整個路徑執行 `vault kv metadata delete`，連版本歷史本身都會一起消失，Vault 自己也不再記得這個路徑曾經存在過，這種情況在程式層面完全無法偵測，只能透過 Vault 的存取控制政策限制誰能執行這個操作，搭配稽核紀錄事後追查。
-- 銷毀偵測跟取鎖之間仍然存在一個極窄的窗口：如果操作者剛好在偵測完成、判定沒有被破壞，跟鎖真正寫入這兩個時間點之間執行 `vault kv destroy`，`Rotate` 依然會誤判成第一次建立。要關閉這個窗口，需要在取鎖之後用另一種不依賴路徑是否空白的訊號重新驗證，但取鎖本身的寫入會讓路徑不再空白，這正是上一段解釋的限制，因此目前沒有嘗試在鎖之後重做這個檢查。
+這項判斷機制在系統架構上存在兩項邊界限制：
+
+- 若維運人員直接對該路徑執行 `vault kv metadata delete`，整條版本歷史將連帶被徹底清除，使 Vault 本身也不再保有任何歷史紀錄。這種情況無法在程式層面透過 API 偵測，必須仰賴 Vault 的 ACL 存取控制政策限制操作權限，並配合 Audit Log 進行事後追蹤。
+- 在「偵測完成」與「成功寫入互斥鎖」之間，仍存在微小的時間窗口。若維運人員剛好在這個間隔內執行 `vault kv destroy`，`Rotate` 仍可能把它當成初次建立。若要消除這個時間差，需要在取得鎖之後以不依賴路徑空白狀態的機制重新確認，但取鎖本身的寫入操作又會使路徑不再處於空白狀態，因此目前保持在取鎖前完成檢查的保守策略。
 
 ### Item B. 併發保護：文件快照與 CAS 建議鎖
 
-密碼輪替本質上是一段臨界區段：從讀取舊密碼到套用新密碼完成之前，這段期間不應該有第二個輪替流程同時對同一組憑證動手。如果真的同時發生，兩個流程會各自讀到同一組舊密碼、各自產生不同的新密碼，其中一個先呼叫 `Deploy` 成功，外部服務的密碼變成第一個流程產生的新值；緊接著第二個流程也呼叫 `Deploy`，但它手上的舊密碼已經不是外部服務目前持有的密碼，認證會直接失敗。
+密碼輪替就是一段臨界區段：從讀取舊密碼到套用新密碼完成之前，這段期間不應該有第二個輪替流程同時對同一組憑證動手。如果真的同時發生，兩個流程會各自讀到同一組舊密碼、各自產生不同的新密碼，其中一個先呼叫 `Deploy` 成功，外部服務的密碼變成第一個流程產生的新值；緊接著第二個流程也呼叫 `Deploy`，但它手上的舊密碼已經不是外部服務目前持有的密碼，認證會直接失敗。
 
-`secretrotate` 用 Vault KV2 引擎內建的 check-and-set（CAS）機制在同一份文件上實作一把互斥鎖。演算法的形狀如下：
+`secretrotate` 用 Vault KV2 引擎內建的 check-and-set（CAS）機制在同一份文件上實作一把互斥鎖。具體實作邏輯與步驟如下：
 
-1.  **一次讀取取得一份快照。** 每次嘗試取鎖，都對目標路徑做一次 Vault GET，同時取得欄位內容跟文件版本號（`documentSnapshot.version`，定義見 Section 5 Item B），兩者來自同一個時間點，不會有一份讀舊資料、另一份讀新版本號的落差。
-2.  **在同一份快照上判斷鎖是否有效。** 用這份快照裡的鎖記錄跟目前時間比較過期時間，決定鎖目前是否被別人持有。
-3.  **用同一份快照的版本號做 CAS 寫入。** 寫入自己的鎖記錄時，把第一步讀到的版本號一併送給 Vault 當作 CAS 條件。Vault 只在文件版本跟送出的版本號相符時才接受寫入，任何人在讀取之後、寫入之前動過這份文件，Vault 會直接拒絕。
-4.  **CAS 衝突觸發整輪重試，而不是只重讀版本號。** 寫入被拒絕代表狀況已經變了，下一次嘗試從第一步重新開始，讀一份全新的快照、重新判斷鎖，避免拿著過期的判斷結果去覆蓋別人剛寫入的鎖。
-5.  **鎖的存活時間跟著呼叫端的 context 走。** TTL 由 `ctx.Deadline()` 推導，deadline 之後另外留一段緩衝時間，而不是寫死一個固定值，因為 `Deploy` 實際耗時完全由呼叫端決定。
-6.  **釋放鎖前先核對持有者身分，並且同樣用 CAS 完成刪除。** 釋放動作不是看到鎖存在就清掉，而是先確認欄位裡記錄的持有者仍然是自己，才用同一份快照的版本號做 CAS 刪除；如果版本已經被別人動過，直接放棄這次釋放，讓現有記錄保持原樣。
+1. **單次讀取取得完整快照**：每次嘗試取鎖時，都對目標路徑執行一次讀取，同時取得欄位內容與文件版本號（`documentSnapshot.version`，定義見 _Section 5 Item B_），兩者來自同一時間點，避免讀取到舊內容卻配上新版本號的問題。
+2. **在同一份快照上驗證鎖的有效性**：比對快照中的鎖紀錄過期時間與目前時間，確認該鎖當前是否仍被其他流程持有。
+3. **以該快照的版本號進行 CAS 寫入**：寫入自身的鎖紀錄時，將步驟 1 取得的版本號作為 CAS 條件一併送出。Vault 僅在當前版本號與條件相符時才接受寫入；若在讀取與寫入之間有其他操作更動過文件，Vault 會直接拒絕寫入。
+4. **CAS 衝突觸發整輪重試**：寫入遭拒代表文件狀態已改變，下一次重試必須回到步驟 1 重新讀取全新快照並重新驗證鎖狀態，避免使用過期的快照資訊覆蓋他人剛寫入的鎖。
+5. **鎖的存活時間（TTL）對齊呼叫端的 context**：TTL 直接由 `ctx.Deadline()` 推導，並額外保留緩衝時間，不使用寫死的固定數值，因為 `Deploy` 的實際耗時完全由呼叫端 context 控制。
+6. **釋放鎖前先比對持有者身分並以 CAS 刪除**：釋放動作並非單純清除鎖欄位，而是先確認鎖紀錄中的持有者標識（Holder）確實屬於自己，才以快照版本號執行 CAS 刪除；若版本號已被其他流程更動，就直接放棄這次釋放，避免誤刪別人剛拿到的新鎖。
 
 這六步共同保證的性質是：判斷「鎖是否可取得」跟「寫入自己的鎖」兩件事，必定發生在同一份文件版本之上，兩個並行呼叫之中，只有先送達 Vault 的那一次寫入會成功，另一次會因為版本號過期被拒絕並重新走一輪判斷。
 
@@ -1322,7 +1260,7 @@ type rotationLock struct {
 ```go
 func acquireLock(ctx context.Context, client *vaultapi.Client, mount, path, field string) (string, error) {
     var lastErr error
-    for attempt := 0; attempt < acquireLockMaxAttempts; attempt++ {
+    for range acquireLockMaxAttempts {
         doc, _ := readDocument(ctx, client, mount, path)
         if lock, held := readActiveLock(doc, field); held {
             return "", fmt.Errorf("secretrotate: rotation aborted, %s holds the lock on %s/%s#%s until %s",
@@ -1351,9 +1289,9 @@ CAS 條件本身由 `writeFieldCAS` 送出，它依照版本號決定要走哪�
 ```go
 func writeFieldCAS(ctx context.Context, client *vaultapi.Client, mount, path, field, value string, version int) error {
     writePath := resolveDataPath(mount, path)
-    body := map[string]interface{}{
-        "data":    map[string]interface{}{field: value},
-        "options": map[string]interface{}{"cas": version},
+    body := map[string]any{
+        "data":    map[string]any{field: value},
+        "options": map[string]any{"cas": version},
     }
     if version > 0 {
         _, err := client.Logical().JSONMergePatch(ctx, writePath, body)
@@ -1364,7 +1302,7 @@ func writeFieldCAS(ctx context.Context, client *vaultapi.Client, mount, path, fi
 }
 ```
 
-版本號大於零代表文件已經存在，用 merge patch 才不會抹掉同一份文件裡其他擁有者的欄位，理由與 Section 5 Item C 相同。版本號為零代表文件還不存在，此時 merge patch 沒有對象可以合併，必須改用建立寫入，而 `cas` 為零在 Vault 的語意剛好就是「只有在這個路徑還沒有任何版本時才接受」，兩者的條件一致。
+版本號大於零代表文件已經存在，用 merge patch 才不會抹掉同一份文件裡其他擁有者的欄位，理由與 _Section 5 Item C_ 相同。版本號為零代表文件還不存在，這時 merge patch 沒有對象可以合併，必須改用建立寫入，而 `cas` 為零在 Vault 的語意剛好就是「只有在這個路徑還沒有任何版本時才接受」，兩者的條件一致。
 
 兩個真正並行的呼叫，其中一個的 CAS 寫入先送達 Vault 並成功，文件版本因此往前推進；另一個呼叫即使是在對方寫入之前就讀到了沒有鎖的快照，它送出的 CAS 寫入所帶的版本號已經落後於 Vault 當下的真實版本，Vault 會直接拒絕這次寫入。拒絕之後 `acquireLock` 重新讀一份快照，這次一定能看到對方剛寫入的鎖記錄，正確回報鎖已被持有，而不是再次嘗試覆蓋。`checkNotLocked` 這個函數仍然保留，但只作為診斷用的非授權性檢查，真正的互斥保證完全來自 `acquireLock` 這個合併過的迴圈。
 
@@ -1399,9 +1337,9 @@ func releaseLock(ctx context.Context, client *vaultapi.Client, mount, path, fiel
         return nil
     }
     writePath := resolveDataPath(mount, path)
-    body := map[string]interface{}{
-        "data":    map[string]interface{}{field + "_lock": nil},
-        "options": map[string]interface{}{"cas": doc.version},
+    body := map[string]any{
+        "data":    map[string]any{field + "_lock": nil},
+        "options": map[string]any{"cas": doc.version},
     }
     if _, err := client.Logical().JSONMergePatch(ctx, writePath, body); err != nil {
         if isCASConflict(err) {
@@ -1413,7 +1351,7 @@ func releaseLock(ctx context.Context, client *vaultapi.Client, mount, path, fiel
 }
 ```
 
-如果一次呼叫的 `Deploy` 拖得比自己鎖的 TTL 還久，鎖會先過期，另一個等待中的呼叫可能已經合法地拿到新的鎖並開始執行。這時候前一個呼叫在 `defer` 裡執行的釋放動作，如果不核對 holder，就會把後一個呼叫剛拿到的鎖直接刪掉，讓兩個呼叫在沒有鎖保護的情況下同時進行。`releaseLock` 因此先讀一份快照，確認欄位裡的 `Holder` 仍然是自己，才用同一份快照的版本號做 CAS 刪除；如果版本已經被別人動過，代表狀況又變了，直接放棄這次釋放，讓現有的記錄保持原樣，不冒著用過期資訊覆寫別人狀態的風險。
+如果單次呼叫的 `Deploy` 耗時超過自身互斥鎖的 TTL，鎖將會逾時失效，這時等待中的另一個輪替呼叫可能已經合法取得新鎖並開始執行。這種情況下，若前一個呼叫在 `defer` 中執行的釋放動作沒有比對 holder，就會誤將後一個呼叫剛取得的新鎖直接刪除，導致多個呼叫在缺乏互斥保護下並行執行。因此 `releaseLock` 會先讀取一份快照，確認欄位中記錄的 `Holder` 仍為自己，才以該快照的版本號執行 CAS 刪除；若版本號已被其他操作更動，代表文件狀態已經發生變化，這時會直接放棄釋放動作，讓現有紀錄保持原樣，避免使用過期資訊覆寫其他流程的合法狀態。
 
 ### Item C. 版本衝突的辨識
 
@@ -1444,9 +1382,9 @@ func isCASConflict(err error) bool {
 
 ### Item D. `previous` 與 `exists` 的讀取時機
 
-`Rotate` 裡有兩次對同一個欄位的讀取，時間點不同，用途也不同。第一次讀取只用來餵給 Item A 的銷毀偵測，讀到的值本身被丟棄。第二次讀取才是後續 `recoverPendingRotation` 跟 `commitRotation` 真正要拿去比對、拿去當作 `Deploy` 認證用途的 `previous` 跟 `exists`，而且刻意安排在鎖已經取得之後才進行。
+`Rotate` 裡有兩次對同一個欄位的讀取，時間點不同，用途也不同。第一次讀取只用來餵給 _Item A_ 的銷毀偵測，讀到的值本身被丟棄。第二次讀取才是後續 `recoverPendingRotation` 跟 `commitRotation` 真正要拿去比對、拿去當作 `Deploy` 認證用途的 `previous` 跟 `exists`，而且刻意安排在鎖已經取得之後才進行。
 
-如果只讀一次、把第一次讀到的值一路沿用到底，會有一個窗口：在第一次讀取跟鎖真正取得之間，如果有一個域外寫入者（不透過這個套件、直接對 Vault 下指令）在這段期間寫入了這個欄位，`exists` 會維持在讀取當下觀察到的不存在，導致 `commitRotation` 誤判成第一次建立，直接把新產生的密碼用 `writeField` 蓋掉域外寫入者剛寫入的值，全程不會呼叫 `Deploy` 去跟外部服務核對，這個域外寫入者留下的值就這樣在沒有任何驗證、也沒有任何錯誤訊息的情況下消失了。把 `previous` 與 `exists` 的讀取移到鎖已經確定屬於自己之後，讀到的就是這次輪替真正要對付的狀態，即使域外寫入發生在兩次讀取之間，第二次讀取也會看到它，`commitRotation` 就會正確地把它當成既有的舊密碼，透過 Section 7 Item B 的 `stageAndApply` 呼叫 `Deploy` 去核對。
+如果只讀一次、把第一次讀到的值一路沿用到底，會有一個時間差：在第一次讀取跟鎖真正取得之間，如果有一個域外寫入者（不透過這個套件、直接對 Vault 下指令）在這段期間寫入了這個欄位，`exists` 會維持在讀取當下觀察到的不存在，導致 `commitRotation` 誤判成第一次建立，直接把新產生的密碼用 `writeField` 蓋掉域外寫入者剛寫入的值，全程不會呼叫 `Deploy` 去跟外部服務核對，這個域外寫入者留下的值就這樣在沒有任何驗證、也沒有任何錯誤訊息的情況下消失了。把 `previous` 與 `exists` 的讀取移到鎖已經確定屬於自己之後，讀到的就是這次輪替真正要對付的狀態，即使域外寫入發生在兩次讀取之間，第二次讀取也會看到它，`commitRotation` 就會正確地把它當成既有的舊密碼，透過 _Section 7 Item B_ 的 `stageAndApply` 呼叫 `Deploy` 去核對。
 
 ### Item E. httprotate 的變更密碼協定
 
@@ -1488,7 +1426,7 @@ func (s FormSpec) Deploy(ctx context.Context, previous, next string) error {
 
 認證用的 Basic Auth 密碼是 `previous`，不是 `next`：變更密碼的 API 本來就要求先用舊密碼登入才能提交變更，這個呼叫本身同時完成了認證舊密碼跟提交新密碼兩件事。收到 401 時，回傳的錯誤同時包裝兩個哨兵：`ErrUnauthorized` 是 `httprotate` 自己對外的錯誤語意，`secretrotate.ErrAuthRejected` 則是跨套件合約，讓 `secretrotate` 能夠分辨這是一次明確的拒絕，而不是網路層的失敗。
 
-`ErrAuthRejected` 是 `secretrotate` 對外公開的合約：任何 `DeployFunc` 實作，遇到服務明確拒絕舊密碼時（例如 HTTP 401），必須用 `fmt.Errorf("%w: ...", ErrAuthRejected)` 包裝回傳。這個區分之所以重要，會在 Item F 展開。
+`ErrAuthRejected` 是 `secretrotate` 對外公開的合約：任何 `DeployFunc` 實作，遇到服務明確拒絕舊密碼時（例如 HTTP 401），必須用 `fmt.Errorf("%w: ...", ErrAuthRejected)` 包裝回傳。這個區分之所以重要，會在 _Item F_ 展開。
 
 `Verify` 是同一個 `FormSpec` 的唯讀操作，對 `VerifyURL` 送出一個以 Basic Auth 認證的 GET。SonarQube 的 `/api/authentication/validate` 對任何認證都回應 HTTP 200，以 JSON 布林欄位 `valid` 表示密碼是否有效：
 
@@ -1539,7 +1477,7 @@ var noRedirectClient = &http.Client{
 
 ### Item F. 崩潰後的自我修復
 
-`Rotate` 用一種輕量的預寫式紀錄（Write-Ahead Staging）來處理本節開頭的雙寫問題，把 Vault 本身當成記錄輪替進度的地方，而不只是最終結果的容器：
+`Rotate` 用一種輕量的預寫式紀錄（Write-Ahead Staging）來處理這一節開頭提到的雙寫問題，把 Vault 本身當成記錄輪替進度的地方，而不只是最終結果的容器：
 
 ```go
 type rotationState struct {
@@ -1548,7 +1486,7 @@ type rotationState struct {
 }
 ```
 
-在真正呼叫 `Deploy` 之前，`stageAndApply` 會先把這一輪要用的舊密碼跟即將套用的新密碼，一起寫進同一個 Vault 路徑底下的 `<field>_rotation` 附屬欄位，寫入的部分在 Section 7 Item B 說明。這個寫入動作發生在對外部服務動手之前，所以即使程式在呼叫 `Deploy` 之後、正式提交新密碼之前的任何時間點中斷，Vault 裡都留著足夠的資訊：這一輪打算把密碼從哪個舊值換成哪個新值。
+在真正呼叫 `Deploy` 之前，`stageAndApply` 會先把這一輪要用的舊密碼跟即將套用的新密碼，一起寫進同一個 Vault 路徑底下的 `<field>_rotation` 附屬欄位，寫入的部分在 _Section 7 Item B_ 說明。這個寫入動作發生在對外部服務動手之前，所以即使程式在呼叫 `Deploy` 之後、正式提交新密碼之前的任何時間點中斷，Vault 裡都留著足夠的資訊：這一輪打算把密碼從哪個舊值換成哪個新值。
 
 自我修復發生在下一次呼叫 `Rotate` 的時候，由 `recoverPendingRotation` 負責，以 `Verify` 確認暫存的新密碼是否已經生效：
 
@@ -1606,7 +1544,7 @@ func Generate(length int, classes ...CharClass) (string, error) {
 
 其中
 
-1.  前置作業要先進行狀態檢查
+1. 前置作業要先進行狀態檢查
 
     ```go
     func Generate(length int, classes ...CharClass) (string, error) {
@@ -1628,7 +1566,7 @@ func Generate(length int, classes ...CharClass) (string, error) {
     }
     ```
 
-2.  將每個類別的 `buf` 的前 `len(classes)` 個位置插入一個字元，同時把每個類別的字元集合併成 `allChars` 以保證每個類別都至少出現一次
+2. 將每個類別的 `buf` 的前 `len(classes)` 個位置插入一個字元，同時把每個類別的字元集合併成 `allChars` 以保證每個類別都至少出現一次
 
     ```go
     func Generate(length int, classes ...CharClass) (string, error) {
@@ -1650,7 +1588,7 @@ func Generate(length int, classes ...CharClass) (string, error) {
     }
     ```
 
-3.  用合併後的 `allChars` 隨機填滿剩下的位置
+3. 用合併後的 `allChars` 隨機填滿剩下的位置
 
     ```go
     func Generate(length int, classes ...CharClass) (string, error) {
@@ -1671,7 +1609,7 @@ func Generate(length int, classes ...CharClass) (string, error) {
     }
     ```
 
-4.  以 Fisher-Yates 演算法將 `buf` 完全打亂，方法是在 `i` 從 `length-1` 遞減到 1，每一輪跟 `[0, i]` 範圍內隨機選出的位置 `j` 互換，從而消除第一段固定塞在前段的痕跡
+4. 以 Fisher-Yates 演算法將 `buf` 完全打亂，方法是在 `i` 從 `length-1` 遞減到 1，每一輪跟 `[0, i]` 範圍內隨機選出的位置 `j` 互換，從而消除第一段固定塞在前段的痕跡
 
     ```go
     func Generate(length int, classes ...CharClass) (string, error) {
@@ -1697,7 +1635,7 @@ func Generate(length int, classes ...CharClass) (string, error) {
 
 ## Section 7. 提交路徑與雙寫自我修復
 
-Section 6 結束在 `Rotate` 骨架的最後一行，把 `previous`、`next`、`exists` 三個值交給 `commitRotation`。這一節說明的是從這裡到函數返回為止的路徑，也是雙寫問題真正被處理掉的地方。
+_Section 6_ 結束在 `Rotate` 骨架的最後一行，把 `previous`、`next`、`exists` 三個值交給 `commitRotation`。這一節說明的是從這裡到函數返回為止的路徑，也是雙寫問題真正被處理掉的地方。
 
 ### Item A. `commitRotation` 的協調流程
 
@@ -1726,17 +1664,17 @@ func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, rea
 }
 ```
 
-每一輪都經過 `stageAndApply`，沒有跳過外部服務的分支。Vault 沒有值時，Section 6 的 `resolveLiveCredential` 已經用出廠預設值確認服務目前的密碼，所以 `Deploy` 一定有一個驗證過的舊密碼可用。`read` 帶著 Vault 原本的值，只供 Item C 的回退偵測比對，`live` 才是送給 `Deploy` 的舊密碼。
+每一輪都經過 `stageAndApply`，沒有跳過外部服務的分支。Vault 沒有值時，_Section 6_ 的 `resolveLiveCredential` 已經用出廠預設值確認服務目前的密碼，所以 `Deploy` 一定有一個驗證過的舊密碼可用。`read` 帶著 Vault 原本的值，只供 _Item C_ 的回退偵測比對，`live` 才是送給 `Deploy` 的舊密碼。
 
-正式提交用的是 `writeField`，不帶 CAS 條件，與 Section 6 Item B 取鎖時用的 `writeFieldCAS` 不同。理由是這個時間點互斥已經由鎖提供：能走到這裡代表鎖屬於自己，沒有第二個 `Rotate` 會同時寫這個欄位。反過來說，如果這裡也加上 CAS，帶的版本號必然是過期的，因為自己稍早取鎖的那次寫入就已經讓文件版本前進了一次，Vault 會拒絕這次提交，把一次成功的輪替變成失敗。
+正式提交用的是 `writeField`，不帶 CAS 條件，與 _Section 6 Item B_ 取鎖時用的 `writeFieldCAS` 不同。理由是這個時間點互斥已經由鎖提供：能走到這裡代表鎖屬於自己，沒有第二個 `Rotate` 會同時寫這個欄位。反過來說，如果這裡也加上 CAS，帶的版本號必然是過期的，因為自己稍早取鎖的那次寫入就已經讓文件版本前進了一次，Vault 會拒絕這次提交，把一次成功的輪替變成失敗。
 
-提交與清除 staging 紀錄的順序不能對調。目前是先 `writeField` 寫入正式欄位、成功之後才 `clearRotationState`。如果反過來先清除，而清除與提交之間發生中斷，Vault 裡會同時失去 staging 紀錄與正式值，但外部服務已經持有新密碼，這正是 Section 6 開頭描述的永久遺失情境。照現在的順序，中斷發生在兩者之間時，最壞情況只是留下一筆已經完成的 staging 紀錄，下一次 `Rotate` 的 `recoverPendingRotation` 會探測到外部服務確實持有這個值，重新提交一次，結果一致。
+提交與清除 staging 紀錄的順序不能對調。目前是先 `writeField` 寫入正式欄位、成功之後才 `clearRotationState`。如果反過來先清除，而清除與提交之間發生中斷，Vault 裡會同時失去 staging 紀錄與正式值，但外部服務已經持有新密碼，這正是 _Section 6_ 開頭描述的永久遺失情境。照現在的順序，中斷發生在兩者之間時，最壞情況只是留下一筆已經完成的 staging 紀錄，下一次 `Rotate` 的 `recoverPendingRotation` 會探測到外部服務確實持有這個值，重新提交一次，結果一致。
 
-提交失敗的錯誤訊息直接告訴操作者重跑即可。外部服務此時已經換成 `next`，而 `next` 留在 staging 紀錄的 `pending_next`，重跑時 `recoverPendingRotation` 會以 `Verify` 確認並提交這個值。
+提交失敗的錯誤訊息直接告訴操作者重跑即可。外部服務這時已經換成 `next`，而 `next` 留在 staging 紀錄的 `pending_next`，重跑時 `recoverPendingRotation` 會以 `Verify` 確認並提交這個值。
 
 ### Item B. Write-Ahead Staging 與 `stageAndApply`
 
-`stageAndApply` 負責把 Section 6 Item F 描述的那筆 staging 紀錄寫進去，然後以驗證過的 `live` 呼叫外部服務：
+`stageAndApply` 負責把 _Section 6 Item F_ 描述的那筆 staging 紀錄寫進去，然後以驗證過的 `live` 呼叫外部服務：
 
 ```go
 func stageAndApply(ctx context.Context, client *vaultapi.Client, spec Spec, read vaultField, live, next string, log func(string)) error {
@@ -1758,7 +1696,7 @@ func stageAndApply(ctx context.Context, client *vaultapi.Client, spec Spec, read
 }
 ```
 
-紀錄的讀寫與清除三個動作都只是把欄位名稱與內容包好之後交給 Section 5 Item C 的合併寫入：
+紀錄的讀寫與清除三個動作都只是把欄位名稱與內容包好之後交給 _Section 5 Item C_ 的合併寫入：
 
 ```go
 func formatRotationStateField(field string) string { return field + "_rotation" }
@@ -1768,7 +1706,7 @@ func writeRotationState(ctx context.Context, client *vaultapi.Client, mount, pat
     if err != nil {
         return fmt.Errorf("secretrotate: encode rotation state: %w", err)
     }
-    body := map[string]interface{}{"data": map[string]interface{}{
+    body := map[string]any{"data": map[string]any{
         formatRotationStateField(field): string(raw),
     }}
     if err := patchOrInitDocument(ctx, client, mount, path, body); err != nil {
@@ -1779,7 +1717,7 @@ func writeRotationState(ctx context.Context, client *vaultapi.Client, mount, pat
 
 func clearRotationState(ctx context.Context, client *vaultapi.Client, mount, path, field string) error {
     writePath := resolveDataPath(mount, path)
-    body := map[string]interface{}{"data": map[string]interface{}{formatRotationStateField(field): nil}}
+    body := map[string]any{"data": map[string]any{formatRotationStateField(field): nil}}
     if _, err := client.Logical().JSONMergePatch(ctx, writePath, body); err != nil {
         return fmt.Errorf("secretrotate: clear rotation state at %s: %w", writePath, err)
     }
@@ -1791,7 +1729,7 @@ func clearRotationState(ctx context.Context, client *vaultapi.Client, mount, pat
 
 清除採用把欄位設成 `nil` 的方式，這是 JSON merge patch 定義的刪除語意，伺服器端會把這個鍵從文件裡移除，而不是留下一個值為 null 的欄位。清除不經過 `patchOrInitDocument`，因為那個函數的退回分支是在文件不存在時改用建立寫入，而清除一筆紀錄的前提本來就是文件存在，走退回分支反而會憑空建立一份只有 null 欄位的文件。
 
-寫入 staging 紀錄的動作排在呼叫 `Deploy` 之前，這個順序就是整個機制的全部重點。紀錄先落地，之後不論在哪一個時間點中斷，Vault 裡都留著「這一輪打算把密碼從哪個舊值換成哪個新值」這項資訊，讓下一次執行有依據可以判斷。順序反過來就完全失去意義：如果先呼叫 `Deploy` 再寫紀錄，兩者之間中斷的話，外部服務已經改變而 Vault 沒有任何線索，跟完全沒有這套機制的結果相同。
+寫入 staging 紀錄的動作排在呼叫 `Deploy` 之前，這個順序是整個機制的關鍵防線。預先將 staging 紀錄寫入 Vault 保存，之後無論流程在哪個時間點中斷，Vault 內都明確留存「這輪輪替預計把密碼從哪個舊值換成哪個新值」的狀態資訊，讓後續的重試或復原流程有具體依據可以比對判斷。若把順序顛倒（先呼叫 `Deploy` 再寫紀錄），一旦兩者之間發生中斷，外部服務已經套用新密碼但 Vault 完全沒有留下紀錄，這種狀態就等同於失去復原線索，沒辦法進行自動化自我修復。
 
 ### Item C. `Deploy` 失敗後的回退偵測與驗證
 
@@ -1833,13 +1771,13 @@ func resolveAppliedElsewhere(ctx context.Context, client *vaultapi.Client, spec 
 }
 ```
 
-跟 `recoverPendingRotation` 用同一套手法：以 `Verify` 確認候選值。服務接受，才清掉這次呼叫殘留的 staging 記錄、接受這個值當作結果；服務不接受，直接把原本的 `applyRaceResolvedError` 當成錯誤回傳，讓呼叫端得到明確的失敗，而不是一個看似成功、實際上從未被驗證過的值。`Verify` 傳輸失敗時，兩個錯誤一起回傳。
+這裡的比對邏輯與 `recoverPendingRotation` 一致：一律透過 `Verify` 驗證候選值。只有在外部服務確認接受該值時，才會清除這輪殘留的 staging 紀錄，並採用該值作為最終結果；若服務拒絕該值，就直接回傳原先的 `applyRaceResolvedError`，向呼叫端明確指出失敗，避免在未獲驗證的情況下誤把未確認的值當成成功。若 `Verify` 在網路連線或通訊時發生錯誤，就將兩項錯誤一併打包回傳。
 
-這條路徑接受的是別人寫入的值，因此 `commitRotation` 在 `errors.As` 命中之後直接回傳 `resolveAppliedElsewhere` 的結果，不會再往下走 `writeField`。這一輪自己產生的 `next` 被整個丟棄，因為外部服務持有的是對方那個值，把自己的值寫進 Vault 只會製造出新的不一致。
+因為這條路徑採納的是並行寫入者已經提交的值，所以 `commitRotation` 在 `errors.As` 比對命中後，會直接回傳 `resolveAppliedElsewhere` 的結果，不再執行後續的 `writeField`。這輪產生的 `next` 則會直接捨棄，因為外部服務當前持有的已經是並行寫入的新密碼，若硬把自己的值覆寫回 Vault，反而會破壞一致性。
 
-這個回退偵測要能派上用場，前提是繞過鎖的寫入者確實存在。在正常情況下，Section 6 Item B 描述的鎖已經讓兩個 `Rotate` 呼叫互斥，不可能同時走到 `Deploy` 這一步，所以這個偵測防的是鎖保護範圍之外的情境，例如有人直接對 Vault 下指令覆寫欄位，不是鎖失效的情境。
+這項回退偵測要防護的對象，是繞過互斥鎖機制的外部並行寫入操作。在正常流程下，_Section 6 Item B_ 的互斥鎖已經確保兩個 `Rotate` 程序不會同時進入 `Deploy` 階段；所以這項機制防禦的是鎖保護範圍外的異常行為（例如管理員直接用 CLI 命令強制寫入欄位），確保系統在遇到帶外異動時仍能維持狀態收斂。
 
-### Item D. Terminal Output and Interactive Input
+## Section 8. Reconcile 調諧流程與單向收斂
 
 `Reconcile` 跟 `Rotate` 解決的是不同的問題，不應該混為一談。`Rotate` 假設 Vault 跟外部服務原本是同步的，目標是產生一組新密碼並讓兩邊繼續保持同步。`Reconcile` 假設兩邊已經不同步了，目標單純是把 Vault 現有的密碼值推到外部服務上，讓外部服務追上 Vault 記錄的狀態。這種不同步最常發生在外部服務因為某些原因被重設回出廠預設值，但 Vault 裡還留著重設前那組已經不再有效的密碼：
 
@@ -1884,43 +1822,54 @@ func Reconcile(ctx context.Context, client *vaultapi.Client, spec Spec, operator
 
 兩邊不同步時，`Reconcile` 從候選值中找出服務目前接受的密碼，再以它認證，把服務改成 Vault 的值。操作者輸入了密碼時，候選值只有這一個，不再猜測，因為操作者的輸入是明確的指示。操作者留白時，候選值依序是 staging 紀錄的 `pending_next` 與出廠預設值：前者對應一次中斷的輪替，後者對應一個剛重建的服務。所有候選值都以 `Verify` 確認，沒有一個通過時回傳 `ErrNoLiveCredential`，不呼叫 `Deploy`。
 
-因為不寫入 Vault，`Reconcile` 也不需要取鎖。Section 6 Item B 的鎖保護的是「讀舊值、產生新值、寫回新值」這段會改變 Vault 狀態的臨界區段，而 `Reconcile` 對 Vault 只有一次讀取，不存在兩個呼叫互相覆寫的可能。
+因為不寫入 Vault，`Reconcile` 也不需要取鎖。_Section 6 Item B_ 的鎖保護的是「讀舊值、產生新值、寫回新值」這段會改變 Vault 狀態的臨界區段，而 `Reconcile` 對 Vault 只有一次讀取，不存在兩個呼叫互相覆寫的可能。
 
 ## Section 9. CLI 介面層與互動工具
 
-Section 2 Item E 說明了兩個介面各自在哪裡觸發 `BootstrapEnv`，這一節說明介面本身怎麼組出來、以及底下的輸出入工具。這一層完全不含業務邏輯，職責是把使用者的選擇轉成對前面各節那些函數的呼叫。
+_Section 2 Item E_ 說明了兩個介面各自在哪裡觸發 `BootstrapEnv`，這一節說明介面本身怎麼組出來、以及底下的輸出入工具。這一層完全不含業務邏輯，職責是把使用者的選擇轉成對前面各節那些函數的呼叫。
 
 ### Item A. cobra 指令樹的動態組裝
 
-指令樹分成三棵，分別對應 Vault 操作、Ansible 操作、環境檢查。其中 Vault 那一棵的形狀由 `credentials.yaml` 決定：
+指令樹以功能劃分為六組子指令命名空間：
+
+1. `host`（別名 `ansible`）：開發機前置環境維護。包含 `apply-all`（別名 `all`）、`apply-selinux`（別名 `selinux`）、`apply-libvirt`（別名 `libvirt`）、`apply-vault-proxy`（別名 `vault-proxy`）與 `verify`（別名 `verify-tools`）。
+2. `vault`：Bastion Vault 生命週期管理。包含 `generate-tls`（別名 `tls-generate`）、`init`、`enable-kv`、`unseal`、`revoke-root`（別名 `revoke-root-token`）、`generate-root`（別名 `generate-root-token`），以及掛在 `vault rotate` 與 `vault reconcile` 底下的憑證動態子指令。為維持既有指令相容性，`vault` 根節點亦保留隱藏的憑證輪替別名。
+3. `credentials`：憑證專屬命名空間，掛載 `credentials rotate <key>` 與 `credentials reconcile <key>`。
+4. `terraform`：Terraform 治理操作，掛載 `terraform audit-state`（別名 `audit`、`state-audit`）。
+5. `audit-state-secrets`：隱藏之頂層機密稽核指令，供腳本直接調用。
+6. `env`：環境檢查（`env verify` 為隱藏指令）。
+
+其中憑證子指令的形狀由 `service_admin_passwords` 動態生成：
 
 ```go
+rotateCmd := &cobra.Command{Use: "rotate", Short: "Rotate service admin passwords"}
 for _, cred := range a.credentials {
     key := cred.Key
-    cmd.AddCommand(&cobra.Command{
+    rotateCmd.AddCommand(&cobra.Command{
         Use:   key,
-        Short: "Rotate " + key,
+        Short: prefixRotate + key,
         RunE:  func(cmd *cobra.Command, args []string) error { return a.rotateCredential(cmd.Context(), key) },
     })
 }
+cmd.AddCommand(rotateCmd)
 
-reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Push a Vault-stored credential out to a drifted live service"}
+reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Push a stored credential out to a drifted live service"}
 for _, cred := range a.credentials {
     key := cred.Key
     reconcileCmd.AddCommand(&cobra.Command{
         Use:   key,
-        Short: "Reconcile " + key,
+        Short: prefixReconcile + key,
         RunE:  func(cmd *cobra.Command, args []string) error { return a.reconcileCredential(cmd.Context(), key) },
     })
 }
 cmd.AddCommand(reconcileCmd)
 ```
 
-每一筆宣告會長出兩個子指令，一個掛在 `vault` 底下做輪替，一個掛在 `vault reconcile` 底下做調諧。這是 Section 3 那份宣告檔真正的回報：新增一組憑證只要編輯 YAML，指令介面自動跟著長出來，不需要有人記得回來改 `commands.go`。
+每一筆宣告會長出兩個子指令，分別處理輪替與調諧。這是 _Section 3_ 那份宣告檔真正的回報：新增一組憑證只要編輯 YAML，指令介面自動跟著長出來，不需要有人記得回來改 `commands.go`。
 
 迴圈裡的 `key := cred.Key` 是刻意複製出來的區域變數，讓閉包捕捉的是這個複本而不是迴圈變數本身。這份模組宣告的 Go 版本已經是每輪迭代各自綁定迴圈變數的語意，但寫成明確的複本之後，這段程式碼的正確性就不依賴讀者是否記得語言版本之間的這項差異。
 
-根指令關掉了 cobra 的兩個預設行為：
+根指令的 `PersistentPreRunE` 負責觸發 `config.BootstrapEnv`。如果當前執行的指令是根指令本身（`cmd == rootCmd`），則略過執行，留待選單進入點統一處理，避免重複開銷。此外，根指令關掉了 cobra 的兩個預設行為：
 
 ```go
 rootCmd = &cobra.Command{
@@ -1945,9 +1894,26 @@ type menuOption struct {
 }
 ```
 
-用 `nil` 當結束的標記，而不是另外設一個布林欄位或用字串比對標籤，讓「選到這一項要做什麼」與「這一項是不是結束」用同一個欄位表達，判斷只需要 `chosen.run == nil` 一個條件。
+選單項目（`buildMenuOptions`）依引導優先權順序排列：
 
-憑證相關的兩個選項只在有宣告憑證時才加入清單，所以一個還沒有 `credentials.yaml` 的專案不會看到自己用不到的選項。
+1. `[Host] Apply All Workstation Prerequisites` (`runHostAll`)
+2. `[Host] Verify Host IaC Tools` (`verifyEnvironment`)
+3. `[Host] Apply Workstation SELinux Policy and File Contexts` (`runHostSELinuxPlaybook`)
+4. `[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites` (`runHostLibvirtPlaybook`)
+5. `[Host] Apply Workstation Vault Proxies` (`runHostVaultProxyPlaybook`)
+6. `[Vault] Set up TLS for Bastion Vault` (`generateVaultTLS`)
+7. `[Vault] Initialize Bastion Vault` (`initVault`)
+8. `[Vault] Enable KV-v2 Engine` (`enableVaultKV`)
+9. `[Vault] Unseal Bastion Vault` (`unsealVault`)
+10. `[Vault] Revoke Root Token After Bootstrap` (`revokeRootToken`)
+11. `[Vault] Generate Root Token for Break-Glass` (`generateRootToken`)
+12. 憑證存在時追加：
+    - `[Credentials] Rotate Service Admin Passwords` (`runRotateCredentialMenu`)
+    - `[Credentials] Reconcile Service Admin Passwords with the Live Service` (`runReconcileCredentialMenu`)
+13. `[Terraform] Audit State Secrets` (`runStateAuditMenu`)
+14. `Quit` (`nil`)
+
+用 `nil` 當結束的標記，而不是另外設一個布林欄位或用字串比對標籤，讓「選到這一項要做什麼」與「這一項是不是結束」用同一個欄位表達，判斷只需要 `chosen.run == nil` 一個條件。
 
 選單的迴圈只在輸入無效時重跑，選到有效項目之後執行並直接返回：
 
@@ -1969,7 +1935,11 @@ for {
 
 執行完一個動作就結束整個程序，不回到選單。這讓每一次執行對應一個明確的動作與一個明確的結束碼，外部若要串接或重跑都以行程為單位，不需要處理「跑了三個動作其中一個失敗」這種複合結果。
 
-進入選單前會先印一次狀態橫幅：
+進入選單前會先透過 `printVaultStatusBanner` 印出狀態橫幅：
+
+- 目前宣告的憑證清單。
+- Bastion Vault 的四種狀態：`Stopped`、`Running (Not Initialized)`、`Running (Sealed)`、`Running (Unsealed)`。
+- 若在已解封狀態下偵測到 `~/.vault-token` 仍殘留 root token，會顯示警告，提醒操作者在 bootstrap 結束後執行撤銷。
 
 ```go
 bastion := vaultops.InspectBastionStatus(ctx, a.newVaultPaths())
@@ -1982,24 +1952,18 @@ case bastion.Sealed:
     a.out.Print(ui.Warn, "Bastion Vault: Running (Sealed)")
 default:
     a.out.Print(ui.OK, "Bastion Vault: Running (Unsealed)")
-    if a.env != nil {
-        if _, err := vaultops.SyncVaultToken(a.newVaultPaths(), a.env); err != nil {
-            a.out.Print(ui.Warn, "Vault token sync failed: "+err.Error())
-        } else if err := a.env.Save(); err != nil {
-            a.out.Print(ui.Warn, "Vault token sync failed: "+err.Error())
-        }
+    if vaultclient.ReadTokenFile(a.home) != "" {
+        a.out.Print(ui.Warn, "Root token present in ~/.vault-token. Run [Vault] Revoke Root Token After Bootstrap once bootstrap ends.")
     }
 }
 ```
 
-四個狀態依序判斷，對應 Section 4 Item G 的 `SealStatus` 三個布林值。順序不能調換，因為後面的欄位只有在前面成立時才有意義：連不上的時候 `Initialized` 與 `Sealed` 都是零值，若先判斷 `Sealed` 會把一台根本沒開的 Vault 顯示成已解封。
-
-token 同步只在解封狀態下進行，而且失敗只降級成警告不中止選單。理由是同步 token 是順手做的便利措施，操作者這一次要跑的可能是產生 TLS 或檢查環境這類完全不需要 token 的動作，為了一個附帶動作讓整個選單無法使用並不合理。
+四個狀態依序判斷，對應 _Section 4 Item G_ 的 `SealStatus` 三個布林值。順序不能調換，因為後面的欄位只有在前面成立時才有意義：連不上的時候 `Initialized` 與 `Sealed` 都是零值，若先判斷 `Sealed` 會把一台根本沒開的 Vault 顯示成已解封。
 
 批次選擇的兩個子選單共用同一套處理方式，差別在於候選清單怎麼來：
 
 ```go
-client, err := vaultops.NewAuthenticatedBastionClient(a.newVaultPaths())
+client, err := a.newRotationClient()
 for i, cred := range a.credentials {
     keys[i] = cred.Key
     status := "status unknown"
@@ -2012,18 +1976,9 @@ for i, cred := range a.credentials {
 }
 ```
 
-輪替選單列出全部憑證並標註 Vault 裡有沒有值，因為兩種情況都可以輪替：Vault 沒有值時，Section 6 的 `resolveLiveCredential` 會改用出廠預設值確認服務目前的密碼。調諧選單則只列出已經有值的，因為 Section 8 的 `Reconcile` 對沒有值的憑證無事可做。
+輪替選單列出全部憑證並標註 Vault 裡有沒有值，因為兩種情況都可以輪替：Vault 沒有值時，_Section 6_ 的 `resolveLiveCredential` 會改用出廠預設值確認服務目前的密碼。調諧選單則只列出已經有值的，因為 _Section 8_ 的 `Reconcile` 對沒有值的憑證無事可做。
 
-狀態查詢用的是 `secretrotate.Exists`：
-
-```go
-func Exists(ctx context.Context, client *vaultapi.Client, spec Spec) bool {
-    _, ok := readField(ctx, client, spec.Mount, spec.Path, spec.Field)
-    return ok
-}
-```
-
-client 建構失敗時標籤退化成 `status unknown` 而不是讓整個選單失敗，理由與上一段相同：Vault 還沒初始化的時候本來就拿不到 token，此時仍然應該讓操作者看得到有哪些憑證被宣告。
+狀態查詢用的是 `secretrotate.Exists`。client 建構失敗時標籤退化成 `status unknown` 而不是讓整個選單失敗，理由與上一段相同：Vault 還沒初始化的時候本來就拿不到 token，這時仍然應該讓操作者看得到有哪些憑證被宣告。
 
 批次執行時，其中一筆失敗不會中斷其餘的處理：
 
@@ -2042,7 +1997,84 @@ return lastErr
 
 ### Item C. 操作實作
 
-`operations.go` 是兩個介面共用的終點。輪替與調諧兩個操作都從 key 字串反查回 `Credential`：
+`operations.go` 是兩個介面共用的業務邏輯收斂點，負責管理開發機環境準備、Vault 初始化防禦、權限代理與憑證操作：
+
+#### 1. Bastion Vault 初始化防禦（`initVault`）
+
+在真正執行 `vaultops.Init` 之前，`initVault` 設計了一道關鍵的連線與狀態防線：
+
+```go
+waitCtx, cancel := context.WithTimeout(ctx, serviceReadyTimeout)
+defer cancel()
+var retained []string
+for _, cred := range a.credentials {
+    if cred.Spec.FactoryDefaultPassword == "" {
+        continue
+    }
+    a.out.Print(ui.Info, "Waiting for the service of "+cred.Key+" to answer.")
+    fresh, err := secretrotate.AwaitFactoryDefault(waitCtx, cred.Spec, 5*time.Second)
+    if err != nil {
+        return fmt.Errorf("%s: %w", cred.Key, err)
+    }
+    if !fresh {
+        retained = append(retained, cred.Key)
+    }
+}
+if len(retained) > 0 {
+    return fmt.Errorf("%w: rebuild the service of %s, as README Section 4 Item D describes, before vault init",
+        errRetainedServiceState, strings.Join(retained, ", "))
+}
+return vaultops.Init(ctx, a.newVaultPaths(), a.out)
+```
+
+這項檢查設有 5 分鐘上限（`serviceReadyTimeout`）。針對每一組宣告了出廠預設密碼的服務，它會反覆輪詢直到服務就緒，並確認服務當前是否仍接受出廠預設值。
+
+若有服務明確拒絕出廠密碼（`!fresh`），代表該服務在先前的運作中已經被輪替過並持有新密碼，但即將初始化的 Bastion Vault 是一座全新且空白的保險箱，無法復原被服務持久化留存的密碼雜湊。如果這時允許執行 `vault init`，線上服務的密碼就會徹底脫節變成孤兒。因此程式會直接回傳 `errRetainedServiceState` 拒絕初始化，強制要求維運人員依 _Section 4 Item D_ 重建服務容器回到出廠狀態後再行操作。
+
+#### 2. Workstation Playbook 流程與一鍵串接（`runHostPlaybooks` 與 `runHostAll`）
+
+開發機前置環境由三支 Playbook 組裝而成：
+
+- `buildSELinuxPlaybook`：執行 `playbooks/workstation_selinux.yaml`，注入 `workstation_selinux_home: a.home`。
+- `buildLibvirtPlaybook`：執行 `playbooks/workstation_libvirt.yaml`，注入 `workstation_libvirt_operator_user`（透過 `config.DetectHostFacts()` 取得）與 `workstation_libvirt_vault_config_path`（指向 `vault/vault.hcl`）。
+- `buildVaultProxyPlaybook`：執行 `playbooks/workstation_vault_proxy.yaml`，注入 `workstation_vault_proxy_operator_user` 與 `workstation_vault_proxy_ca_dir`（指向 `vault/tls`）。
+
+這三支 playbook 由 `runHostPlaybooks` 統一調度。它在最前端一次性索取提權密碼，留白視為取消：
+
+```go
+becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
+if err != nil {
+    return fmt.Errorf("read ANSIBLE_BECOME_PASS: %w", err)
+}
+if becomePass == "" {
+    a.out.Print(ui.Info, msgCancelled)
+    return nil
+}
+```
+
+留白等同取消，而不是帶著空密碼去跑 playbook，因為空密碼一定會在第一個提權任務失敗，屆時錯誤訊息出現在 Ansible 的輸出裡，遠不如在這裡直接停下來清楚。
+
+`runHostAll` 則依據前置引導的先後順序，一鍵串聯全部環境配置：
+
+1. 套用 SELinux 政策與檔案上下文（`buildSELinuxPlaybook`）。
+2. 配置 Libvirt 虛擬網路與 Bastion Vault 儲存目錄（`buildLibvirtPlaybook`）。
+3. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA，確保後續 Vault Proxy 能取得正確簽署的伺服器與客戶端憑證。
+4. 部署本機 Vault Proxies（`buildVaultProxyPlaybook`）。
+
+#### 3. 身分代理與安全輪替（`buildProxyConfig`、`newRotationClient`、`revokeRootToken`）
+
+CLI 透過 `a.topology.ResolveProxyEndpoint` 依角色解析端點設定：
+
+- `accessFoundation`（`topology.AccessRoleFoundation`）
+- `accessRotation`（`topology.AccessRoleRotation`）
+
+`newRotationClient` 建立的 Vault 客戶端走的是本機 Proxy 代理端點（由 Proxy 自行完成 mTLS 驗證與身分維護）。因此輪替與調諧操作完全不接觸、也不需要 root token。
+
+當 bootstrap 完成且 foundation Proxy 成功登入後，`revokeRootToken` 在操作者確認後，透過 `accessFoundation` 身分向 Vault 撤銷 `~/.vault-token` 的 root token，將特權及時收斂。
+
+#### 4. 憑證查詢與調諧輸入
+
+輪替與調諧兩個操作都從 key 字串反查回 `Credential`：
 
 ```go
 func Lookup(creds []Credential, key string) (Credential, bool) {
@@ -2055,7 +2087,7 @@ func Lookup(creds []Credential, key string) (Credential, bool) {
 }
 ```
 
-用線性搜尋而不是預先建一個 map，因為憑證數量是個位數，而且這個查詢一次執行只會發生幾次。重複的 key 在這裡會取第一筆，Section 3 Item A 第 5 點的碰撞檢查擋的是 Vault 位置相同，不是 key 字串相同，兩個 key 字串完全一樣但指向不同 Vault 路徑的宣告可以通過檢查，此時以先宣告者為準。
+用線性搜尋而不是預先建一個 map，因為憑證數量是個位數，而且這個查詢一次執行只會發生幾次。重複的 key 在這裡會取第一筆，_Section 3 Item A_ 第 5 點的碰撞檢查擋的是 Vault 位置相同，不是 key 字串相同，兩個 key 字串完全一樣但指向不同 Vault 路徑的宣告可以通過檢查，這時以先宣告者為準。
 
 調諧操作會先問一次目前的線上密碼：
 
@@ -2063,7 +2095,7 @@ func Lookup(creds []Credential, key string) (Credential, bool) {
 previous, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "Current live password for "+key+" (leave blank to let governance guess): ")
 ```
 
-提示語明講留白的效果，對應 Section 8 那道猜測階梯。把「讓工具自己猜」做成留白而不是另一個選項，是因為操作者多半在這一刻才發現自己並不知道線上密碼是什麼，此時直接按下輸入鍵是最自然的動作。
+提示語明講留白的效果，對應 _Section 8_ 那道猜測階梯。把「讓工具自己猜」做成留白而不是另一個選項，是因為操作者多半在這一刻才發現自己並不知道線上密碼是什麼，這時直接按下輸入鍵是最自然的動作。
 
 產生 TLS 是唯一需要打字確認的操作：
 
@@ -2074,9 +2106,9 @@ if !a.out.PromptConfirm(a.in, "Type 'Y' or 'y' to confirm execution: ") {
 }
 ```
 
-因為 Section 4 Item B 會清空整個 `vault/tls/` 目錄，而且清空之後既有的 Vault 連線全部會因為憑證不符而中斷。取消時回傳 `nil` 而不是錯誤，因為使用者主動取消是預期內的結果，不該讓結束碼變成失敗。
+因為 _Section 4 Item B_ 會清空整個 `vault/tls/` 目錄，而且清空之後既有的 Vault 連線全部會因為憑證不符而中斷。取消時回傳 `nil` 而不是錯誤，因為使用者主動取消是預期內的結果，不該讓結束碼變成失敗。
 
-環境檢查把 Section 2 Item D 的檢查結果轉成輸出，並在結尾彙整成單一錯誤：
+環境檢查把 _Section 2 Item D_ 的檢查結果轉成輸出，並在結尾彙整成單一錯誤：
 
 ```go
 if len(missing) > 0 {
@@ -2085,23 +2117,6 @@ if len(missing) > 0 {
 ```
 
 逐項印出讓操作者看到完整狀態，彙整的錯誤則讓缺工具這件事同時反映在結束碼上，供腳本判斷。
-
-兩支 host playbook（SELinux 與 libvirt）共用 `runHostPlaybook`，它先取得提權密碼，留白視為取消：
-
-```go
-becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
-if err != nil {
-    return fmt.Errorf("read ANSIBLE_BECOME_PASS: %w", err)
-}
-if becomePass == "" {
-    a.out.Print(ui.Info, "Cancelled.")
-    return nil
-}
-```
-
-留白等同取消，而不是帶著空密碼去跑 playbook，因為空密碼一定會在第一個提權任務失敗，屆時錯誤訊息出現在 Ansible 的輸出裡，遠不如在這裡直接停下來清楚。
-
-兩個呼叫端只差三樣東西：playbook 檔名、注入的 extra var、完成訊息。`runHostSELinuxPlaybook` 注入 `workstation_selinux_home`，值取自 `a.home`。`runHostLibvirtPlaybook` 注入 `workstation_libvirt_operator_user`，值取自 `config.DetectHostFacts()` 回傳的使用者名稱。`.env` 的 `UNAME` 不作為來源，因為 `patchExistingEnv` 不會回補既有 `.env` 缺少的 `UNAME`。
 
 ### Item D. 終端機輸出與互動輸入
 
@@ -2241,16 +2256,16 @@ func RunPlaybook(ctx context.Context, ansibleDir, runDir, playbookFile string, o
 
 ## Section 10. 邊界條件與已知限制
 
-Section 6 Item A 已經記錄了銷毀偵測本身的兩層邊界。除此之外，`Deploy` 因為非認證原因失敗時（Section 6 Item F 的分類），目前的處理方式是直接中止整個 `Rotate` 呼叫並保留 staging 紀錄，等待下一次呼叫重新探測，這是刻意的保守選擇，不是待辦事項：寧可讓操作者多跑一次，也不要在狀態未知的情況下自行判斷。
+_Section 6 Item A_ 已經記錄了銷毀偵測本身的兩層邊界。除此之外，`Deploy` 因為非認證原因失敗時（_Section 6 Item F_ 的分類），目前的處理方式是直接中止整個 `Rotate` 呼叫並保留 staging 紀錄，等待下一次呼叫重新探測，這是刻意的保守選擇，不是待辦事項：寧可讓操作者多跑一次，也不要在狀態未知的情況下自行判斷。
 
 其餘已知的邊界如下，都已經在對應章節說明過，這裡集中列出供查閱：
 
-- Section 2 Item A：工具必須在 git 工作區內執行，工作區外會在解析專案根目錄時直接中止。
-- Section 2 Item C：既有的 `.env` 只補齊空值欄位，`HOST_UID`、`HOST_GID`、`PROJECT_ROOT` 例外，每次執行都會被目前的主機狀態覆寫。
-- Section 2 Item E：Bastion Vault 位址的預設值字面值同時存在於 `internal/config` 與 `internal/vaultops`，兩處必須一起修改。
-- Section 4 Item B：重新產生 TLS 會清空整個 `vault/tls/` 目錄，既有憑證無法保留。
-- Section 4 Item D：解封的輪詢逾時上限是 10 秒，逾時錯誤訊息的字面寫的是 5 秒。
-- Section 7 Item A：正式提交失敗時，外部服務已經持有新密碼而 Vault 仍是舊值，必須依照錯誤訊息重跑才能收斂。
+- _Section 2 Item A_：工具必須在 git 工作區內執行，工作區外會在解析專案根目錄時直接中止。
+- _Section 2 Item C_：既有的 `.env` 只補齊空值欄位，`HOST_UID`、`HOST_GID`、`PROJECT_ROOT` 例外，每次執行都會被目前的主機狀態覆寫。
+- _Section 2 Item E_：Bastion Vault 位址的預設值字面值同時存在於 `internal/config` 與 `internal/vaultops`，兩處必須一起修改。
+- _Section 4 Item B_：重新產生 TLS 會清空整個 `vault/tls/` 目錄，既有憑證無法保留。
+- _Section 4 Item D_：解封的輪詢逾時上限是 10 秒，逾時錯誤訊息的字面寫的是 5 秒。
+- _Section 7 Item A_：正式提交失敗時，外部服務已經持有新密碼而 Vault 仍是舊值，必須依照錯誤訊息重跑才能收斂。
 
 ## Section 11. Terraform State 機密稽核
 
@@ -2260,8 +2275,8 @@ Section 6 Item A 已經記錄了銷毀偵測本身的兩層邊界。除此之外
 
 稽核依序使用兩種偵測來源，兩者都不需要逐一為服務撰寫規則：
 
-1.  Terraform 的 sensitive 標記：state 每個 instance 的 `sensitive_attributes` 路徑，以及 root output 的 `sensitive = true`。路徑下任何非空值都是一筆發現。provider schema 宣告的機密屬性因此自動涵蓋，新增服務不需要修改稽核。
-2.  gitleaks 預設規則：沒有 sensitive 標記的值交給 gitleaks 的 Go library 偵測，偵測輸入是 `"<屬性名>": "<值>"`，讓需要屬性名稱的通用規則可以判斷。帶有固定前綴的 token（例如 GitLab 的 `glpat-`、`glrt-`）由社群維護的規則抓出，base64 編碼的內容會遞迴解碼五層。
+1. Terraform 的 sensitive 標記：state 每個 instance 的 `sensitive_attributes` 路徑，以及 root output 的 `sensitive = true`。路徑下任何非空值都是一筆發現。provider schema 宣告的機密屬性因此自動涵蓋，新增服務不需要修改稽核。
+2. gitleaks 預設規則：沒有 sensitive 標記的值交給 gitleaks 的 Go library 偵測，偵測輸入是 `"<屬性名>": "<值>"`，讓需要屬性名稱的通用規則可以判斷。帶有固定前綴的 token（例如 GitLab 的 `glpat-`、`glrt-`）由社群維護的規則抓出，base64 編碼的內容會遞迴解碼五層。
 
 同一個值只回報一種來源：有 sensitive 標記時只回報標記，沒有標記時才回報 gitleaks 的規則。
 
@@ -2271,37 +2286,50 @@ Section 6 Item A 已經記錄了銷毀偵測本身的兩層邊界。除此之外
 
 歷史版本模式（`--history`）先讀取目前 state 的 `serial`，再由 `serial - 1` 往回讀到 1，每一版位於 `<位址>/versions/<serial>`。backend 已經刪除的版本回應 404，稽核略過該版本。
 
-### Item C. 忽略檔
+### Item C. 忽略檔與規則過濾
 
-`terraform/.tfstate-audit-ignore.yaml` 列出「provider 標成 sensitive 但值是公開資料」的位置。每筆必須填寫 `layer`、`address`、`path`、`detection` 與 `reason`，未知欄位會被拒絕。比對以位置為準，不以值為準，因此機密輪替之後忽略檔不需要更新，一筆設定也會套用到同一個 layer 的每個歷史版本。
+`pkg/stateaudit/ignore.go` 負責忽略檔案的解析（`LoadIgnores`）與發現過濾（`ApplyIgnores`）。忽略檔預設路徑為 `terraform/.tfstate-audit-ignore.yaml`（`IgnoreFileName`），用於豁免「provider 標示為 sensitive 但實際為公開資料」的欄位。
 
-沒有比對到任何發現的忽略項目同樣讓稽核失敗，避免忽略檔累積失效的項目。
+檔案內容以 `ignores` 為根鍵，以 layer 名稱為鍵映射到一組規則項目。每個項目透過 `address` 或 `addresses`、`path` 或 `paths` 宣告豁免位置，且 `reason` 欄位為必填。YAML 解碼器啟用 `decoder.KnownFields(true)`，未知欄位會直接被拒絕。
+
+規則比對與豁免具有以下核心約束：
+
+1. 僅豁免 Terraform 的 sensitive 標記（`DetectionSensitiveAttribute` 與 `DetectionSensitiveOutput`）。gitleaks 所偵測到的實質機密規則（例如固定前綴 token）永遠不接受豁免。
+2. 比對以結構位置（`Layer`、`Address`、`Path`）為準，不比對機密明文值。因此機密輪替後忽略檔無須更動，而且同一筆設定可以直接套用到該 layer 的所有歷史版本。
+3. `ApplyIgnores` 會同時回傳過濾後的發現清單與未被命中的忽略項目（`UnusedIgnores`）。任何未匹配到任何發現的忽略項目，同樣會使稽核失敗（回傳 `stateaudit.ErrFindings`），防止忽略檔累積失效或過期的過度豁免設定。
 
 ### Item D. 在下游 CLI 使用
 
-選單項目直接呼叫 `Run`：
+選單項目呼叫 `AuditAndReport`：
 
 ```go
 {"[Terraform] Audit State Secrets", func(ctx context.Context) error {
-    cfg, err := stateaudit.ConfigFromEnv(terraformDir, os.Getenv, true)
+    cfg, err := a.resolveStateAuditConfig(stateaudit.Options{History: true})
     if err != nil {
         return err
     }
-    return stateaudit.Run(ctx, cfg, os.Stdout)
+    return stateaudit.AuditAndReport(ctx, cfg, os.Stdout)
 }},
 ```
 
-子指令以 `NewCommand` 掛載，旗標 `--history` 由套件提供：
+子指令以 `NewCommand` 掛載：
 
 ```go
-rootCmd.AddCommand(stateaudit.NewCommand(func(history bool) (stateaudit.Config, error) {
-    return stateaudit.ConfigFromEnv(terraformDir, os.Getenv, history)
-}))
+auditCmd := stateaudit.NewCommand(a.resolveStateAuditConfig)
+rootCmd.AddCommand(auditCmd)
 ```
 
-`Run` 在有發現或有未使用的忽略項目時回傳 `stateaudit.ErrFindings`，CLI 以非零結束碼結束。
+其中 `resolveStateAuditConfig` 接收 `stateaudit.Options`，從環境變數載入憑證並呼叫 `BuildConfigFromEnv`。套件提供三個指令旗標：
+
+1. `--history`：回溯掃描後端所持有的每一版歷史 state 版本。
+2. `--terraform-dir`：指定稽核目標儲存庫的 terraform 目錄與忽略檔路徑。
+3. `--reveal`：在各個發現位置下方印出機密明文。
+
+針對 `--reveal` 旗標，`checkRevealOutput` 建立了嚴格的安全防護：機密明文僅允許在非 CI 環境（未設定 `CI` 環境變數）且標準輸出為互動式終端機（TTY `term.IsTerminal`）時印出。若偵測到管線環境、管道重新導向或輸出至檔案，會立即回傳 `ErrRevealRefused` 中止，避免機密明文外洩至日誌或持久化儲存。
+
+`AuditAndReport` 會呼叫 `AuditStates` 完成掃描，接著透過 `WriteReport` 格式化輸出報告。當存在任何發現（`len(report.Findings) > 0`）或存在未使用的忽略項目（`len(report.UnusedIgnores) > 0`）時，回傳 `stateaudit.ErrFindings`，CLI 以非零狀態碼結束。
 
 ### Item E. 已知限制
 
-1.  同時沒有 sensitive 標記、沒有固定前綴、熵值又低的值無法偵測，例如出廠預設密碼。這類值由服務核發或由人選定，依 `planning/decisions.md` 的「Terraform State 不保存機密」由 `./governance` 處理，不經過 Terraform。
-2.  稽核只涵蓋 state。存檔的 plan、`TF_LOG` 除錯紀錄與 `terraform output` 的輸出不在範圍內。
+1. 同時沒有 sensitive 標記、沒有固定前綴、熵值又低的值無法偵測，例如出廠預設密碼。這類值由服務核發或由人選定，依 `planning/decisions.md` 的「Terraform State 不保存機密」由 `./governance` 處理，不經過 Terraform。
+2. 稽核只涵蓋 state。存檔的 plan、`TF_LOG` 除錯紀錄與 `terraform output` 的輸出不在範圍內。

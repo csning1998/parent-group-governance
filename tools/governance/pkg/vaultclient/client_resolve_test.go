@@ -16,9 +16,9 @@ func kvAppConfigHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": map[string]interface{}{
-			"data": map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": map[string]any{
+			"data": map[string]any{
 				"api_key": "secret123",
 			},
 		},
@@ -56,13 +56,13 @@ func TestReadKVv2Field(t *testing.T) {
 }
 
 func kvProdTokenHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/v1/secret/data/meta-platform/credentials" {
+	if r.URL.Path != "/v1/secret/data/example-platform/credentials" {
 		http.NotFound(w, r)
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": map[string]interface{}{
-			"data": map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": map[string]any{
+			"data": map[string]any{
 				"prod_vault_root_token": "s.prod-root-token",
 			},
 		},
@@ -94,7 +94,7 @@ func TestTokenAuth(t *testing.T) {
 
 var sampleProdSecretRef = vaultclient.SecretRef{
 	Mount: "secret",
-	Path:  "meta-platform/credentials",
+	Path:  "example-platform/credentials",
 	Field: "prod_vault_root_token",
 }
 

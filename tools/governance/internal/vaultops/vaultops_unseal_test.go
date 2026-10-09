@@ -27,7 +27,7 @@ func newFakeUnsealServer(t *testing.T, failOnKeyIndex int) (*httptest.Server, *[
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"sealed": false})
+		_ = json.NewEncoder(w).Encode(map[string]any{"sealed": false})
 	}))
 	return srv, received
 }
