@@ -6,6 +6,8 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
+# A saved plan which contains sensitive value of the plan in plain text.
+tfplan
 
 # Ansible
 .ansible/.lock
@@ -30,6 +32,8 @@ vault/data/*
 !vault/data/README.md
 vault/keys/
 vault/audit/
+# Rendered by the role workstation_libvirt from the declared listener addresses and ports.
+vault/vault.hcl
 tls/
 terraform/layers/foundation-vault-bastion/tls
 
@@ -39,8 +43,12 @@ terraform/layers/foundation-vault-bastion/tls
 platform-trust.json
 stdout.txt
 
+# Temporary
+README-zh-TW.md
+
 # IDEs
 .vscode
 .idea
 merge-request*.md
 note.md
+*.bak

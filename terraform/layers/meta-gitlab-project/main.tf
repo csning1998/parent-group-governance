@@ -1,5 +1,4 @@
 
-
 module "provisioner_gitlab_project" {
   # Resolves relative to the directory containing this file (terraform/layers/<this layer>),
   # two levels up to terraform/, then into modules/provisioner-gitlab-project.
