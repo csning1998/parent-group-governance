@@ -1,7 +1,4 @@
 
-module "local_credential_contexts" {
-  source = "../../modules/contexts-local-credential"
-}
 
 resource "gitlab_user_runner" "shared" {
   runner_type = "group_type"
