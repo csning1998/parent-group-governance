@@ -13,3 +13,15 @@ variable "github_owner" {
     error_message = "github_owner must be a GitHub login of 1 to 39 characters. A hyphen must not be the first or last character."
   }
 }
+
+variable "gitlab_project" {
+  description = "Basic items for GitLab project settings"
+  type = object({
+    visibility = string
+  })
+
+  validation {
+    condition     = contains(["public", "private", "internal"], var.gitlab_project.visibility)
+    error_message = "gitlab_project.visibility must be one of: public, private, internal."
+  }
+}
