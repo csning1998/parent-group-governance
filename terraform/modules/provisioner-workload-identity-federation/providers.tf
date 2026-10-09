@@ -22,9 +22,5 @@ terraform {
       source  = "hashicorp/google"
       version = "8.4.0"
     }
-    vault = {
-      source  = "hashicorp/vault"
-      version = "5.5.0"
-    }
   }
 }
