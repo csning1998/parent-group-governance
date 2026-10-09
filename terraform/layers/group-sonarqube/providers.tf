@@ -30,8 +30,7 @@ provider "sonarqube" {
   installed_version = "26.7.0.124771"
 }
 
+# The Bastion Vault. The .envrc of the layer supplies VAULT_ADDR, VAULT_CACERT, and the credential of the identity.
 provider "vault" {
-  alias        = "bastion"
-  address      = module.local_credential_contexts.bastion_vault_config.endpoint
-  ca_cert_file = module.local_credential_contexts.bastion_vault_config.ca_cert_path
+  alias = "bastion"
 }
