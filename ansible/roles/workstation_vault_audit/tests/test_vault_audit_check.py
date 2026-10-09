@@ -24,7 +24,7 @@ CONFIG = {
     "transit_mount": "transit-unseal",
     "transit_source_cidrs": ["172.16.127.0/24"],
 }
-UNSEAL_PATH = "transit-unseal/decrypt/meta-platform-vault-downstream"
+UNSEAL_PATH = "transit-unseal/decrypt/example-platform-vault-downstream"
 
 
 def build_response(
@@ -46,7 +46,7 @@ def build_response(
         ),
         pytest.param(
             build_response(
-                "transit-unseal/keys/meta-platform-vault-downstream", operation="read"
+                "transit-unseal/keys/example-platform-vault-downstream", operation="read"
             ),
             CONFIG,
             ["transit key administration"],
@@ -104,7 +104,7 @@ def build_response(
         ),
         pytest.param(
             build_response(
-                "sys/policies/acl/meta-platform-x",
+                "sys/policies/acl/example-platform-x",
                 operation="create",
                 error="1 error occurred: permission denied",
             ),
@@ -114,7 +114,7 @@ def build_response(
         ),
         pytest.param(
             build_response(
-                "auth/approle/role/meta-platform-x", error="permission denied"
+                "auth/approle/role/example-platform-x", error="permission denied"
             ),
             CONFIG,
             ["denied policy or role write"],
@@ -122,7 +122,7 @@ def build_response(
         ),
         pytest.param(
             build_response(
-                "sys/policies/acl/meta-platform-x",
+                "sys/policies/acl/example-platform-x",
                 operation="read",
                 error="permission denied",
             ),
