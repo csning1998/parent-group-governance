@@ -56,7 +56,7 @@ func TestReadKVv2Field(t *testing.T) {
 }
 
 func kvProdTokenHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/v1/secret/data/meta-platform/credentials" {
+	if r.URL.Path != "/v1/secret/data/example-platform/credentials" {
 		http.NotFound(w, r)
 		return
 	}
@@ -94,7 +94,7 @@ func TestTokenAuth(t *testing.T) {
 
 var sampleProdSecretRef = vaultclient.SecretRef{
 	Mount: "secret",
-	Path:  "meta-platform/credentials",
+	Path:  "example-platform/credentials",
 	Field: "prod_vault_root_token",
 }
 
