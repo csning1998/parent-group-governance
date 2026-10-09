@@ -1,0 +1,16 @@
+---
+- name: "E1. Create the user binary directory"
+  ansible.builtin.file:
+    path: "{{ _workstation_vault_proxy_home }}/.local/bin"
+    state: directory
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0755"
+
+- name: "E2. Install vault-proxy-env"
+  ansible.builtin.template:
+    src: vault-proxy-env.sh.j2
+    dest: "{{ _workstation_vault_proxy_home }}/.local/bin/vault-proxy-env"
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0755"

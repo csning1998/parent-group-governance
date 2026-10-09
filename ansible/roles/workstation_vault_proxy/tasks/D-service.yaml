@@ -1,0 +1,72 @@
+---
+- name: "D1. Render the Proxy configuration of each identity"
+  ansible.builtin.template:
+    src: proxy.hcl.j2
+    dest: "{{ _workstation_vault_proxy_base_dir }}/{{ item }}/proxy.hcl"
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0600"
+  vars:
+    _workstation_vault_proxy_identity_name: "{{ item }}"
+  loop: "{{ operator_proxy.identities.keys() | list }}"
+  register: _workstation_vault_proxy_configs
+
+- name: "D2. Create the systemd user unit directory"
+  ansible.builtin.file:
+    path: "{{ _workstation_vault_proxy_home }}/.config/systemd/user"
+    state: directory
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0755"
+
+- name: "D3. Install the templated Proxy unit"
+  ansible.builtin.template:
+    src: vault-proxy@.service.j2
+    dest: "{{ _workstation_vault_proxy_home }}/.config/systemd/user/vault-proxy@.service"
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0644"
+  register: _workstation_vault_proxy_unit
+
+# Lingering keeps the user manager running without a login session, hence the Proxies serve after a reboot.
+- name: "D4. Enable lingering for the operator"
+  ansible.builtin.command:
+    argv: [loginctl, enable-linger, "{{ workstation_vault_proxy_operator_user }}"]
+    creates: "/var/lib/systemd/linger/{{ workstation_vault_proxy_operator_user }}"
+
+- name: "D5. Enable and start the Proxy of each identity"
+  become: true
+  become_user: "{{ workstation_vault_proxy_operator_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ _workstation_vault_proxy_uid }}"
+  ansible.builtin.systemd_service:
+    name: "vault-proxy@{{ item }}.service"
+    scope: user
+    enabled: true
+    state: started
+    daemon_reload: "{{ _workstation_vault_proxy_unit.changed }}"
+  loop: "{{ operator_proxy.identities.keys() | list }}"
+
+# A new certificate, CA, or configuration takes effect after a restart of the affected Proxy.
+- name: "D6. Restart each Proxy whose certificates or configuration changed"
+  become: true
+  become_user: "{{ workstation_vault_proxy_operator_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ _workstation_vault_proxy_uid }}"
+  ansible.builtin.systemd_service:
+    name: "vault-proxy@{{ item }}.service"
+    scope: user
+    state: restarted
+  loop: "{{ operator_proxy.identities.keys() | list }}"
+  when: >-
+    _workstation_vault_proxy_ca_copy.changed
+    or _workstation_vault_proxy_unit.changed
+    or item in (_workstation_vault_proxy_changed | default([]))
+    or item in (_workstation_vault_proxy_configs.results | selectattr('changed') | map(attribute='item') | list)
+
+- name: "D7. Wait for the listener of each Proxy"
+  ansible.builtin.wait_for:
+    host: "{{ bastion_vault.loopback_address }}"
+    port: "{{ operator_proxy.identities[item].port }}"
+    timeout: 30
+  loop: "{{ operator_proxy.identities.keys() | list }}"

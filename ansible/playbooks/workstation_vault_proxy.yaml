@@ -1,0 +1,9 @@
+---
+- name: "Play [Vault Proxy]: Run one Vault Proxy per operator identity"
+  hosts: workstation
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../../workstation-topology.yaml
+  roles:
+    - workstation_vault_proxy

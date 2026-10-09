@@ -1,0 +1,37 @@
+---
+- name: "A1. Read the passwd entry of the operator"
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ workstation_vault_proxy_operator_user }}"
+
+- name: "A2. Derive the operator home, UID, shell, and the Proxy directory"
+  ansible.builtin.set_fact:
+    _workstation_vault_proxy_home: "{{ ansible_facts.getent_passwd[workstation_vault_proxy_operator_user][4] }}"
+    _workstation_vault_proxy_uid: "{{ ansible_facts.getent_passwd[workstation_vault_proxy_operator_user][1] }}"
+    _workstation_vault_proxy_shell: "{{ ansible_facts.getent_passwd[workstation_vault_proxy_operator_user][5] | basename }}"
+    _workstation_vault_proxy_base_dir: >-
+      {{ ansible_facts.getent_passwd[workstation_vault_proxy_operator_user][4] }}/{{ operator_proxy.config_dir }}
+
+- name: "A3. Create the Proxy directory of each identity, readable by the operator alone"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0700"
+  loop: >-
+    {{
+      [_workstation_vault_proxy_base_dir] +
+      (operator_proxy.identities.keys() | map('regex_replace', '^', _workstation_vault_proxy_base_dir ~ '/') | list)
+    }}
+
+# The copy keeps every caller off the repository path, and the source stays authoritative.
+- name: "A4. Copy the local CA certificate next to the identities"
+  ansible.builtin.copy:
+    src: "{{ workstation_vault_proxy_ca_dir }}/ca.pem"
+    dest: "{{ _workstation_vault_proxy_base_dir }}/ca.pem"
+    remote_src: true
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0644"
+  register: _workstation_vault_proxy_ca_copy

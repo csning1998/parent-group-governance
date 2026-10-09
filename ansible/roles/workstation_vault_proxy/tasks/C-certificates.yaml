@@ -1,0 +1,107 @@
+---
+# The client certificate authenticates the identity to the Bastion Vault and to its own Proxy listener.
+# The listener certificate serves the Proxy on the loopback address. The local CA of vault/tls signs both.
+- name: "C1. Declare the certificates of {{ _workstation_vault_proxy_identity.key }}"
+  ansible.builtin.set_fact:
+    _workstation_vault_proxy_certs:
+      - name: client
+        common_name: "operator-{{ _workstation_vault_proxy_identity.key }}"
+        subject_alt_name: []
+        extended_key_usage: [clientAuth]
+      - name: listener
+        common_name: "vault-proxy-{{ _workstation_vault_proxy_identity.key }}"
+        subject_alt_name: ["IP:{{ bastion_vault.loopback_address }}"]
+        extended_key_usage: [serverAuth]
+    _workstation_vault_proxy_identity_dir: >-
+      {{ _workstation_vault_proxy_base_dir }}/{{ _workstation_vault_proxy_identity.key }}
+
+- name: "C2. Generate the private keys"
+  community.crypto.openssl_privatekey:
+    path: "{{ _workstation_vault_proxy_identity_dir }}/{{ item.name }}-key.pem"
+    type: ECC
+    curve: secp256r1
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0600"
+  loop: "{{ _workstation_vault_proxy_certs }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Verification detects certificates invalidated by local CA rotation or approaching expiration.
+- name: "C3. Verify each existing certificate against the current local CA"
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - verify
+      - -CAfile
+      - "{{ workstation_vault_proxy_ca_dir }}/ca.pem"
+      - "{{ _workstation_vault_proxy_identity_dir }}/{{ item.name }}.pem"
+  register: _workstation_vault_proxy_verify
+  changed_when: false
+  failed_when: false
+  loop: "{{ _workstation_vault_proxy_certs }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "C4. Read the remaining validity of each existing certificate"
+  community.crypto.x509_certificate_info:
+    path: "{{ _workstation_vault_proxy_identity_dir }}/{{ item.name }}.pem"
+    valid_at:
+      renewal: "+{{ workstation_vault_proxy_cert.renew_days }}d"
+  register: _workstation_vault_proxy_info
+  failed_when: false
+  loop: "{{ _workstation_vault_proxy_certs }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "C5. Build the signing request of each certificate"
+  community.crypto.openssl_csr_pipe:
+    privatekey_path: "{{ _workstation_vault_proxy_identity_dir }}/{{ item.name }}-key.pem"
+    common_name: "{{ item.common_name }}"
+    subject_alt_name: "{{ item.subject_alt_name if item.subject_alt_name | length > 0 else omit }}"
+    key_usage: [digitalSignature]
+    extended_key_usage: "{{ item.extended_key_usage }}"
+  register: _workstation_vault_proxy_csr
+  changed_when: false
+  loop: "{{ _workstation_vault_proxy_certs }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "C6. Issue each certificate from the local CA"
+  community.crypto.x509_certificate:
+    path: "{{ _workstation_vault_proxy_identity_dir }}/{{ item.0.name }}.pem"
+    csr_content: "{{ item.3.csr }}"
+    provider: ownca
+    ownca_path: "{{ workstation_vault_proxy_ca_dir }}/ca.pem"
+    ownca_privatekey_path: "{{ workstation_vault_proxy_ca_dir }}/ca-key.pem"
+    ownca_not_after: "+{{ workstation_vault_proxy_cert.valid_days }}d"
+    force: >-
+      {{
+        item.1.rc != 0 or not (item.2.valid_at | default({})).get('renewal', false)
+      }}
+    owner: "{{ workstation_vault_proxy_operator_user }}"
+    group: "{{ workstation_vault_proxy_operator_user }}"
+    mode: "0644"
+  loop: >-
+    {{
+      _workstation_vault_proxy_certs | zip(
+        _workstation_vault_proxy_verify.results,
+        _workstation_vault_proxy_info.results,
+        _workstation_vault_proxy_csr.results
+      ) | list
+    }}
+  loop_control:
+    label: "{{ item.0.name }}"
+  register: _workstation_vault_proxy_issued
+
+- name: "C7. Record whether the identity needs a Proxy restart"
+  ansible.builtin.set_fact:
+    _workstation_vault_proxy_changed: >-
+      {{
+        (_workstation_vault_proxy_changed | default([])) +
+        (
+          [_workstation_vault_proxy_identity.key]
+          if (_workstation_vault_proxy_issued.results | selectattr('changed') | list | length > 0)
+          else []
+        )
+      }}
