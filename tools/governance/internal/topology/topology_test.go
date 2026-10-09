@@ -30,8 +30,8 @@ operator_vault_proxy:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if endpoint := got.BastionVault.Endpoint(); endpoint != "https://127.0.0.1:8200" {
-		t.Errorf("Endpoint() = %q, want https://127.0.0.1:8200", endpoint)
+	if endpoint := got.BastionVault.APIEndpoint(); endpoint != "https://127.0.0.1:8200" {
+		t.Errorf("APIEndpoint() = %q, want https://127.0.0.1:8200", endpoint)
 	}
 	want := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("172.16.0.1")}
 	if ips := got.BastionVault.ListenerIPs(); !slices.EqualFunc(ips, want, net.IP.Equal) {
@@ -70,7 +70,7 @@ func TestLoad_RejectsMalformedYAML(t *testing.T) {
 	}
 }
 
-func TestProxyEndpoint_LocatesTheIdentityOfAnAccess(t *testing.T) {
+func TestResolveProxyEndpoint_LocatesTheIdentityOfAnAccess(t *testing.T) {
 	path := writeTopology(t, `bastion_vault:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
@@ -91,9 +91,9 @@ operator_vault_proxy:
 		t.Fatalf("Load: %v", err)
 	}
 
-	got, err := topo.ProxyEndpoint("/home/u", "rotation")
+	got, err := topo.ResolveProxyEndpoint("/home/u", AccessRoleRotation)
 	if err != nil {
-		t.Fatalf("ProxyEndpoint: %v", err)
+		t.Fatalf("ResolveProxyEndpoint: %v", err)
 	}
 	want := ProxyEndpoint{
 		Identity:   "service-admin-passwords",
@@ -104,18 +104,18 @@ operator_vault_proxy:
 		Token:      "proxy-supplied",
 	}
 	if got != want {
-		t.Errorf("ProxyEndpoint = %+v, want %+v", got, want)
+		t.Errorf("ResolveProxyEndpoint = %+v, want %+v", got, want)
 	}
 }
 
-func TestProxyEndpoint_RequiresExactlyOneIdentity(t *testing.T) {
-	topo := Topology{OperatorVaultProxy: OperatorVaultProxy{Identities: map[string]ProxyIdentity{
+func TestResolveProxyEndpoint_RequiresExactlyOneIdentity(t *testing.T) {
+	topo := VaultTopology{OperatorVaultProxy: OperatorVaultProxy{Identities: map[string]ProxyIdentity{
 		"first":  {ListenPort: 1, AccessTier: "rotation"},
 		"second": {ListenPort: 2, AccessTier: "rotation"},
 	}}}
-	for _, access := range []string{"rotation", "foundation"} {
-		if _, err := topo.ProxyEndpoint("/home/u", access); err == nil {
-			t.Errorf("ProxyEndpoint(%s) error = nil, want a rejection", access)
+	for _, access := range []AccessRole{AccessRoleRotation, AccessRoleFoundation} {
+		if _, err := topo.ResolveProxyEndpoint("/home/u", access); err == nil {
+			t.Errorf("ResolveProxyEndpoint(%s) error = nil, want a rejection", access)
 		}
 	}
 }

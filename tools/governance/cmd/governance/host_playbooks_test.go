@@ -127,7 +127,7 @@ func TestRunHostPlaybooks_StopsAtTheFirstFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "workstation_libvirt.yaml") {
 		t.Fatalf("runHostAll error = %v, want the failing libvirt playbook", err)
 	}
-	if err != nil && strings.Contains(err.Error(), "example-become") {
+	if strings.Contains(err.Error(), "example-become") {
 		t.Errorf("runHostAll error = %v, want no become password", err)
 	}
 	want := []string{"playbooks/workstation_selinux.yaml", "playbooks/workstation_libvirt.yaml"}
@@ -158,7 +158,7 @@ func newHostFixture(t *testing.T, becomeAnswer, failOn string) *hostFixture {
 			root:       root,
 			home:       t.TempDir(),
 			ansibleDir: filepath.Join(root, "ansible"),
-			topology:   topology.Topology{BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200}},
+			topology:   topology.VaultTopology{BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200}},
 			out:        ui.New(io.Discard, io.Discard),
 			in:         bufio.NewReader(strings.NewReader(becomeAnswer + "\n")),
 		},

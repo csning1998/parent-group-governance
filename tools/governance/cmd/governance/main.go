@@ -21,7 +21,7 @@ type app struct {
 	root        string
 	home        string
 	ansibleDir  string
-	topology    topology.Topology
+	topology    topology.VaultTopology
 	credentials []credentials.Credential
 	env         *config.Env
 	out         *ui.Printer
