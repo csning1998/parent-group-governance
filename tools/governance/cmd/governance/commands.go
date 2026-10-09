@@ -25,12 +25,13 @@ func (a *app) newVaultCmd() *cobra.Command {
 		Short: "[Vault] Unseal Bastion Vault",
 		RunE:  func(cmd *cobra.Command, args []string) error { return a.unsealVault(cmd.Context()) },
 	})
-	cmd.AddCommand(&cobra.Command{
-		Use:   "tenant-session <tenant>",
-		Short: "[Vault] Open a shell holding a tenant operator token, revoked on exit",
-		Args:  cobra.ExactArgs(1),
-		RunE:  func(cmd *cobra.Command, args []string) error { return a.runTenantSession(cmd.Context(), args[0]) },
-	})
+	// Deprecated: tenant sessions are superseded by workstation Vault Proxies.
+	// cmd.AddCommand(&cobra.Command{
+	// 	Use:   "tenant-session <tenant>",
+	// 	Short: "[Vault] Open a shell holding a tenant operator token, revoked on exit",
+	// 	Args:  cobra.ExactArgs(1),
+	// 	RunE:  func(cmd *cobra.Command, args []string) error { return a.runTenantSession(cmd.Context(), args[0]) },
+	// })
 	for _, cred := range a.credentials {
 		key := cred.Key
 		cmd.AddCommand(&cobra.Command{

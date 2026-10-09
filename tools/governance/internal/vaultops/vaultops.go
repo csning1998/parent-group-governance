@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	vaultapi "github.com/hashicorp/vault/api"
 
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
@@ -22,17 +24,22 @@ type Paths struct {
 	AnsibleDir       string
 	Home             string
 	bastionVaultAddr string
+	listenerIPs      []net.IP
 }
 
-// NewPaths constructs Paths for a caller outside this package.
-func NewPaths(projectRoot, ansibleDir, home, bastionVaultAddr string) Paths {
+// NewPaths constructs Paths for a caller outside this package, with the Bastion Vault of workstation-topology.yaml.
+func NewPaths(projectRoot, ansibleDir, home string, bastion topology.BastionVault) Paths {
 	return Paths{
 		ProjectRoot:      projectRoot,
 		AnsibleDir:       ansibleDir,
 		Home:             home,
-		bastionVaultAddr: bastionVaultAddr,
+		bastionVaultAddr: bastion.Endpoint(),
+		listenerIPs:      bastion.ListenerIPs(),
 	}
 }
+
+// TLSDir returns the directory of the local CA and the Bastion Vault listener certificate.
+func (p Paths) TLSDir() string { return p.resolveTLSDir() }
 
 func (p Paths) resolveBastionAddr() string {
 	if p.bastionVaultAddr != "" {
