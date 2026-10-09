@@ -27,6 +27,81 @@ type Paths struct {
 	listenerIPs      []net.IP
 }
 
+// SealStatus records reachability, initialization, and seal state for one Vault instance.
+type SealStatus = vaultclient.SealStatus
+
+// EnableKVEngine enables the kv-v2 secrets engine at secret/ if not already mounted.
+func EnableKVEngine(ctx context.Context, p Paths, out *ui.Printer) error {
+	token := vaultclient.ReadTokenFile(p.Home)
+	if token == "" {
+		return fmt.Errorf("vaultops: root token not found at %s", p.resolveRootTokenFile())
+	}
+	client, err := p.newBastionClientWithToken(token)
+	if err != nil {
+		return err
+	}
+
+	mounts, err := client.Sys().ListMountsWithContext(ctx)
+	if err == nil {
+		if _, exists := mounts["secret/"]; exists {
+			out.Print(ui.Info, "kv-v2 secrets engine is already enabled.")
+			return nil
+		}
+	}
+
+	out.Print(ui.Task, "'secret/' path not found, enabling kv-v2...")
+	if err := client.Sys().MountWithContext(ctx, "secret", &vaultapi.MountInput{Type: "kv-v2"}); err != nil {
+		return fmt.Errorf("vaultops: enable kv-v2: %w", err)
+	}
+	return nil
+}
+
+// Init initializes Bastion Vault with Shamir secret shares, persists unseal keys, and performs initial unseal.
+func Init(ctx context.Context, p Paths, out *ui.Printer) error {
+	if _, err := os.Stat(p.resolveInitFile()); err == nil {
+		return fmt.Errorf("vaultops: %s already exists, refusing to re-init", p.resolveInitFile())
+	}
+
+	client, err := p.newBastionClientWithToken("")
+	if err != nil {
+		return err
+	}
+	resp, err := client.Sys().InitWithContext(ctx, &vaultapi.InitRequest{SecretShares: 5, SecretThreshold: 3})
+	if err != nil {
+		return fmt.Errorf("vaultops: vault init against %s: %w", p.resolveBastionAddr(), err)
+	}
+
+	if err := persistInitOutput(p, resp); err != nil {
+		return err
+	}
+
+	out.Print(ui.Info, "Keys saved to "+p.resolveKeysDir())
+
+	if err := persistBootstrapRootToken(p); err != nil {
+		return err
+	}
+	if err := UnsealBastion(ctx, p, out); err != nil {
+		return fmt.Errorf("vaultops: auto-unseal after init: %w", err)
+	}
+
+	out.Print(ui.OK, "Bastion Vault is ready for use.")
+	return nil
+}
+
+// InspectBastionStatus queries the full seal status of Bastion Vault.
+func InspectBastionStatus(ctx context.Context, p Paths) SealStatus {
+	return InspectTargetStatus(ctx, p.resolveBastionAddr(), p.resolveCACertFile())
+}
+
+// InspectTargetStatus queries the Vault instance at addr, verifying its TLS certificate against
+// caCert. A zero SealStatus means the instance did not response.
+func InspectTargetStatus(ctx context.Context, addr, caCert string) SealStatus {
+	return vaultclient.InspectStatus(ctx, vaultclient.Config{
+		Address:    addr,
+		CACertPath: caCert,
+	})
+}
+
 // NewPaths constructs Paths for a caller outside this package, with the Bastion Vault of workstation-topology.yaml.
 func NewPaths(projectRoot, ansibleDir, home string, bastion topology.BastionVault) Paths {
 	return Paths{
@@ -38,52 +113,6 @@ func NewPaths(projectRoot, ansibleDir, home string, bastion topology.BastionVaul
 	}
 }
 
-// TLSDir returns the directory of the local CA and the Bastion Vault listener certificate.
-func (p Paths) TLSDir() string { return p.resolveTLSDir() }
-
-func (p Paths) resolveBastionAddr() string {
-	if p.bastionVaultAddr != "" {
-		return p.bastionVaultAddr
-	}
-	return "https://127.0.0.1:8200"
-}
-
-func (p Paths) resolveKeysDir() string       { return filepath.Join(p.ProjectRoot, "vault", "keys") }
-func (p Paths) resolveTLSDir() string        { return filepath.Join(p.ProjectRoot, "vault", "tls") }
-func (p Paths) resolveInitFile() string      { return filepath.Join(p.resolveKeysDir(), "init-output.json") }
-func (p Paths) resolveUnsealKeyFile() string { return filepath.Join(p.resolveKeysDir(), "unseal.key") }
-func (p Paths) resolveRootTokenFile() string { return filepath.Join(p.Home, ".vault-token") }
-func (p Paths) resolveCACertFile() string    { return filepath.Join(p.resolveTLSDir(), "ca.pem") }
-
-func newClient(addr, caCertPath, token string) (*vaultapi.Client, error) {
-	return vaultclient.NewClient(vaultclient.Config{
-		Address:    addr,
-		CACertPath: caCertPath,
-		Token:      token,
-	})
-}
-
-func (p Paths) newBastionClientWithToken(token string) (*vaultapi.Client, error) {
-	return newClient(p.resolveBastionAddr(), p.resolveCACertFile(), token)
-}
-
-// SealStatus records reachability, initialization, and seal state for one Vault instance.
-type SealStatus = vaultclient.SealStatus
-
-// InspectTargetStatus queries the Vault instance at addr, verifying its TLS certificate against
-// caCert. A zero SealStatus means the instance did not response.
-func InspectTargetStatus(ctx context.Context, addr, caCert string) SealStatus {
-	return vaultclient.InspectStatus(ctx, vaultclient.Config{
-		Address:    addr,
-		CACertPath: caCert,
-	})
-}
-
-// InspectBastionStatus queries the full seal status of Bastion Vault.
-func InspectBastionStatus(ctx context.Context, p Paths) SealStatus {
-	return InspectTargetStatus(ctx, p.resolveBastionAddr(), p.resolveCACertFile())
-}
-
 // ProbeBastionState checks whether Bastion Vault is reachable and reports its sealed state.
 func ProbeBastionState(ctx context.Context, p Paths) (running, sealed bool, err error) {
 	client, err := p.newBastionClientWithToken("")
@@ -93,29 +122,64 @@ func ProbeBastionState(ctx context.Context, p Paths) (running, sealed bool, err 
 	return vaultclient.ProbeState(ctx, client)
 }
 
-// SyncVaultToken extracts the root token from the initialization file or existing token file and updates the environment.
-func SyncVaultToken(p Paths, env interface{ Set(string, string) }) (string, error) {
-	if err := copyInitTokenIfPresent(p); err != nil {
-		return "", err
+// UnsealBastion applies stored unseal keys to Bastion Vault until the sealed flag clears.
+func UnsealBastion(ctx context.Context, p Paths, out *ui.Printer) error {
+	keysRaw, err := os.ReadFile(p.resolveUnsealKeyFile())
+	if err != nil {
+		return fmt.Errorf("vaultops: unseal keys not found at %s, run Init first: %w", p.resolveUnsealKeyFile(), err)
 	}
 
-	token, err := vaultclient.SyncSessionToken(p.Home, env)
+	if _, sealed, err := ProbeBastionState(ctx, p); err == nil && !sealed {
+		out.Print(ui.Info, "Bastion Vault is already unsealed.")
+		return nil
+	}
+
+	client, err := p.newBastionClientWithToken("")
 	if err != nil {
-		return "", err
+		return err
 	}
-	if token != "" {
-		return token, nil
+	if err := applyUnsealKeys(ctx, client, keysRaw); err != nil {
+		return err
 	}
-	if _, err := os.Stat(p.resolveInitFile()); err == nil {
-		return "", fmt.Errorf("vaultops: failed to extract a valid token")
+	if err := waitUntilUnsealed(ctx, p, 10*time.Second); err != nil {
+		return err
 	}
-	return token, nil
+
+	out.Print(ui.OK, "Bastion Vault Unsealed and ready.")
+	return nil
 }
 
-func copyInitTokenIfPresent(p Paths) error {
+// TLSDir returns the directory of the local CA and the Bastion Vault listener certificate.
+func (p Paths) TLSDir() string { return p.resolveTLSDir() }
+
+// applyUnsealKeys submits every non-blank line of keysRaw to the Vault unseal endpoint in order.
+func applyUnsealKeys(ctx context.Context, client *vaultapi.Client, keysRaw []byte) error {
+	for _, key := range strings.Split(strings.TrimSpace(string(keysRaw)), "\n") {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, err := client.Sys().UnsealWithContext(ctx, key); err != nil {
+			return fmt.Errorf("vaultops: unseal: %w", err)
+		}
+	}
+	return nil
+}
+
+func newClient(addr, caCertPath, token string) (*vaultapi.Client, error) {
+	return vaultclient.NewClient(vaultclient.Config{
+		Address:    addr,
+		CACertPath: caCertPath,
+		Token:      token,
+	})
+}
+
+// persistBootstrapRootToken writes the root token of the initialization to the token helper file, which the bootstrap
+// steps read until RevokeRoot.
+func persistBootstrapRootToken(p Paths) error {
 	data, err := os.ReadFile(p.resolveInitFile())
 	if err != nil {
-		return nil
+		return fmt.Errorf("vaultops: read %s: %w", p.resolveInitFile(), err)
 	}
 	var init struct {
 		RootToken string `json:"root_token"`
@@ -150,79 +214,6 @@ func persistInitOutput(p Paths, resp *vaultapi.InitResponse) error {
 	return nil
 }
 
-// Init initializes Bastion Vault with Shamir secret shares, persists unseal keys, and performs initial unseal.
-func Init(ctx context.Context, p Paths, out *ui.Printer, env interface{ Set(string, string) }) error {
-	if _, err := os.Stat(p.resolveInitFile()); err == nil {
-		return fmt.Errorf("vaultops: %s already exists, refusing to re-init", p.resolveInitFile())
-	}
-
-	client, err := p.newBastionClientWithToken("")
-	if err != nil {
-		return err
-	}
-	resp, err := client.Sys().InitWithContext(ctx, &vaultapi.InitRequest{SecretShares: 5, SecretThreshold: 3})
-	if err != nil {
-		return fmt.Errorf("vaultops: vault init against %s: %w", p.resolveBastionAddr(), err)
-	}
-
-	if err := persistInitOutput(p, resp); err != nil {
-		return err
-	}
-
-	out.Print(ui.Info, "Keys saved to "+p.resolveKeysDir())
-
-	if _, err := SyncVaultToken(p, env); err != nil {
-		return err
-	}
-	if err := UnsealBastion(ctx, p, out, env); err != nil {
-		return fmt.Errorf("vaultops: auto-unseal after init: %w", err)
-	}
-
-	out.Print(ui.OK, "Bastion Vault is ready for use.")
-	return nil
-}
-
-// UnsealBastion applies stored unseal keys to Bastion Vault until the sealed flag clears.
-func UnsealBastion(ctx context.Context, p Paths, out *ui.Printer, env interface{ Set(string, string) }) error {
-	keysRaw, err := os.ReadFile(p.resolveUnsealKeyFile())
-	if err != nil {
-		return fmt.Errorf("vaultops: unseal keys not found at %s, run Init first: %w", p.resolveUnsealKeyFile(), err)
-	}
-
-	if _, sealed, err := ProbeBastionState(ctx, p); err == nil && !sealed {
-		out.Print(ui.Info, "Bastion Vault is already unsealed.")
-		return nil
-	}
-
-	client, err := p.newBastionClientWithToken("")
-	if err != nil {
-		return err
-	}
-	if err := applyUnsealKeys(ctx, client, keysRaw); err != nil {
-		return err
-	}
-	if err := waitUntilUnsealed(ctx, p, 10*time.Second); err != nil {
-		return err
-	}
-
-	out.Print(ui.OK, "Bastion Vault Unsealed and ready.")
-	return syncSessionTokenIfPresent(p, out, env)
-}
-
-// applyUnsealKeys submits every non-blank line of keysRaw to the Vault unseal endpoint in order.
-func applyUnsealKeys(ctx context.Context, client *vaultapi.Client, keysRaw []byte) error {
-	for _, key := range strings.Split(strings.TrimSpace(string(keysRaw)), "\n") {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		if _, err := client.Sys().UnsealWithContext(ctx, key); err != nil {
-			return fmt.Errorf("vaultops: unseal: %w", err)
-		}
-	}
-	return nil
-}
-
 // waitUntilUnsealed polls the Bastion Vault sealed flag until the flag clears or timeout elapses.
 func waitUntilUnsealed(ctx context.Context, p Paths, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
@@ -235,50 +226,20 @@ func waitUntilUnsealed(ctx context.Context, p Paths, timeout time.Duration) erro
 	return fmt.Errorf("vaultops: still reporting sealed after %v of unseal attempts", timeout)
 }
 
-// syncSessionTokenIfPresent copies the root token into env when Init has already written one.
-func syncSessionTokenIfPresent(p Paths, out *ui.Printer, env interface{ Set(string, string) }) error {
-	if _, statErr := os.Stat(p.resolveRootTokenFile()); statErr != nil {
-		return nil
-	}
-	if _, err := SyncVaultToken(p, env); err != nil {
-		return err
-	}
-	out.Print(ui.Info, "Vault environment variables set for this session.")
-	return nil
+func (p Paths) newBastionClientWithToken(token string) (*vaultapi.Client, error) {
+	return newClient(p.resolveBastionAddr(), p.resolveCACertFile(), token)
 }
 
-// EnableKVEngine enables the kv-v2 secrets engine at secret/ if not already mounted.
-func EnableKVEngine(ctx context.Context, p Paths, out *ui.Printer) error {
-	token := vaultclient.ReadTokenFile(p.Home)
-	if token == "" {
-		return fmt.Errorf("vaultops: root token not found at %s", p.resolveRootTokenFile())
-	}
-	client, err := p.newBastionClientWithToken(token)
-	if err != nil {
-		return err
-	}
+func (p Paths) resolveBastionAddr() string { return p.bastionVaultAddr }
 
-	mounts, err := client.Sys().ListMountsWithContext(ctx)
-	if err == nil {
-		if _, exists := mounts["secret/"]; exists {
-			out.Print(ui.Info, "kv-v2 secrets engine is already enabled.")
-			return nil
-		}
-	}
+func (p Paths) resolveCACertFile() string { return filepath.Join(p.resolveTLSDir(), "ca.pem") }
 
-	out.Print(ui.Task, "'secret/' path not found, enabling kv-v2...")
-	if err := client.Sys().MountWithContext(ctx, "secret", &vaultapi.MountInput{Type: "kv-v2"}); err != nil {
-		return fmt.Errorf("vaultops: enable kv-v2: %w", err)
-	}
-	return nil
-}
+func (p Paths) resolveInitFile() string { return filepath.Join(p.resolveKeysDir(), "init-output.json") }
 
-// NewAuthenticatedBastionClient builds a Bastion Vault client authenticated with the root token persisted at
-// Paths' resolveRootTokenFile location.
-func NewAuthenticatedBastionClient(p Paths) (*vaultapi.Client, error) {
-	token := vaultclient.ReadTokenFile(p.Home)
-	if token == "" {
-		return nil, fmt.Errorf("vaultops: root token not found at %s", p.resolveRootTokenFile())
-	}
-	return p.newBastionClientWithToken(token)
-}
+func (p Paths) resolveKeysDir() string { return filepath.Join(p.ProjectRoot, "vault", "keys") }
+
+func (p Paths) resolveRootTokenFile() string { return filepath.Join(p.Home, ".vault-token") }
+
+func (p Paths) resolveTLSDir() string { return filepath.Join(p.ProjectRoot, "vault", "tls") }
+
+func (p Paths) resolveUnsealKeyFile() string { return filepath.Join(p.resolveKeysDir(), "unseal.key") }

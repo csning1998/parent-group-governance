@@ -20,12 +20,23 @@ func TestInitRefusesReinitWhenInitFileExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := Init(context.Background(), p, discardOut(), newFakeEnv())
+	err := Init(context.Background(), p, discardOut())
 	if err == nil {
 		t.Fatal("Init: want error, got nil")
 	}
 	if !strings.Contains(err.Error(), "already exists, refusing to re-init") {
 		t.Errorf("error = %q, want it to contain %q", err.Error(), "already exists, refusing to re-init")
+	}
+}
+
+func TestPersistInitOutputRejectsEmptyUnsealKeys(t *testing.T) {
+	root := t.TempDir()
+	p := Paths{ProjectRoot: root, Home: t.TempDir()}
+	resp := &vaultapi.InitResponse{RootToken: "s.root"}
+
+	err := persistInitOutput(p, resp)
+	if err == nil || !strings.Contains(err.Error(), "no unseal keys in init response") {
+		t.Fatalf("persistInitOutput with no keys = %v, want error containing %q", err, "no unseal keys in init response")
 	}
 }
 
@@ -43,23 +54,12 @@ func TestPersistInitOutputRestrictsPermissions(t *testing.T) {
 	assertMode(t, p.resolveUnsealKeyFile(), 0o600)
 }
 
-func TestPersistInitOutputRejectsEmptyUnsealKeys(t *testing.T) {
-	root := t.TempDir()
-	p := Paths{ProjectRoot: root, Home: t.TempDir()}
-	resp := &vaultapi.InitResponse{RootToken: "s.root"}
-
-	err := persistInitOutput(p, resp)
-	if err == nil || !strings.Contains(err.Error(), "no unseal keys in init response") {
-		t.Fatalf("persistInitOutput with no keys = %v, want error containing %q", err, "no unseal keys in init response")
-	}
-}
-
 func TestUnsealBastionFailsWhenUnsealKeyFileMissing(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
 	p := Paths{ProjectRoot: root, Home: home}
 
-	err := UnsealBastion(context.Background(), p, discardOut(), newFakeEnv())
+	err := UnsealBastion(context.Background(), p, discardOut())
 	if err == nil {
 		t.Fatal("UnsealBastion: want error, got nil")
 	}
@@ -68,19 +68,5 @@ func TestUnsealBastionFailsWhenUnsealKeyFileMissing(t *testing.T) {
 		!strings.Contains(err.Error(), "run Init first") {
 		t.Errorf("error = %q, want it to contain resolveUnsealKeyFile path, %q and %q",
 			err.Error(), "unseal keys not found at", "run Init first")
-	}
-}
-
-func TestNewAuthenticatedBastionClientRootTokenFileNotFound(t *testing.T) {
-	root := t.TempDir()
-	home := t.TempDir()
-	p := Paths{ProjectRoot: root, Home: home}
-
-	_, err := NewAuthenticatedBastionClient(p)
-	if err == nil {
-		t.Fatal("NewAuthenticatedBastionClient: want error, got nil")
-	}
-	if !strings.Contains(err.Error(), "root token not found at") {
-		t.Errorf("error = %q, want it to contain %q", err.Error(), "root token not found at")
 	}
 }

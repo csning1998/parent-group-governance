@@ -11,70 +11,20 @@ import (
 	"testing"
 )
 
-func newLiveTestPaths(t *testing.T, bastionAddr string) Paths {
-	t.Helper()
-	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir(), bastionVaultAddr: bastionAddr}
-	if err := GenerateTLS(context.Background(), p, discardOut()); err != nil {
-		t.Fatalf("GenerateTLS: %v", err)
-	}
-	return p
-}
-
-func fakeSealStatusHandler(sequence ...bool) http.HandlerFunc {
-	var call int32
-	return func(w http.ResponseWriter, r *http.Request) {
-		idx := int(atomic.AddInt32(&call, 1)) - 1
-		sealed := sequence[len(sequence)-1]
-		if idx < len(sequence) {
-			sealed = sequence[idx]
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"initialized": true, "sealed": sealed})
-	}
-}
-
-func fakeInitHandler(rootToken string, unsealKeys []string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"keys": unsealKeys, "keys_base64": unsealKeys, "root_token": rootToken,
-		})
-	}
-}
-
-func fakeUnsealHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"sealed": false})
-	}
-}
-
-func fakeVaultErrorHandler(status int) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"errors": []string{"boom"}})
-	}
-}
-
-func TestInitSyncsTokenOnSuccess(t *testing.T) {
+func TestInitFailsWhenInitResponseHasNoUnsealKeys(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/sys/init", fakeInitHandler("hvs.faketoken", []string{"a2V5MQ==", "a2V5Mg==", "a2V5Mw=="}))
-	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(false))
+	mux.HandleFunc("/v1/sys/init", fakeInitHandler("hvs.faketoken", nil))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	p := newLiveTestPaths(t, srv.URL)
-	env := newFakeEnv()
 
-	if err := Init(context.Background(), p, discardOut(), env); err != nil {
-		t.Fatalf("Init: %v", err)
+	err := Init(context.Background(), p, discardOut())
+	if err == nil || !strings.Contains(err.Error(), "no unseal keys in init response") {
+		t.Fatalf("Init = %v, want error containing %q", err, "no unseal keys in init response")
 	}
-	if env.kv["VAULT_TOKEN"] != "hvs.faketoken" {
-		t.Errorf("env.Set(VAULT_TOKEN) = %v, want hvs.faketoken", env.kv)
-	}
-	data, err := os.ReadFile(p.resolveRootTokenFile())
-	if err != nil || string(data) != "hvs.faketoken" {
-		t.Errorf("resolveRootTokenFile content = %q, err %v, want hvs.faketoken", data, err)
+	if _, statErr := os.Stat(p.resolveRootTokenFile()); statErr == nil {
+		t.Error("resolveRootTokenFile was written despite a failed initialization")
 	}
 }
 
@@ -85,35 +35,70 @@ func TestInitFailsWhenVaultInitAPIErrors(t *testing.T) {
 	defer srv.Close()
 
 	p := newLiveTestPaths(t, srv.URL)
-	env := newFakeEnv()
 
-	err := Init(context.Background(), p, discardOut(), env)
+	err := Init(context.Background(), p, discardOut())
 	if err == nil {
 		t.Fatal("Init: want error, got nil")
 	}
 	if _, statErr := os.Stat(p.resolveInitFile()); statErr == nil {
 		t.Error("resolveInitFile was created despite a failed Vault init API call")
 	}
-	if len(env.kv) != 0 {
-		t.Errorf("env.Set was called: %v", env.kv)
+	if _, statErr := os.Stat(p.resolveRootTokenFile()); statErr == nil {
+		t.Error("resolveRootTokenFile was written despite a failed initialization")
 	}
 }
 
-func TestInitFailsWhenInitResponseHasNoUnsealKeys(t *testing.T) {
+func TestInitWritesTheBootstrapRootToken(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/sys/init", fakeInitHandler("hvs.faketoken", nil))
+	mux.HandleFunc("/v1/sys/init", fakeInitHandler("hvs.faketoken", []string{"a2V5MQ==", "a2V5Mg==", "a2V5Mw=="}))
+	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(false))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	p := newLiveTestPaths(t, srv.URL)
-	env := newFakeEnv()
 
-	err := Init(context.Background(), p, discardOut(), env)
-	if err == nil || !strings.Contains(err.Error(), "no unseal keys in init response") {
-		t.Fatalf("Init = %v, want error containing %q", err, "no unseal keys in init response")
+	if err := Init(context.Background(), p, discardOut()); err != nil {
+		t.Fatalf("Init: %v", err)
 	}
-	if len(env.kv) != 0 {
-		t.Errorf("env.Set was called: %v", env.kv)
+	data, err := os.ReadFile(p.resolveRootTokenFile())
+	if err != nil || string(data) != "hvs.faketoken" {
+		t.Errorf("resolveRootTokenFile content = %q, err %v, want hvs.faketoken", data, err)
+	}
+}
+
+func TestInspectBastionStatusReachableSealed(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(true))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	p := newLiveTestPaths(t, srv.URL)
+
+	got := InspectBastionStatus(context.Background(), p)
+	want := SealStatus{Reachable: true, Initialized: true, Sealed: true}
+	if got != want {
+		t.Errorf("InspectBastionStatus = %+v, want %+v", got, want)
+	}
+}
+
+func TestInspectBastionStatusUnreachableReturnsZeroValue(t *testing.T) {
+	p := newLiveTestPaths(t, "http://127.0.0.1:1")
+
+	got := InspectBastionStatus(context.Background(), p)
+	if got != (SealStatus{}) {
+		t.Errorf("InspectBastionStatus = %+v, want zero value", got)
+	}
+}
+
+func TestProbeBastionStateUnreachableConnectionRefused(t *testing.T) {
+	p := newLiveTestPaths(t, "http://127.0.0.1:1")
+
+	running, sealed, err := ProbeBastionState(context.Background(), p)
+	if err != nil {
+		t.Fatalf("ProbeBastionState: want nil error, got %v", err)
+	}
+	if running || sealed {
+		t.Errorf("ProbeBastionState = (%v, %v), want (false, false)", running, sealed)
 	}
 }
 
@@ -133,17 +118,37 @@ func TestUnsealBastionAlreadyUnsealedDoesNotSyncToken(t *testing.T) {
 	if err := os.WriteFile(p.resolveInitFile(), []byte(`{"root_token":"hvs.shouldnotsync"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	env := newFakeEnv()
 
-	if err := UnsealBastion(context.Background(), p, discardOut(), env); err != nil {
+	if err := UnsealBastion(context.Background(), p, discardOut()); err != nil {
 		t.Fatalf("UnsealBastion: %v", err)
 	}
-	if len(env.kv) != 0 {
-		t.Errorf("env.Set was called on the already-unsealed fast path: %v", env.kv)
+	if _, statErr := os.Stat(p.resolveRootTokenFile()); statErr == nil {
+		t.Error("resolveRootTokenFile was written on the already-unsealed fast path")
 	}
 }
 
-func TestUnsealBastionSyncsTokenAfterActuallyUnsealing(t *testing.T) {
+func TestUnsealBastionFailsWhenUnsealAPIErrors(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(true))
+	mux.HandleFunc("/v1/sys/unseal", fakeVaultErrorHandler(http.StatusInternalServerError))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	p := newLiveTestPaths(t, srv.URL)
+	if err := os.MkdirAll(p.resolveKeysDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p.resolveUnsealKeyFile(), []byte("key1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := UnsealBastion(context.Background(), p, discardOut())
+	if err == nil || !strings.Contains(err.Error(), "vaultops: unseal:") {
+		t.Fatalf("UnsealBastion = %v, want error containing %q", err, "vaultops: unseal:")
+	}
+}
+
+func TestUnsealBastionKeepsTheTokenHelperFile(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(true, false))
 	mux.HandleFunc("/v1/sys/unseal", fakeUnsealHandler())
@@ -163,74 +168,58 @@ func TestUnsealBastionSyncsTokenAfterActuallyUnsealing(t *testing.T) {
 	if err := os.WriteFile(p.resolveRootTokenFile(), []byte("hvs.staletoken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	env := newFakeEnv()
 
-	if err := UnsealBastion(context.Background(), p, discardOut(), env); err != nil {
+	if err := UnsealBastion(context.Background(), p, discardOut()); err != nil {
 		t.Fatalf("UnsealBastion: %v", err)
 	}
-	if env.kv["VAULT_TOKEN"] != "hvs.freshtoken" {
-		t.Errorf("env.Set(VAULT_TOKEN) = %v, want hvs.freshtoken", env.kv)
-	}
+	// An unseal never restores a root token, since revoke-root leaves the token helper file to the operator.
 	data, err := os.ReadFile(p.resolveRootTokenFile())
-	if err != nil || string(data) != "hvs.freshtoken" {
-		t.Errorf("resolveRootTokenFile content = %q, err %v, want hvs.freshtoken", data, err)
+	if err != nil || string(data) != "hvs.staletoken" {
+		t.Errorf("resolveRootTokenFile content = %q, err %v, want the untouched hvs.staletoken", data, err)
 	}
 }
 
-func TestUnsealBastionFailsWhenUnsealAPIErrors(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(true))
-	mux.HandleFunc("/v1/sys/unseal", fakeVaultErrorHandler(http.StatusInternalServerError))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	p := newLiveTestPaths(t, srv.URL)
-	if err := os.MkdirAll(p.resolveKeysDir(), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(p.resolveUnsealKeyFile(), []byte("key1\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	env := newFakeEnv()
-
-	err := UnsealBastion(context.Background(), p, discardOut(), env)
-	if err == nil || !strings.Contains(err.Error(), "vaultops: unseal:") {
-		t.Fatalf("UnsealBastion = %v, want error containing %q", err, "vaultops: unseal:")
+func fakeInitHandler(rootToken string, unsealKeys []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"keys": unsealKeys, "keys_base64": unsealKeys, "root_token": rootToken,
+		})
 	}
 }
 
-func TestProbeBastionStateUnreachableConnectionRefused(t *testing.T) {
-	p := newLiveTestPaths(t, "http://127.0.0.1:1")
-
-	running, sealed, err := ProbeBastionState(context.Background(), p)
-	if err != nil {
-		t.Fatalf("ProbeBastionState: want nil error, got %v", err)
-	}
-	if running || sealed {
-		t.Errorf("ProbeBastionState = (%v, %v), want (false, false)", running, sealed)
-	}
-}
-
-func TestInspectBastionStatusUnreachableReturnsZeroValue(t *testing.T) {
-	p := newLiveTestPaths(t, "http://127.0.0.1:1")
-
-	got := InspectBastionStatus(context.Background(), p)
-	if got != (SealStatus{}) {
-		t.Errorf("InspectBastionStatus = %+v, want zero value", got)
+func fakeSealStatusHandler(sequence ...bool) http.HandlerFunc {
+	var call int32
+	return func(w http.ResponseWriter, r *http.Request) {
+		idx := int(atomic.AddInt32(&call, 1)) - 1
+		sealed := sequence[len(sequence)-1]
+		if idx < len(sequence) {
+			sealed = sequence[idx]
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"initialized": true, "sealed": sealed})
 	}
 }
 
-func TestInspectBastionStatusReachableSealed(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(true))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	p := newLiveTestPaths(t, srv.URL)
-
-	got := InspectBastionStatus(context.Background(), p)
-	want := SealStatus{Reachable: true, Initialized: true, Sealed: true}
-	if got != want {
-		t.Errorf("InspectBastionStatus = %+v, want %+v", got, want)
+func fakeUnsealHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"sealed": false})
 	}
+}
+
+func fakeVaultErrorHandler(status int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"errors": []string{"boom"}})
+	}
+}
+
+func newLiveTestPaths(t *testing.T, bastionAddr string) Paths {
+	t.Helper()
+	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir(), bastionVaultAddr: bastionAddr, listenerIPs: testBastion.ListenerIPs()}
+	if err := GenerateTLS(context.Background(), p, discardOut()); err != nil {
+		t.Fatalf("GenerateTLS: %v", err)
+	}
+	return p
 }
