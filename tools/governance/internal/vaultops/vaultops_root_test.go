@@ -40,6 +40,7 @@ func TestClearInitRootToken(t *testing.T) {
 		}
 	})
 	t.Run("read only file", func(t *testing.T) {
+		skipWhenRoot(t)
 		p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
 		writeInitFile(t, p, `{"root_token":"s.root","keys":["a"]}`)
 		if err := os.Chmod(p.resolveInitFile(), 0o444); err != nil {
