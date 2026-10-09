@@ -68,7 +68,7 @@
   ansible.builtin.assert:
     that:
       - _workstation_libvirt_policy_info.stdout is search('^\s*services:\s*dhcp dhcpv6 dns\s*$', multiline=true)
-      - _workstation_libvirt_policy_info.stdout is search('port="' ~ bastion_vault.port ~ '"')
+      - _workstation_libvirt_policy_info.stdout is search('port="' ~ bastion_vault.api_port ~ '"')
     fail_msg: >-
       The runtime policy libvirt-to-host does not match the declared service set (dhcp, dhcpv6, dns) and the
       Bastion Vault rich rule. Compare against the rendered libvirt-to-host.xml.j2 and rerun C1 and C3.

@@ -25,7 +25,8 @@ func (a *app) buildMenuOptions() []menuOption {
 		{"[Vault] Initialize Bastion Vault", func(ctx context.Context) error { return a.initVault(ctx) }},
 		{"[Vault] Enable KV-v2 Engine", func(ctx context.Context) error { return a.enableVaultKV(ctx) }},
 		{"[Vault] Unseal Bastion Vault", func(ctx context.Context) error { return a.unsealVault(ctx) }},
-		{"[Vault] Open Tenant Operator Session", func(ctx context.Context) error { return a.runTenantSessionMenu(ctx) }},
+		// Deprecated: tenant sessions are superseded by workstation Vault Proxies.
+		// {"[Vault] Open Tenant Operator Session", func(ctx context.Context) error { return a.runTenantSessionMenu(ctx) }},
 	}
 	if len(a.credentials) > 0 {
 		options = append(options,

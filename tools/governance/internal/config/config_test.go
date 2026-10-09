@@ -10,16 +10,6 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 )
 
-func TestLoadMissingFileYieldsEmptyEnv(t *testing.T) {
-	e, err := Load(filepath.Join(t.TempDir(), "does-not-exist.env"))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got := e.Get("ANYTHING"); got != "" {
-		t.Errorf("Get on empty Env = %q, want empty", got)
-	}
-}
-
 func TestBootstrapEnvFirstRun(t *testing.T) {
 	root := t.TempDir()
 	out := ui.New(io.Discard, io.Discard)
@@ -31,12 +21,6 @@ func TestBootstrapEnvFirstRun(t *testing.T) {
 
 	if got := e.Get(KeyProjectRoot); got != root {
 		t.Errorf("PROJECT_ROOT = %q, want %q", got, root)
-	}
-	if got := e.Get(KeyBastionVaultAddr); got != "https://127.0.0.1:8200" {
-		t.Errorf("BASTION_VAULT_ADDR = %q", got)
-	}
-	if got := e.Get(KeyBastionVaultCACert); got != "${PROJECT_ROOT}/vault/tls/ca.pem" {
-		t.Errorf("BASTION_VAULT_CACERT = %q", got)
 	}
 	if got := e.Get(KeySonarQubeDBPassword); got == "" {
 		t.Error("SONARQUBE_DB_PASSWORD = empty, want a generated password")
@@ -67,6 +51,16 @@ func TestBootstrapEnvGeneratesSonarDBPasswordWhenMissingFromExistingFile(t *test
 	}
 	if got := e.Get(KeySonarQubeDBPassword); got == "" {
 		t.Error("SONARQUBE_DB_PASSWORD = empty, want a generated password")
+	}
+}
+
+func TestLoadMissingFileYieldsEmptyEnv(t *testing.T) {
+	e, err := Load(filepath.Join(t.TempDir(), "does-not-exist.env"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := e.Get("ANYTHING"); got != "" {
+		t.Errorf("Get on empty Env = %q, want empty", got)
 	}
 }
 

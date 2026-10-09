@@ -26,15 +26,15 @@ var noRedirectClient = &http.Client{
 
 // FormSpec describes one REST change-password endpoint and one credential validation endpoint entirely as data.
 type FormSpec struct {
-	URL       string
-	VerifyURL string
-	Login     string
+	URL           string
+	VerifyURL     string
+	AdminUsername string
 }
 
 // Deploy implements secretrotate.DeployFunc against the endpoint FormSpec describes.
 func (s FormSpec) Deploy(ctx context.Context, previous, next string) error {
 	form := url.Values{}
-	form.Set("login", s.Login)
+	form.Set("login", s.AdminUsername)
 	form.Set("password", next)
 	form.Set("previousPassword", previous)
 
@@ -43,19 +43,22 @@ func (s FormSpec) Deploy(ctx context.Context, previous, next string) error {
 		return fmt.Errorf("httprotate: build request for %s: %w", s.URL, err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth(s.Login, previous)
+	req.SetBasicAuth(s.AdminUsername, previous)
 
 	resp, err := noRedirectClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("httprotate: call %s: %w", s.URL, err)
 	}
+	// Discarding response body close error on completed request.
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
+		// Discarding read error as status code already indicates unauthorized failure.
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("%w: %w: %s", ErrUnauthorized, secretrotate.ErrAuthRejected, strings.TrimSpace(string(body)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Discarding read error as status code already captures HTTP error.
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("httprotate: %s returned %d: %s", s.URL, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
@@ -72,14 +75,16 @@ func (s FormSpec) Verify(ctx context.Context, secret string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("httprotate: build request for %s: %w", s.VerifyURL, err)
 	}
-	req.SetBasicAuth(s.Login, secret)
+	req.SetBasicAuth(s.AdminUsername, secret)
 
 	resp, err := noRedirectClient.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("httprotate: call %s: %w", s.VerifyURL, err)
 	}
+	// Discarding response body close error on completed request.
 	defer func() { _ = resp.Body.Close() }()
 
+	// Discarding read error as status code validation follows immediately.
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("httprotate: %s returned %d: %s", s.VerifyURL, resp.StatusCode, strings.TrimSpace(string(body)))

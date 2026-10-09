@@ -1,6 +1,6 @@
 # Rendered by Ansible role workstation_libvirt using listeners defined in workstation-topology.yaml.
 ui            = true
-api_addr      = "https://{{ bastion_vault.publish_address }}:{{ bastion_vault.port }}"
+api_addr      = "https://{{ bastion_vault.publish_address }}:{{ bastion_vault.api_port }}"
 cluster_addr  = "https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.cluster_port }}"
 disable_mlock = false
 
@@ -14,7 +14,7 @@ storage "raft" {
 
 # Loopback listener serves host-local administrative operations, bootstrap routines, and local CLI tooling.
 listener "tcp" {
-  address       = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.port }}"
+  address       = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.api_port }}"
   tls_disable   = false
   tls_cert_file = "/opt/vault/tls/vault.pem"
   tls_key_file  = "/opt/vault/tls/vault-key.pem"
@@ -22,7 +22,7 @@ listener "tcp" {
 
 # Publish network listener serves guest virtual machines routed across the hypervisor bridge.
 listener "tcp" {
-  address       = "{{ bastion_vault.publish_address }}:{{ bastion_vault.port }}"
+  address       = "{{ bastion_vault.publish_address }}:{{ bastion_vault.api_port }}"
   tls_disable   = false
   tls_cert_file = "/opt/vault/tls/vault.pem"
   tls_key_file  = "/opt/vault/tls/vault-key.pem"

@@ -13,7 +13,7 @@
   <rule family="ipv4">
     <source address="{{ workstation_libvirt_publish_network.source_cidr }}"/>
     <destination address="{{ bastion_vault.publish_address }}"/>
-    <port protocol="tcp" port="{{ bastion_vault.port }}"/>
+    <port protocol="tcp" port="{{ bastion_vault.api_port }}"/>
     <accept/>
   </rule>
 {% for cidr in workstation_libvirt_exporter.scraper_source_cidrs | default([]) %}

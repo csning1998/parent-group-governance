@@ -2,19 +2,19 @@
 # Each operator identity of workstation-topology.yaml logs in through its Vault Proxy with a client certificate,
 # which the local CA of vault/tls signs. A role admits the CN of its own identity alone.
 locals {
-  operator_proxy = local.workstation.operator_proxy
+  operator_proxy = local.workstation.operator_vault_proxy
 
   operator_governance_identities = {
-    for name, identity in local.operator_proxy.identities : name => identity if identity.access == "governance"
+    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "governance"
   }
   operator_tenant_identities = {
-    for name, identity in local.operator_proxy.identities : name => identity if identity.access == "tenant"
+    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "tenant"
   }
   operator_foundation_identities = {
-    for name, identity in local.operator_proxy.identities : name => identity if identity.access == "foundation"
+    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "foundation"
   }
   operator_rotation_identities = {
-    for name, identity in local.operator_proxy.identities : name => identity if identity.access == "rotation"
+    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "rotation"
   }
 
   # Every mount, auth method, and audit device which this layer declares, hence the foundation identity manages them.
@@ -38,8 +38,8 @@ resource "terraform_data" "operator_identities_validation" {
 
   lifecycle {
     precondition {
-      condition     = alltrue([for identity in values(local.operator_proxy.identities) : contains(["governance", "tenant", "foundation", "rotation"], identity.access)])
-      error_message = "Every identity of workstation-topology.yaml MUST declare access governance, tenant, foundation, or rotation."
+      condition     = alltrue([for identity in values(local.operator_proxy.identities) : contains(["governance", "tenant", "foundation", "rotation"], identity.access_tier)])
+      error_message = "Every identity of workstation-topology.yaml MUST declare access_tier governance, tenant, foundation, or rotation."
     }
     precondition {
       condition     = length(local.operator_foundation_identities) == 1 && length(local.operator_rotation_identities) == 1
@@ -71,10 +71,10 @@ resource "vault_policy" "operator_governance" {
   name     = "operator-${each.key}"
   policy = jsonencode({
     path = merge(
-      { "sys/internal/ui/mounts/${local.operator_proxy.state_backend.mount}/*" = { capabilities = local.acl_capability.read } },
+      { "sys/internal/ui/mounts/${local.operator_proxy.state_backend.vault_kv_mount}/*" = { capabilities = local.acl_capability.read } },
       {
-        for p in concat([local.operator_proxy.state_backend.path], each.value.reads) :
-        "${local.operator_proxy.state_backend.mount}/data/${p}" => { capabilities = local.acl_capability.read }
+        for p in concat([local.operator_proxy.state_backend.vault_kv_path], each.value.allowed_read_secret_paths) :
+        "${local.operator_proxy.state_backend.vault_kv_mount}/data/${p}" => { capabilities = local.acl_capability.read }
       },
     )
   })
@@ -90,16 +90,16 @@ resource "vault_policy" "operator_foundation" {
   policy = jsonencode({
     path = merge(
       {
-        "sys/mounts"                                                         = { capabilities = local.acl_capability.read }
-        "sys/auth"                                                           = { capabilities = local.acl_capability.read }
-        "sys/audit"                                                          = { capabilities = local.acl_capability.list_sudo }
-        "sys/policies/acl"                                                   = { capabilities = local.acl_capability.manage }
-        "sys/policies/acl/*"                                                 = { capabilities = local.acl_capability.manage }
-        "sys/internal/ui/mounts/*"                                           = { capabilities = local.acl_capability.read }
-        "${local.operator_proxy.state_backend.mount}/data/${each.key}/*"     = { capabilities = local.acl_capability.kv_data }
-        "${local.operator_proxy.state_backend.mount}/metadata/${each.key}/*" = { capabilities = local.acl_capability.kv_metadata }
-        "${local.operator_proxy.state_backend.mount}/delete/${each.key}/*"   = { capabilities = local.acl_capability.kv_version }
-        "${local.operator_proxy.state_backend.mount}/destroy/${each.key}/*"  = { capabilities = local.acl_capability.kv_version }
+        "sys/mounts"                                                                  = { capabilities = local.acl_capability.read }
+        "sys/auth"                                                                    = { capabilities = local.acl_capability.read }
+        "sys/audit"                                                                   = { capabilities = local.acl_capability.list_sudo }
+        "sys/policies/acl"                                                            = { capabilities = local.acl_capability.manage }
+        "sys/policies/acl/*"                                                          = { capabilities = local.acl_capability.manage }
+        "sys/internal/ui/mounts/*"                                                    = { capabilities = local.acl_capability.read }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/data/${each.key}/*"     = { capabilities = local.acl_capability.kv_data }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/metadata/${each.key}/*" = { capabilities = local.acl_capability.kv_metadata }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/delete/${each.key}/*"   = { capabilities = local.acl_capability.kv_version }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/destroy/${each.key}/*"  = { capabilities = local.acl_capability.kv_version }
       },
       merge([for mount in local.foundation_mount_paths : {
         "sys/mounts/${mount}"      = { capabilities = local.acl_capability.manage_mount }

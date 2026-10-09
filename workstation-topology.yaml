@@ -1,52 +1,85 @@
 ---
 # Central topology defining Bastion Vault endpoints, operator proxies, and rotatable credentials.
-# Shared across Ansible, Terraform, and the governance CLI as the single source of truth.
+# Consumers SHALL treat this file as the authoritative single source of truth across Ansible, Terraform, and Go CLI.
 
+# Infrastructure Plane: Network interfaces and listener port bindings for the Bastion Vault daemon.
+# Consumed by:
+# - Ansible workstation_libvirt (templates/vault.hcl.j2, templates/libvirt-to-host.xml.j2)
+# - Terraform foundation-vault-bastion (context.tf, trust-platform-facts.tf)
+# - Go tools/governance/internal/topology (topology.go)
 bastion_vault:
+  # Loopback interface IP address bound for host-local management and local proxy traffic.
+  # Rendered into vault.hcl.j2 loopback listener and cluster_addr.
   loopback_address: "127.0.0.1"
+  # Isolated libvirt bridge interface IP address (workstation-isolated) for guest VM traffic.
+  # Rendered into vault.hcl.j2 api_addr and publish listener, and libvirt-to-host firewalld rules.
   publish_address: "172.16.0.1"
-  port: 8200
+  # Primary Vault HTTPS service API listener port.
+  # Rendered into vault.hcl.j2 listeners, context.tf bastion_vault_endpoint, and topology.go Endpoint.
+  api_port: 8200
+  # Raft cluster internal communication and request forwarding port.
+  # Rendered into vault.hcl.j2 cluster_addr.
   cluster_port: 8201
+  # Unauthenticated Prometheus metrics telemetry listener port.
+  # Rendered into vault.hcl.j2 telemetry listener.
   metrics_port: 8202
 
-operator_proxy:
-  # Cert auth mount path and role mapping on Bastion Vault (matching CN operator-<identity>).
+# Access Plane: Local mTLS forwarding proxies mediating operator and Terraform connections to Vault.
+# Consumed by:
+# - Ansible workstation_vault_proxy (templates/proxy.hcl.j2, templates/vault-proxy-env.sh.j2, tasks/)
+# - Terraform foundation-vault-bastion (access-operator-proxy.tf)
+# - Go tools/governance/internal/topology (topology.go)
+operator_vault_proxy:
+  # Vault TLS certificate auth mount path matching Common Name operator-<identity>.
+  # Rendered into foundation-vault-bastion access-operator-proxy.tf and proxy.hcl.j2.
   cert_auth_mount: "operator-cert"
-  # Configuration directory under the user home directory storing mTLS client certificates.
-  config_dir: ".config/vault-proxy"
-  # Placeholder token sent by callers; replaced with authenticated tokens by the local proxy.
+  # Relative directory under user home ($HOME) storing mTLS client certificates and systemd units.
+  # Consumed by workstation_vault_proxy tasks and topology.go ResolveProxyEndpoint.
+  user_config_dir: ".config/vault-proxy"
+  # Static dummy token sent by callers, which the local proxy MUST overwrite with authenticated token.
+  # Rendered into vault-proxy-env.sh.j2 VAULT_TOKEN and topology.go ProxyEndpoint.Token.
   placeholder_token: "proxy-supplied"
-  # Shared GitLab credential used by Terraform HTTP remote state backends across layers.
+  # Shared GitLab credential specification used by Terraform HTTP remote state backends across layers.
+  # Consumed by vault-proxy-env.sh.j2 to query Bastion Vault and export TF_HTTP_* variables.
   state_backend:
-    mount: "secret"
-    path: "parent-group-governance/terraform/state-backend"
-    field: "token"
-    username: "gitlab-ci-token"
+    vault_kv_mount: "secret"
+    vault_kv_path: "parent-group-governance/terraform/state-backend"
+    vault_kv_field: "token"
+    terraform_http_username: "gitlab-ci-token"
   identities:
-    # Dedicated proxy for group-level governance layers, granting read-only access to state and bot tokens.
+    # Dedicated loopback proxy for group-level governance Terraform layers with read-only bot access.
+    # Consumed by access-operator-proxy.tf to build operator-governance policy and vault-proxy@.service.
     governance:
-      port: 8210
-      access: "governance"
-      reads:
+      listen_port: 8210
+      access_tier: "governance"
+      allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
         - "parent-group-governance/sonarqube/ci-analysis-bot"
         - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
         - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
-    # Proxy for platform-foundation Terraform layers, granting tenant ACL and registry read permissions.
+    # Dedicated loopback proxy for platform-foundation Terraform layers requiring tenant ACL.
+    # Consumed by access-operator-proxy.tf to bind tenant ACL policies and registry reader.
     platform-foundation:
-      port: 8211
-      access: "tenant"
-    # Proxy for parent-group-governance post-bootstrap layers, managing Vault root objects and policies.
+      listen_port: 8211
+      access_tier: "tenant"
+    # Dedicated loopback proxy for post-bootstrap layers managing Vault root objects and policies.
+    # Consumed by access-operator-proxy.tf to grant foundation administrator capabilities.
     parent-group-governance:
-      port: 8212
-      access: "foundation"
-    # Proxy for governance CLI credential rotation, scoped strictly to rotatable service secrets.
+      listen_port: 8212
+      access_tier: "foundation"
+    # Dedicated loopback proxy for governance CLI credential rotation workflows.
+    # Consumed by access-operator-proxy.tf to scope rotation policies to service_admin_passwords.
     service-admin-passwords:
-      port: 8213
-      access: "rotation"
+      listen_port: 8213
+      access_tier: "rotation"
 
-# Declarative registry of infrastructure service credentials rotated by the governance CLI.
+# Credential Lifecycle Plane: Declarative registry of infrastructure service credentials rotated by Go CLI.
+# Consumed by:
+# - Terraform foundation-vault-bastion (access-operator-proxy.tf to generate rotation policy)
+# - Go tools/governance/pkg/credentials (credentials.go)
+# - Go tools/governance/pkg/httprotate (httprotate.go)
+# - Go tools/governance/cmd/governance (operations.go, menu.go)
 service_admin_passwords:
   - key: sonarqube-admin-password
     vault_kv_mount: secret
@@ -54,7 +87,15 @@ service_admin_passwords:
     length: 24
     service:
       mechanism: http_form
-      endpoint: http://127.0.0.1:9000/api/users/change_password
+      # Specific API endpoint for executing remote password change requests.
+      # Consumed by httprotate.go FormSpec.URL.
+      rotate_endpoint: http://127.0.0.1:9000/api/users/change_password
+      # Specific API endpoint for verifying credential validity via read-only authentication.
+      # Consumed by httprotate.go FormSpec.VerifyURL.
       verify_endpoint: http://127.0.0.1:9000/api/authentication/validate
-      login: admin
+      # Administrative account username on target service passed to the password change payload.
+      # Consumed by httprotate.go FormSpec.AdminUsername.
+      admin_username: admin
+      # Factory default password present before bootstrap rotation.
+      # Consumed by cmd/governance/operations.go during initial vault bootstrap validation.
       factory_default_password: admin

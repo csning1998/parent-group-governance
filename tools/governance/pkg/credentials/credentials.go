@@ -1,5 +1,4 @@
-// Package credentials loads a declarative list of rotatable infrastructure secrets from a YAML file.
-// Refer to docs/secretrotate-design.md for the design.
+// Package credentials parses rotatable service admin credentials from workstation-topology.yaml.
 package credentials
 
 import (
@@ -14,84 +13,38 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/secretrotate"
 )
 
-// Credential pairs a lookup Key with the secretrotate.Spec rotating the named secret.
-type Credential struct {
-	Key  string
-	Spec secretrotate.Spec
-}
-
-// VaultOverride optionally names a Vault address for a Config caller to connect to instead of
-// its own default.
-type VaultOverride struct {
-	Address string `yaml:"address"`
-}
-
-// Config is the parsed form of a credentials YAML file.
-type Config struct {
-	Vault       VaultOverride      `yaml:"vault"`
-	Credentials []credentialConfig `yaml:"credentials"`
-}
-
-type serviceConfig struct {
-	Mechanism      string `yaml:"mechanism"`
-	Endpoint       string `yaml:"endpoint"`
-	VerifyEndpoint string `yaml:"verify_endpoint"`
-	Login          string `yaml:"login"`
-
-	FactoryDefaultPassword string `yaml:"factory_default_password"`
-}
-
-type credentialConfig struct {
-	Key          string        `yaml:"key"`
-	VaultKVMount string        `yaml:"vault_kv_mount"`
-	VaultKVPath  string        `yaml:"vault_kv_path"`
-	Length       int           `yaml:"length"`
-	Service      serviceConfig `yaml:"service"`
-}
-
 var fullComplexityClasses = []secretgen.CharClass{
 	secretgen.Upper, secretgen.Lower, secretgen.Digit, secretgen.Special,
 }
 
-// resolveServiceFuncs builds the change and the read only validation of one service mechanism.
-func resolveServiceFuncs(s serviceConfig) (secretrotate.DeployFunc, secretrotate.VerifyFunc, error) {
-	switch s.Mechanism {
-	case "http_form":
-		if s.VerifyEndpoint == "" {
-			return nil, nil, fmt.Errorf("http_form requires verify_endpoint, since rotation observes the live credential before any change")
-		}
-		form := httprotate.FormSpec{URL: s.Endpoint, VerifyURL: s.VerifyEndpoint, Login: s.Login}
-		return form.Deploy, form.Verify, nil
-	default:
-		return nil, nil, fmt.Errorf("unknown service mechanism %q", s.Mechanism)
-	}
+// Config is the service_admin_passwords list of workstation-topology.yaml.
+type Config struct {
+	Credentials []credentialConfig `yaml:"service_admin_passwords"` // rotatable external service administrator credentials
 }
 
-func formatVaultFieldName(key string) string {
-	return strings.ReplaceAll(key, "-", "_")
+// Credential pairs a lookup Key with the secretrotate.Spec rotating the named secret.
+type Credential struct {
+	Key  string            // unique identifier for the credential within the rotation registry
+	Spec secretrotate.Spec // rotation specification and driver functions
 }
 
-func (c credentialConfig) toCredential() (Credential, error) {
-	deploy, verify, err := resolveServiceFuncs(c.Service)
-	if err != nil {
-		return Credential{}, fmt.Errorf("credentials: %s: %w", c.Key, err)
-	}
-	return Credential{
-		Key: c.Key,
-		Spec: secretrotate.Spec{
-			Mount:                  c.VaultKVMount,
-			Path:                   c.VaultKVPath,
-			Field:                  formatVaultFieldName(c.Key),
-			Length:                 c.Length,
-			Classes:                fullComplexityClasses,
-			Deploy:                 deploy,
-			Verify:                 verify,
-			FactoryDefaultPassword: c.Service.FactoryDefaultPassword,
-		},
-	}, nil
+type credentialConfig struct {
+	Key          string        `yaml:"key"`            // unique identifier for the credential within the rotation registry
+	VaultKVMount string        `yaml:"vault_kv_mount"` // Vault KVv2 secrets engine mount path (e.g. "secret")
+	VaultKVPath  string        `yaml:"vault_kv_path"`  // secret path within KVv2 mount where credentials are stored
+	Length       int           `yaml:"length"`         // generated password length in characters
+	Service      serviceConfig `yaml:"service"`        // external service API endpoints and authentication details
 }
 
-// Load parses a credentials YAML file at path. A missing file returns a zero Config and no error.
+type serviceConfig struct {
+	Mechanism              string `yaml:"mechanism"`                // rotation protocol driver (e.g. "http_form")
+	RotateEndpoint         string `yaml:"rotate_endpoint"`          // target service REST API endpoint for password change requests
+	VerifyEndpoint         string `yaml:"verify_endpoint"`          // target service REST API endpoint for read-only credential authentication checks
+	AdminUsername          string `yaml:"admin_username"`           // administrative user account name on target service (e.g. "admin")
+	FactoryDefaultPassword string `yaml:"factory_default_password"` // out-of-the-box uninitialized password before rotation
+}
+
+// Load parses service_admin_passwords of the YAML file at path. A missing file returns a zero Config and no error.
 func Load(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -105,6 +58,16 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("credentials: parse %s: %w", path, err)
 	}
 	return cfg, nil
+}
+
+// Lookup finds a Credential by Key among creds.
+func Lookup(creds []Credential, key string) (Credential, bool) {
+	for _, cred := range creds {
+		if cred.Key == key {
+			return cred, true
+		}
+	}
+	return Credential{}, false
 }
 
 // BuildCredentials converts every entry in Config.Credentials into a Credential, rejecting two keys
@@ -127,12 +90,44 @@ func (c Config) BuildCredentials() ([]Credential, error) {
 	return creds, nil
 }
 
-// Lookup finds a Credential by Key among creds.
-func Lookup(creds []Credential, key string) (Credential, bool) {
-	for _, cred := range creds {
-		if cred.Key == key {
-			return cred, true
+func formatVaultFieldName(key string) string {
+	return strings.ReplaceAll(key, "-", "_")
+}
+
+// resolveServiceFuncs builds the change and the read only validation of one service mechanism.
+func resolveServiceFuncs(s serviceConfig) (secretrotate.DeployFunc, secretrotate.VerifyFunc, error) {
+	switch s.Mechanism {
+	case "http_form":
+		if s.VerifyEndpoint == "" {
+			return nil, nil, fmt.Errorf("http_form requires verify_endpoint, since rotation observes the live credential before any change")
 		}
+		form := httprotate.FormSpec{
+			URL:           s.RotateEndpoint,
+			VerifyURL:     s.VerifyEndpoint,
+			AdminUsername: s.AdminUsername,
+		}
+		return form.Deploy, form.Verify, nil
+	default:
+		return nil, nil, fmt.Errorf("unknown service mechanism %q", s.Mechanism)
 	}
-	return Credential{}, false
+}
+
+func (c credentialConfig) toCredential() (Credential, error) {
+	deploy, verify, err := resolveServiceFuncs(c.Service)
+	if err != nil {
+		return Credential{}, fmt.Errorf("credentials: %s: %w", c.Key, err)
+	}
+	return Credential{
+		Key: c.Key,
+		Spec: secretrotate.Spec{
+			Mount:                  c.VaultKVMount,
+			Path:                   c.VaultKVPath,
+			Field:                  formatVaultFieldName(c.Key),
+			Length:                 c.Length,
+			Classes:                fullComplexityClasses,
+			Deploy:                 deploy,
+			Verify:                 verify,
+			FactoryDefaultPassword: c.Service.FactoryDefaultPassword,
+		},
+	}, nil
 }

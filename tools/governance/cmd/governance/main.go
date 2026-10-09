@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultenv"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
@@ -20,6 +21,7 @@ type app struct {
 	root             string
 	home             string
 	ansibleDir       string
+	topology         topology.Topology
 	bastionVaultAddr string
 	credentials      []credentials.Credential
 	env              *config.Env
@@ -83,7 +85,16 @@ func execute(args []string) int {
 		in:         bufio.NewReader(os.Stdin),
 	}
 
-	credsConfig, err := credentials.Load(filepath.Join(root, "credentials.yaml"))
+	topologyPath := filepath.Join(root, topology.FileName)
+	topo, err := topology.Load(topologyPath)
+	if err != nil {
+		out.Print(ui.Fatal, err.Error())
+		return 1
+	}
+	a.bastionVaultAddr = topo.BastionVault.Endpoint()
+	a.topology = topo
+
+	credsConfig, err := credentials.Load(topologyPath)
 	if err != nil {
 		out.Print(ui.Fatal, err.Error())
 		return 1
@@ -94,9 +105,10 @@ func execute(args []string) int {
 		return 1
 	}
 	a.credentials = creds
-	if credsConfig.Vault.Address != "" {
-		a.bastionVaultAddr = credsConfig.Vault.Address
-	}
+	// Deprecated: credentials.yaml is superseded by workstation-topology.yaml.
+	// if credsConfig.Vault.Address != "" {
+	// 	a.bastionVaultAddr = credsConfig.Vault.Address
+	// }
 
 	var rootCmd *cobra.Command
 	rootCmd = &cobra.Command{
@@ -140,7 +152,8 @@ func (a *app) applyEnvPaths() {
 	if a.env == nil {
 		return
 	}
-	if a.bastionVaultAddr == "" {
-		a.bastionVaultAddr = a.env.Get(config.KeyBastionVaultAddr)
-	}
+	// Deprecated: KeyBastionVaultAddr superseded by topology discovery.
+	// if a.bastionVaultAddr == "" {
+	// 	a.bastionVaultAddr = a.env.Get(config.KeyBastionVaultAddr)
+	// }
 }
