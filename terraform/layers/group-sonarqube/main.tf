@@ -1,7 +1,4 @@
 
-module "local_credential_contexts" {
-  source = "../../modules/contexts-local-credential"
-}
 
 resource "sonarqube_user_token" "ci_analysis" {
   name = "gitlab-ci-analysis"

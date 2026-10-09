@@ -1,7 +1,4 @@
 
-module "local_credential_contexts" {
-  source = "../../modules/contexts-local-credential"
-}
 
 resource "gitlab_group" "subgroups" {
   for_each = local.top_level_subgroups

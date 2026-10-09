@@ -5,9 +5,6 @@ ephemeral "vault_kv_secret_v2" "state_backend" {
   name     = "parent-group-governance/terraform/state-backend"
 }
 
-module "local_credential_contexts" {
-  source = "../../modules/contexts-local-credential"
-}
 
 resource "gitlab_group" "this" {
   name             = "Personal Lab"

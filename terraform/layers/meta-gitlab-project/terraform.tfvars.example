@@ -6,3 +6,7 @@ inbound_job_token_scope_project_ids = [
 ]
 
 github_owner = "example-org"
+
+gitlab_project = {
+  visibility = "public"
+}

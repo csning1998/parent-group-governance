@@ -11,7 +11,3 @@ resource "anthropic_federation_issuer" "gitlab_saas" {
     prevent_destroy = true
   }
 }
-
-module "local_credential_contexts" {
-  source = "../../modules/contexts-local-credential"
-}

@@ -1,7 +1,4 @@
 
-module "local_credential_contexts" {
-  source = "../../modules/contexts-local-credential"
-}
 
 module "provisioner_gitlab_project" {
   # Resolves relative to the directory containing this file (terraform/layers/<this layer>),
@@ -10,7 +7,7 @@ module "provisioner_gitlab_project" {
 
   name         = "parent-group-governance"
   description  = "Centralized gateway for all personal projects, including production-grade platform engineering."
-  visibility   = "private"
+  visibility   = var.gitlab_project.visibility
   namespace_id = data.terraform_remote_state.foundation_group.outputs.group_id
 
   only_allow_merge_if_pipeline_succeeds = false
@@ -19,10 +16,6 @@ module "provisioner_gitlab_project" {
 
 module "workload_identity_federation" {
   source = "../../modules/provisioner-workload-identity-federation"
-
-  providers = {
-    vault = vault.bastion
-  }
 
   gitlab_project = {
     id   = module.provisioner_gitlab_project.project_id
