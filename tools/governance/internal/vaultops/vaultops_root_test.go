@@ -54,7 +54,7 @@ func TestClearInitRootToken(t *testing.T) {
 
 func TestGenerateRoot_ReportsAClientFailure(t *testing.T) {
 	p := newGenerateRootPaths(t, "https://127.0.0.1:8200", "key1\n")
-	if err := os.RemoveAll(p.resolveTLSDir()); err != nil {
+	if err := os.RemoveAll(p.ResolveTLSDir()); err != nil {
 		t.Fatal(err)
 	}
 	err := GenerateRoot(context.Background(), p, discardOut())

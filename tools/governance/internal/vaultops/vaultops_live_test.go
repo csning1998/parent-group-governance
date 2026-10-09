@@ -90,19 +90,19 @@ func TestInspectBastionStatusUnreachableReturnsZeroValue(t *testing.T) {
 	}
 }
 
-func TestProbeBastionStateUnreachableConnectionRefused(t *testing.T) {
+func TestProbeBastionSealStateUnreachableConnectionRefused(t *testing.T) {
 	p := newLiveTestPaths(t, "http://127.0.0.1:1")
 
-	running, sealed, err := ProbeBastionState(context.Background(), p)
+	running, sealed, err := ProbeBastionSealState(context.Background(), p)
 	if err != nil {
-		t.Fatalf("ProbeBastionState: want nil error, got %v", err)
+		t.Fatalf("ProbeBastionSealState: want nil error, got %v", err)
 	}
 	if running || sealed {
-		t.Errorf("ProbeBastionState = (%v, %v), want (false, false)", running, sealed)
+		t.Errorf("ProbeBastionSealState = (%v, %v), want (false, false)", running, sealed)
 	}
 }
 
-func TestUnsealBastionAlreadyUnsealedDoesNotSyncToken(t *testing.T) {
+func TestUnsealAlreadyUnsealedDoesNotSyncToken(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(false))
 	srv := httptest.NewServer(mux)
@@ -119,15 +119,15 @@ func TestUnsealBastionAlreadyUnsealedDoesNotSyncToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := UnsealBastion(context.Background(), p, discardOut()); err != nil {
-		t.Fatalf("UnsealBastion: %v", err)
+	if err := Unseal(context.Background(), p, discardOut()); err != nil {
+		t.Fatalf("Unseal: %v", err)
 	}
 	if _, statErr := os.Stat(p.resolveRootTokenFile()); statErr == nil {
 		t.Error("resolveRootTokenFile was written on the already-unsealed fast path")
 	}
 }
 
-func TestUnsealBastionFailsWhenUnsealAPIErrors(t *testing.T) {
+func TestUnsealFailsWhenUnsealAPIErrors(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(true))
 	mux.HandleFunc("/v1/sys/unseal", fakeVaultErrorHandler(http.StatusInternalServerError))
@@ -142,13 +142,13 @@ func TestUnsealBastionFailsWhenUnsealAPIErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := UnsealBastion(context.Background(), p, discardOut())
+	err := Unseal(context.Background(), p, discardOut())
 	if err == nil || !strings.Contains(err.Error(), "vaultops: unseal:") {
-		t.Fatalf("UnsealBastion = %v, want error containing %q", err, "vaultops: unseal:")
+		t.Fatalf("Unseal = %v, want error containing %q", err, "vaultops: unseal:")
 	}
 }
 
-func TestUnsealBastionKeepsTheTokenHelperFile(t *testing.T) {
+func TestUnsealKeepsTheTokenHelperFile(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(true, false))
 	mux.HandleFunc("/v1/sys/unseal", fakeUnsealHandler())
@@ -169,8 +169,8 @@ func TestUnsealBastionKeepsTheTokenHelperFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := UnsealBastion(context.Background(), p, discardOut()); err != nil {
-		t.Fatalf("UnsealBastion: %v", err)
+	if err := Unseal(context.Background(), p, discardOut()); err != nil {
+		t.Fatalf("Unseal: %v", err)
 	}
 	// An unseal never restores a root token, since revoke-root leaves the token helper file to the operator.
 	data, err := os.ReadFile(p.resolveRootTokenFile())
@@ -182,7 +182,7 @@ func TestUnsealBastionKeepsTheTokenHelperFile(t *testing.T) {
 func fakeInitHandler(rootToken string, unsealKeys []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"keys": unsealKeys, "keys_base64": unsealKeys, "root_token": rootToken,
 		})
 	}
@@ -197,21 +197,21 @@ func fakeSealStatusHandler(sequence ...bool) http.HandlerFunc {
 			sealed = sequence[idx]
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"initialized": true, "sealed": sealed})
+		_ = json.NewEncoder(w).Encode(map[string]any{"initialized": true, "sealed": sealed})
 	}
 }
 
 func fakeUnsealHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"sealed": false})
+		_ = json.NewEncoder(w).Encode(map[string]any{"sealed": false})
 	}
 }
 
 func fakeVaultErrorHandler(status int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"errors": []string{"boom"}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"errors": []string{"boom"}})
 	}
 }
 

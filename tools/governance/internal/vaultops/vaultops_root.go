@@ -57,6 +57,7 @@ func GenerateRoot(ctx context.Context, p Paths, out *ui.Printer) error {
 
 	encoded, err := submitGenerateRootKeys(ctx, client, attempt.Nonce, keysRaw)
 	if err != nil {
+		// Attempt cancellation is best-effort cleanup after key submission failure.
 		_ = client.Sys().GenerateRootCancelWithContext(context.WithoutCancel(ctx))
 		return err
 	}

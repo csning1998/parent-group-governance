@@ -22,7 +22,7 @@ func GenerateTLS(ctx context.Context, p Paths, out *ui.Printer) error {
 	if len(p.listenerIPs) == 0 {
 		return fmt.Errorf("vaultops: the listener certificate needs the Bastion Vault addresses of workstation-topology.yaml")
 	}
-	resolveTLSDir := p.resolveTLSDir()
+	resolveTLSDir := p.ResolveTLSDir()
 	if err := os.RemoveAll(resolveTLSDir); err != nil {
 		return fmt.Errorf("vaultops: remove %s: %w", resolveTLSDir, err)
 	}
@@ -110,7 +110,7 @@ func writePEMFile(path, blockType string, der []byte, mode os.FileMode) error {
 	if err != nil {
 		return fmt.Errorf("vaultops: open %s: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() /* WHY: Secondary cleanup error is unactionable once pem.Encode finishes. */ }()
 	if err := pem.Encode(f, &pem.Block{Type: blockType, Bytes: der}); err != nil {
 		return fmt.Errorf("vaultops: encode %s: %w", path, err)
 	}

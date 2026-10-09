@@ -134,15 +134,15 @@ func TestPersistInitOutputReportsFilesystemFailures(t *testing.T) {
 	})
 }
 
-func TestProbeBastionStateReportsAClientFailure(t *testing.T) {
+func TestProbeBastionSealStateReportsAClientFailure(t *testing.T) {
 	p := Paths{ProjectRoot: t.TempDir(), bastionVaultAddr: "https://127.0.0.1:8200"}
-	_, _, err := ProbeBastionState(context.Background(), p)
+	_, _, err := ProbeBastionSealState(context.Background(), p)
 	if err == nil {
-		t.Fatal("ProbeBastionState error = nil, want the client failure")
+		t.Fatal("ProbeBastionSealState error = nil, want the client failure")
 	}
 }
 
-func TestUnsealBastionReportsAClientFailure(t *testing.T) {
+func TestUnsealReportsAClientFailure(t *testing.T) {
 	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir(), bastionVaultAddr: "https://127.0.0.1:8200"}
 	if err := os.MkdirAll(p.resolveKeysDir(), 0o700); err != nil {
 		t.Fatal(err)
@@ -150,13 +150,13 @@ func TestUnsealBastionReportsAClientFailure(t *testing.T) {
 	if err := os.WriteFile(p.resolveUnsealKeyFile(), []byte("key1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err := UnsealBastion(context.Background(), p, discardOut())
+	err := Unseal(context.Background(), p, discardOut())
 	if err == nil || strings.Contains(err.Error(), "unseal keys not found") {
-		t.Fatalf("UnsealBastion = %v, want the client failure", err)
+		t.Fatalf("Unseal = %v, want the client failure", err)
 	}
 }
 
-func TestUnsealBastionReportsADeadline(t *testing.T) {
+func TestUnsealReportsADeadline(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(true))
 	mux.HandleFunc("/v1/sys/unseal", fakeUnsealHandler())
@@ -170,9 +170,9 @@ func TestUnsealBastionReportsADeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := UnsealBastion(context.Background(), p, discardOut())
+	err := Unseal(context.Background(), p, discardOut())
 	if err == nil || !strings.Contains(err.Error(), "still reporting sealed") {
-		t.Fatalf("UnsealBastion = %v, want the deadline error", err)
+		t.Fatalf("Unseal = %v, want the deadline error", err)
 	}
 }
 

@@ -54,14 +54,14 @@ func TestPersistInitOutputRestrictsPermissions(t *testing.T) {
 	assertMode(t, p.resolveUnsealKeyFile(), 0o600)
 }
 
-func TestUnsealBastionFailsWhenUnsealKeyFileMissing(t *testing.T) {
+func TestUnsealFailsWhenUnsealKeyFileMissing(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
 	p := Paths{ProjectRoot: root, Home: home}
 
-	err := UnsealBastion(context.Background(), p, discardOut())
+	err := Unseal(context.Background(), p, discardOut())
 	if err == nil {
-		t.Fatal("UnsealBastion: want error, got nil")
+		t.Fatal("Unseal: want error, got nil")
 	}
 	if !strings.Contains(err.Error(), "unseal keys not found at") ||
 		!strings.Contains(err.Error(), p.resolveUnsealKeyFile()) ||
