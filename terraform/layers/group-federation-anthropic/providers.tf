@@ -26,8 +26,7 @@ provider "anthropic" {
   admin_api_key = ephemeral.vault_kv_secret_v2.anthropic_admin_key.data["anthropic_admin_api_key"]
 }
 
+# The Bastion Vault. The .envrc of the layer supplies VAULT_ADDR, VAULT_CACERT, and the credential of the identity.
 provider "vault" {
-  alias        = "bastion"
-  address      = module.local_credential_contexts.bastion_vault_config.endpoint
-  ca_cert_file = module.local_credential_contexts.bastion_vault_config.ca_cert_path
+  alias = "bastion"
 }
