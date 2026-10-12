@@ -17,7 +17,7 @@ locals {
     for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "rotation"
   }
 
-  # Every mount, auth method, and audit device which this layer declares, hence the foundation identity manages them.
+  # The foundation identity manages every mount, auth method, and audit device which this layer declares.
   foundation_mount_paths = concat(
     [vault_mount.pki_root.path, vault_mount.pki_intermediate.path, vault_mount.transit_unseal.path, vault_mount.registry.path],
     [for mount in vault_mount.pki_constrained : mount.path],
@@ -106,10 +106,13 @@ resource "vault_policy" "operator_foundation" {
         "sys/mounts/${mount}/tune" = { capabilities = local.acl_capability.manage_mount }
         "${mount}/*"               = { capabilities = local.acl_capability.administer }
       }]...),
+      # The Vault provider reads and tunes an auth method through sys/mounts/auth/<path>.
       merge([for auth in local.foundation_auth_paths : {
-        "sys/auth/${auth}"      = { capabilities = local.acl_capability.manage_mount }
-        "sys/auth/${auth}/tune" = { capabilities = local.acl_capability.manage_mount }
-        "auth/${auth}/*"        = { capabilities = local.acl_capability.administer }
+        "sys/auth/${auth}"             = { capabilities = local.acl_capability.manage_mount }
+        "sys/auth/${auth}/tune"        = { capabilities = local.acl_capability.manage_mount }
+        "sys/mounts/auth/${auth}"      = { capabilities = local.acl_capability.manage_mount }
+        "sys/mounts/auth/${auth}/tune" = { capabilities = local.acl_capability.manage_mount }
+        "auth/${auth}/*"               = { capabilities = local.acl_capability.administer }
       }]...),
       { for audit in local.foundation_audit_paths : "sys/audit/${audit}" => { capabilities = local.acl_capability.manage_mount } },
     )

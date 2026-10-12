@@ -39,13 +39,13 @@ The bootstrap is one linear sequence. Each step depends on the steps above, and 
 
 1. Run the first menu item `[Host] Apply All Workstation Prerequisites`, or `./governance host apply-all`. The item prompts for the become password once and applies the SELinux file contexts of Section 3 Item B, the libvirt host prerequisites and `vault/vault.hcl` of Section 4 Item C, the local CA under `vault/tls` when the directory holds none, and the operator Vault Proxies of Section 6 Item F.
 2. Start all container services with `podman compose up -d`. The bind mount sources under `sonarqube/` and `vault/` are created by `podman-compose` and inherit `container_file_t` from the repository root.
-3. Run `./governance vault init`. The command waits until every service of `service_admin_passwords` answers, refuses when a service rejects its factory default password, and initializes and unseals the Bastion Vault otherwise. Section 4 Item D describes the rebuild of a retained service state.
+3. Run `./governance vault init`. The command waits until every service of `service_admin_passwords` answers, refuses when a service rejects its factory default password, and initializes and unseals the Bastion Vault when every service accepts the factory default password. Section 4 Item D describes the rebuild of a retained service state.
 4. Run `./governance vault enable-kv`.
 5. Run `eval "$(vault-proxy-env root)"` in the shell, then write the state backend token and the platform trust facts as described in Section 6 Item C Step 1 to Step 3.
 6. Apply `foundation-vault-bastion` with the root token in the same shell, as described in Section 6 Item C Step 4. The apply creates `operator-cert` and the cert roles, after which each background Vault Proxy logs in.
 7. Run `[Credentials] Rotate Service Admin Passwords` or `./governance credentials rotate sonarqube-admin-password`, which moves each service admin password into the Bastion Vault through the rotation Vault Proxy as described in Section 4 Item D Step 3.
-8. Run `direnv allow` once in `terraform/` and once in `terraform/layers/meta-gitlab-project`, as described in Section 6 Item A.
-9. Apply the downstream Terraform layers in the order of Section 6 Item C Step 5 onwards: `group-foundation`, `meta-gitlab-project`, `group-topology`, `group-gitlab-runner`, `group-sonarqube`, and `group-governance`.
+8. Run `direnv allow` once in `terraform/` and once in `terraform/layers/governance-gitlab-project`, as described in Section 6 Item A.
+9. Apply the downstream Terraform layers in the order of Section 6 Item C Step 5 onwards: `group-foundation`, `governance-gitlab-project`, `group-topology`, `group-gitlab-runner`, `group-sonarqube`, and `group-governance`.
 10. Restart the runner with `podman compose restart gitlab-runner` after `group-gitlab-runner` renders the runner configuration.
 11. Run `[Vault] Revoke Root Token After Bootstrap`, or `./governance vault revoke-root`, which ends the bootstrap as described in Section 6 Item G.
 
@@ -80,7 +80,7 @@ The operator can install these CLIs using the supported Ansible role `workstatio
 cd ansible && ansible-playbook playbooks/workstation_cloud_cli.yaml --ask-become-pass && cd -
 ```
 
-Authentication is an interactive manual step. The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to running `terraform apply` across `group-federation-anthropic` or `meta-gitlab-project`, the operator MUST log in, extract the temporary access token, and record the credential into Bastion Vault at `parent-group-governance/ai-provider-console/anthropic`.
+Authentication is an interactive manual step. The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to running `terraform apply` across `group-federation-anthropic` or `governance-gitlab-project`, the operator MUST log in, extract the temporary access token, and record the credential into Bastion Vault at `parent-group-governance/ai-provider-console/anthropic`.
 
 ```bash
 ant auth login --profile <profile> --scope "org:admin"
@@ -361,7 +361,7 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 | `[Credentials] Reconcile Service Admin Passwords with the Live Service`    | `credentials reconcile <credential-key>` | Pushes the value held by Vault out to a drifted live service               |
 | `[Terraform] Audit State Secrets`                                          | `terraform audit-state [--history]`      | Lists state locations holding a secret, see tools/governance Section 11    |
 
-Each key listed under `service_admin_passwords` of `workstation-topology.yaml` becomes one subcommand under `vault`, and one more under `vault reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already holds a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears. The CLI reads the Bastion Vault endpoint and the listener addresses of the TLS material from `bastion_vault` of the same file.
+Each key listed under `service_admin_passwords` of `workstation-topology.yaml` becomes one subcommand under `credentials rotate`, and one more under `credentials reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already holds a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears. The CLI reads the Bastion Vault endpoint and the listener addresses of the TLS material from `bastion_vault` of the same file.
 
 ### Item C. Environment File Lifecycle
 
@@ -390,7 +390,7 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 
 - `terraform/.envrc` loads the identity `parent-group-governance` by default.
 - The first apply of `foundation-vault-bastion` MUST run with `eval "$(vault-proxy-env root)"` in the shell. The identity `root` routes `VAULT_ADDR` to `https://127.0.0.1:8200` and authenticates through `~/.vault-token`.
-- `terraform/layers/meta-gitlab-project/.envrc` loads `governance` via `eval "$(vault-proxy-env governance)"`.
+- `terraform/layers/governance-gitlab-project/.envrc` loads `governance` via `eval "$(vault-proxy-env governance)"`.
 - All environments export `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD` from `secret/parent-group-governance/terraform/state-backend`. The identity `root` reads the secret with the root token, and every other identity reads the secret through the governance Proxy.
 - The GitLab provider reads a token from the same secret through an ephemeral read, which keeps the token out of the persisted state of the consuming layer.
 
@@ -400,7 +400,7 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 | :--------------------------- | :--------------------------------------------------------------------------------------- | :---------------------------------------------------- | :----------------------------------------------- |
 | `foundation-vault-bastion`   | The PKI hierarchy, operator cert roles, tenant ACLs, the registry, transit unseal, audit | `root` (bootstrap), `parent-group-governance` (day-2) | None                                             |
 | `group-foundation`           | The top level group `Personal Lab` at path `csning1998-lab`                              | `parent-group-governance`                             | None                                             |
-| `meta-gitlab-project`        | The GitLab project hosting this repository and every Terraform state                     | `governance`                                          | `group-foundation`, `group-federation-anthropic` |
+| `governance-gitlab-project`  | The GitLab project hosting this repository and every Terraform state                     | `governance`                                          | `group-foundation`, `group-federation-anthropic` |
 | `group-topology`             | Every subgroup and nested subgroup beneath the top level group                           | `parent-group-governance`                             | `group-foundation`                               |
 | `group-governance`           | Group labels and the group CI variables sourced from Vault                               | `parent-group-governance`                             | `group-topology`                                 |
 | `group-gitlab-runner`        | The group runner registration and the rendered `gitlab-runner-configs/config.toml`       | `parent-group-governance`                             | `group-topology`                                 |
@@ -411,7 +411,7 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing the Bootstrap Issuing Intermediate alone, and the intermediate issues every leaf certificate. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
-The layer `group-governance` publishes the masked group variable `SONAR_TOKEN` read out of Vault. Reviewer bot credentials have migrated to the project layer (`meta-gitlab-project`) via `provisioner-code-reviewer`.
+The layer `group-governance` publishes the masked group variable `SONAR_TOKEN` read out of Vault. Reviewer bot credentials have migrated to the project layer (`governance-gitlab-project`) via `provisioner-code-reviewer`.
 
 The layer `group-sonarqube` writes the path `sonarqube/ci-analysis-bot`. The `./governance` rotation of `sonarqube-admin-password` writes the path `sonarqube/admin-account`. The separation keeps one writer per Vault path.
 
@@ -458,7 +458,7 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 4. Apply `foundation-vault-bastion` with the root token. The apply creates the cert auth mount `operator-cert` and one cert role per identity of `workstation-topology.yaml`, after which every Vault Proxy logs in, and every later apply of the layer runs as `parent-group-governance`.
 5. Apply `group-foundation`.
 6. Apply `group-federation-*` (for example `group-federation-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
-7. Apply `meta-gitlab-project`, whose `.envrc` loads the governance identity, and apply `group-topology` in either order.
+7. Apply `governance-gitlab-project`, whose `.envrc` loads the governance identity, and apply `group-topology` in either order.
 8. Apply `group-gitlab-runner`. Restart the runner container with `podman compose restart gitlab-runner` afterwards.
 9. Apply `group-sonarqube` after Section 1 Item C Step 7 writes the administrator password into the Bastion Vault.
 10. Apply `group-governance`, which reads the token written by `group-sonarqube`.
@@ -483,24 +483,24 @@ A precondition of `foundation-vault-bastion` stops the plan when a field is miss
 
 `./governance terraform audit-state` reports the locations below, since each value enters the state through a provider attribute without a write-only form. Each location is a known operational risk, and the ignore file MUST NOT exempt the location, because the value is confidential. The convergence model is a CI job which reads Vault at run time through a GitLab `id_tokens` login, which removes the CI variable itself.
 
-| Layer                    | Address                                                                      | Value                                                                    |
-| ------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `meta-gitlab-project`    | `module.code_reviewer`                                                       | The reviewer and tag bot tokens, read and published as project variables |
-| `group-governance`       | `data.vault_kv_secret_v2.sonar_token`, `gitlab_group_variable.review_secret` | The SonarQube analysis token, read and published as a group variable     |
-| `group-sonarqube`        | `sonarqube_user_token.ci_analysis`, `vault_kv_secret_v2.sonar_token`         | The SonarQube analysis token, minted by the provider                     |
-| `group-gitlab-runner`    | `gitlab_user_runner.shared`, `local_sensitive_file.runner_config`            | The runner authentication token                                          |
-| `group-federation-azure` | `azurerm_cognitive_account.openai`                                           | The account access keys, inert while `local_auth_enabled = false`        |
+| Layer                       | Address                                                                      | Value                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `governance-gitlab-project` | `module.code_reviewer`                                                       | The reviewer and tag bot tokens, read and published as project variables |
+| `group-governance`          | `data.vault_kv_secret_v2.sonar_token`, `gitlab_group_variable.review_secret` | The SonarQube analysis token, read and published as a group variable     |
+| `group-sonarqube`           | `sonarqube_user_token.ci_analysis`, `vault_kv_secret_v2.sonar_token`         | The SonarQube analysis token, minted by the provider                     |
+| `group-gitlab-runner`       | `gitlab_user_runner.shared`, `local_sensitive_file.runner_config`            | The runner authentication token                                          |
+| `group-federation-azure`    | `azurerm_cognitive_account.openai`                                           | The account access keys, inert while `local_auth_enabled = false`        |
 
 The historical state versions of every layer still hold values which a later change removed. A purge of the history and a rotation of each exposed value close the record.
 
 ### Item F. Governance Layers of the Group
 
-The governance layer of every repository in the group, such as `meta-gitlab-project` or `governance-gitlab-project`, MUST run through the governance Vault Proxy, which the `.envrc` of the layer loads with `eval "$(vault-proxy-env governance)"`. The tenant registry of the Bastion Vault lists platforms alone, hence a governance layer does not hold a tenant identity.
+The governance layer of every repository in the group, such as `governance-gitlab-project`, MUST run through the governance Vault Proxy, which the `.envrc` of the layer loads with `eval "$(vault-proxy-env governance)"`. The tenant registry of the Bastion Vault lists platforms alone, hence a governance layer does not hold a tenant identity.
 
-1. The role `workstation_vault_proxy` runs one Vault Proxy per identity of `operator_proxy.identities` as a systemd user unit. Each Proxy listens on `127.0.0.1` at the port of the identity, requires a client certificate signed by the local CA of `vault/tls`, and overwrites the token of every request with the token of its own login.
+1. The role `workstation_vault_proxy` runs one Vault Proxy per identity of `operator_vault_proxy.identities` as a systemd user unit. Each Proxy listens on `127.0.0.1` at the port of the identity, requires a client certificate signed by the local CA of `vault/tls`, and overwrites the token of every request with the token of its own login.
 2. Each Proxy logs in through the cert auth mount `operator-cert` with a client certificate of CN `operator-<identity>`, and the cert role of the identity admits that CN alone. The private key of the client certificate is the long lived credential, and the file carries mode `0600` below `~/.config/vault-proxy/<identity>`.
 3. The role issues each certificate for 365 days, and every run of the role reissues a certificate within 30 days of expiry or after a CA change. The Proxy reloads the certificate without a restart. Each Proxy retries a failed login at most every `workstation_vault_proxy_login_retry_seconds` seconds, hence a Proxy which starts before the cert roles exist logs in within that bound after the apply of `foundation-vault-bastion`, and `vault-proxy-env` waits as long before reporting the failure.
-4. Each identity declares one access. The access `governance` reads `parent-group-governance/terraform/state-backend` and the paths of `reads`, and writes nothing. The access `tenant` holds the tenant ACL of the platform and the registry reader. The access `foundation` manages every object of `foundation-vault-bastion`. The access `rotation` reads and writes the paths of `service_admin_passwords` alone, which `./governance` uses for the rotation and the reconciliation.
+4. Each identity declares one `access_tier`. The tier `governance` reads `parent-group-governance/terraform/state-backend` and the paths of `allowed_read_secret_paths`, and writes nothing. The tier `tenant` holds the tenant ACL of the platform and the registry reader. The tier `foundation` manages every object of `foundation-vault-bastion`. The tier `rotation` reads and writes the paths of `service_admin_passwords` alone, which `./governance` uses for the rotation and the reconciliation.
 5. The token of each login is bound to `127.0.0.1/32`, lives one hour, and renews to four hours at most. A caller holds the placeholder token `proxy-supplied` alone, hence a leaked shell environment exposes no Vault token.
 6. `vault-proxy-env <identity>` prints the environment of the identity, including `VAULT_CLIENT_CERT` and `VAULT_CLIENT_KEY`, which the Vault CLI, the Vault provider, and Ansible present to the mTLS listener. The identity `root` prints the loopback listener of the Bastion Vault and the token helper instead.
 7. The group keys stay group wide, since GitLab.com Free offers neither project nor group access tokens. A Premium subscription replaces the shared tokens with a project access token per repository, without a change of the Proxies or the governance layers.
@@ -511,7 +511,7 @@ The governance layer of every repository in the group, such as `meta-gitlab-proj
 The root token serves the bootstrap alone: `vault init`, `vault enable-kv`, the first writes of Section 6 Item C Step 1 to Step 3, and the first apply of `foundation-vault-bastion`.
 
 1. `./governance vault init` writes the root token to `vault/keys/init-output.json` and the token helper file `~/.vault-token`. An unseal never restores the token, and `.env` never holds the token.
-2. `./governance vault revoke-root` revokes the token once the foundation identity logs in through its Proxy with its policy, and refuses otherwise, since the revocation would leave the Bastion Vault without an administrator. The command removes `~/.vault-token` and empties `root_token` of `init-output.json`.
+2. `./governance vault revoke-root` revokes the token once the foundation identity logs in through its Proxy with its policy. The command refuses while that login is absent, since the revocation would leave the Bastion Vault without an administrator. The command removes `~/.vault-token` and empties `root_token` of `init-output.json`.
 3. `./governance vault generate-root` produces a root token for break-glass from the unseal keys of `vault/keys/unseal.key`, and writes the token to `~/.vault-token`. The break-glass work ends with `revoke-root` again.
 4. Vault 2 authenticates the generate-root endpoints by default. `vault.hcl` therefore declares `enable_unauthenticated_access = ["generate-root"]`, hence the break-glass needs the unseal key quorum alone and no identity which might be broken. An unauthenticated caller can cancel an attempt, and cannot finish one without the quorum.
 5. The interactive banner warns while `~/.vault-token` holds a token.

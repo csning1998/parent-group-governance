@@ -8,6 +8,12 @@ locals {
   # parent is null for a subgroup nested directly under the top-level group, or the key of
   # another entry in this same map for a nested subgroup.
   subgroups = {
+    "platform-engineering-lab" = {
+      name        = "Platform Engineering Lab"
+      description = "A centralized workspace for a personally crafted, production-grade internal development platform."
+      visibility  = "public"
+      parent      = null
+    }
     template = {
       name        = "Template"
       description = "Project templates and boilerplate code."
@@ -38,15 +44,9 @@ locals {
       visibility  = "public"
       parent      = null
     }
-    "platform-engineering-lab" = {
-      name        = "Platform Engineering Lab"
-      description = "A centralized workspace for a personally crafted, production-grade internal development platform."
-      visibility  = "public"
-      parent      = null
-    }
-    terraform = {
-      name        = "Terraform"
-      description = "Terraform components related to platform engineering"
+    utilities = {
+      name        = "Utilities"
+      description = "Utilities related to platform engineering"
       visibility  = "public"
       parent      = "platform-engineering-lab"
     }

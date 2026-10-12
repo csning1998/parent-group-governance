@@ -17,7 +17,7 @@ This document records the privilege boundaries, roots of trust, fact publication
 - **Tenant**: A product repository granted a restricted set of privileges on the Bastion Vault and identified by an owner code, such as `platform-foundation`.
 - **Owner Code**: An identifier string for a tenant, formatted as lowercase alphanumerics connected by hyphens, such as `platform-foundation`, denoted as `<code>` below.
 - **root token**: The Bastion Vault root token, which `~/.vault-token` holds during the bootstrap and a break-glass alone.
-- **Operator identity**: An entry of `operator_proxy.identities` in `workstation-topology.yaml`, such as `governance`, `platform-foundation`, `parent-group-governance`, or `service-admin-passwords`, with access `governance`, `tenant`, `foundation`, or `rotation`.
+- **Operator identity**: An entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `governance`, `platform-foundation`, `parent-group-governance`, or `service-admin-passwords`, with `access_tier` `governance`, `tenant`, `foundation`, or `rotation`.
 - **Operator Vault Proxy**: The Vault Proxy of one operator identity on the operator workstation, which logs in through the cert auth mount `operator-cert` and overwrites the token of every request on its loopback mTLS listener.
 - **Operator cert role**: The cert auth role `operator-<identity>`, which admits the client certificate of CN `operator-<identity>` signed by the local CA of `vault/tls`.
 - **Assignment Scope**: The set of policy names which a tenant role on one class of auth mount is allowed to carry.
@@ -111,7 +111,7 @@ Identities on the Bastion Vault are structured into five tiers. Each tier receiv
 
 ### Item C. L1 pgg Terraform
 
-1. The Terraform runs for pgg are executed on the operator workstation through the Vault Proxy of the identity `parent-group-governance`, access `foundation`, after the first apply of `foundation-vault-bastion` with the root token.
+1. The Terraform runs for pgg are executed on the operator workstation through the Vault Proxy of the identity `parent-group-governance`, access tier `foundation`, after the first apply of `foundation-vault-bastion` with the root token.
 2. `foundation-vault-bastion` declares auth mounts, PKI mounts, transit mounts, registry mounts, audit devices, the operator cert auth mount and cert roles, and policies held by pgg.
 3. `foundation-vault-bastion` also declares the tenant ACL and every policy which a tenant may assign.
 4. The state file of the layer is stored in GitLab project `86417732`, and the state MUST NOT contain any secrets, as verified in Section 9 Step E.
@@ -123,19 +123,19 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 
 #### Item D.1 Declaration of the Operator Cert Roles
 
-`foundation-vault-bastion/access-operator-proxy.tf` declares the cert auth mount `operator-cert` and one cert role per entry of `operator_proxy.identities` in `workstation-topology.yaml`.
+`foundation-vault-bastion/access-operator-proxy.tf` declares the cert auth mount `operator-cert` and one cert role per entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`.
 
-| Attribute              | Value                                                                                                                                       | Rationale                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                 | `operator-<identity>`                                                                                                                       | The role name matches the CN which the role admits.                                                                             |
-| `certificate`          | The local CA `vault/tls/ca.pem`                                                                                                             | The CA of the Bastion listener signs the client certificates, hence the workstation holds one CA alone.                         |
-| `allowed_common_names` | `operator-<identity>`                                                                                                                       | A certificate of one identity cannot log in through the role of another identity.                                               |
-| `token_policies`       | `operator-<identity>` for access `governance`, `foundation`, or `rotation`; the tenant ACL and `registry-reader-<code>` for access `tenant` | A governance identity reads group keys alone. Foundation and rotation hold scoped administrative policies. Tenant holds Item E. |
-| `token_ttl`            | 3600s                                                                                                                                       | The Proxy renews the token within the TTL.                                                                                      |
-| `token_max_ttl`        | 14400s                                                                                                                                      | The Proxy logs in again after the maximum TTL.                                                                                  |
-| `token_bound_cidrs`    | `127.0.0.1/32`                                                                                                                              | The Proxies connect through the loopback listener, and a token presented from any other source fails.                           |
+| Attribute              | Value                                                                                                                                   | Rationale                                                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                 | `operator-<identity>`                                                                                                                   | The role name matches the CN which the role admits.                                                                             |
+| `certificate`          | The local CA `vault/tls/ca.pem`                                                                                                         | The CA of the Bastion listener signs the client certificates, hence the workstation holds one CA alone.                         |
+| `allowed_common_names` | `operator-<identity>`                                                                                                                   | A certificate of one identity cannot log in through the role of another identity.                                               |
+| `token_policies`       | `operator-<identity>` for tier `governance`, `foundation`, or `rotation`; the tenant ACL and `registry-reader-<code>` for tier `tenant` | A governance identity reads group keys alone. Foundation and rotation hold scoped administrative policies. Tenant holds Item E. |
+| `token_ttl`            | 3600s                                                                                                                                   | The Proxy renews the token within the TTL.                                                                                      |
+| `token_max_ttl`        | 14400s                                                                                                                                  | The Proxy logs in again after the maximum TTL.                                                                                  |
+| `token_bound_cidrs`    | `127.0.0.1/32`                                                                                                                          | The Proxies connect through the loopback listener, and a token presented from any other source fails.                           |
 
-`terraform_data.operator_identities_validation` stops the plan when an identity declares an access other than `governance`, `tenant`, `foundation`, or `rotation`, when there is not exactly one `governance` identity, exactly one `foundation` identity, and exactly one `rotation` identity, or when a tenant identity names no tenant of `access-tenant.tf`. Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
+`terraform_data.operator_identities_validation` stops the plan when an identity declares an `access_tier` other than `governance`, `tenant`, `foundation`, or `rotation`, when there is not exactly one `governance` identity, exactly one `foundation` identity, and exactly one `rotation` identity, or when a tenant identity names no tenant of `access-tenant.tf`. Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
 
 #### Item D.2 Workflow of the Operator Vault Proxy
 
@@ -166,8 +166,8 @@ The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Work
 
 The tenant registry lists platforms alone, and a repository of the group registers no tenant for the governance layer. Every governance layer of the group runs through the governance Proxy.
 
-1. The policy `operator-governance` reads `parent-group-governance/terraform/state-backend` and the paths of `reads` of the identity in `workstation-topology.yaml`, and writes nothing.
-2. The paths of `reads` are the group keys: the Anthropic admin key, the GitHub publication token, the SonarQube analysis token, and the two bot tokens below `gitlab-ci-with-code-reviewer/integration`.
+1. The policy `operator-governance` reads `parent-group-governance/terraform/state-backend` and the paths of `allowed_read_secret_paths` of the identity in `workstation-topology.yaml`, and writes nothing.
+2. The paths of `allowed_read_secret_paths` are the group keys: the Anthropic admin key, the GitHub publication token, the SonarQube analysis token, and the two bot tokens below `gitlab-ci-with-code-reviewer/integration`.
 3. The Workload Identity Federation module writes no Vault path, hence a governance layer holds no Vault write privilege.
 
 #### Item D.6 Foundation Identity
