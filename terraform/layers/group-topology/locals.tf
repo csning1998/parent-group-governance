@@ -46,7 +46,7 @@ locals {
     }
     utilities = {
       name        = "Utilities"
-      description = "Utilites related to platform engineering"
+      description = "Utilities related to platform engineering"
       visibility  = "public"
       parent      = "platform-engineering-lab"
     }

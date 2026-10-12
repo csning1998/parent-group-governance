@@ -111,7 +111,7 @@ ant federation issuers list --profile "${ANTHROPIC_PROFILE}"
 The operator validates that consuming layers can resolve the remote state.
 
 ```bash
-cd ../meta-gitlab-project
+cd ../governance-gitlab-project
 terraform init
 terraform plan
 ```
