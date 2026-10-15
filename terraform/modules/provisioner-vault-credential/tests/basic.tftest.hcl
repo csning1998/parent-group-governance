@@ -8,9 +8,7 @@ run "keepalived_credential" {
 
   variables {
     vault_credential_context = {
-      kv_namespace = "example-platform/haproxy-frontend"
-      domain       = "haproxy"
-      component    = "frontend"
+      kv_path = "example-platform/haproxy/frontend/app"
       generate = {
         keepalived_auth_pass = { length = 32 }
       }
@@ -23,8 +21,8 @@ run "keepalived_credential" {
   }
 
   assert {
-    condition     = vault_kv_secret_v2.this.name == "example-platform/haproxy-frontend/haproxy/frontend"
-    error_message = "secret path must compose kv_namespace/domain/component"
+    condition     = vault_kv_secret_v2.this.name == "example-platform/haproxy/frontend/app"
+    error_message = "secret path must equal kv_path"
   }
 }
 
@@ -34,9 +32,7 @@ run "keycloak_frontend" {
 
   variables {
     vault_credential_context = {
-      kv_namespace = "example-platform/keycloak-frontend"
-      domain       = "keycloak"
-      component    = "frontend"
+      kv_path = "example-platform/keycloak/frontend/app"
       static = {
         keycloak_admin_user = "admin"
         keycloak_db_user    = "keycloak"
@@ -56,9 +52,7 @@ run "service_identity_empty_generate" {
 
   variables {
     vault_credential_context = {
-      kv_namespace = "example-platform/ssh-identity"
-      domain       = "gitlab-runner"
-      component    = "frontend"
+      kv_path = "example-platform/gitlab-runner/frontend/ssh"
       static = {
         ssh_private_key_b64 = "ZmFrZS1rZXk="
         ssh_public_key_b64  = "ZmFrZS1wdWJrZXk="
@@ -77,9 +71,7 @@ run "fully_empty_payload" {
 
   variables {
     vault_credential_context = {
-      kv_namespace = "test/empty"
-      domain       = "test"
-      component    = "empty"
+      kv_path = "example-platform/app/core/empty"
     }
   }
 
@@ -94,10 +86,8 @@ run "custom_kv_mount" {
 
   variables {
     vault_credential_context = {
-      kv_mount     = "kv-transit"
-      kv_namespace = "test/custom-mount"
-      domain       = "test"
-      component    = "frontend"
+      kv_mount = "kv-transit"
+      kv_path  = "example-platform/app/core/transit"
     }
   }
 
@@ -112,9 +102,7 @@ run "special_character_generation" {
 
   variables {
     vault_credential_context = {
-      kv_namespace = "test/special"
-      domain       = "test"
-      component    = "frontend"
+      kv_path = "example-platform/app/core/special"
       generate = {
         with_special    = { length = 40, special = true }
         without_special = { length = 20 }
@@ -146,9 +134,7 @@ run "generate_overrides_static_on_key_collision" {
 
   variables {
     vault_credential_context = {
-      kv_namespace = "test/collision"
-      domain       = "test"
-      component    = "frontend"
+      kv_path = "example-platform/app/core/collision"
       static = {
         shared_key = "static-value"
       }

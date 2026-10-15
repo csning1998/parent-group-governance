@@ -29,7 +29,7 @@ resource "random_password" "this" {
 
 resource "vault_kv_secret_v2" "this" {
   mount = var.vault_credential_context.kv_mount
-  name  = "${var.vault_credential_context.kv_namespace}/${var.vault_credential_context.domain}/${var.vault_credential_context.component}"
+  name  = var.vault_credential_context.kv_path
 
   data_json = jsonencode(merge(
     var.vault_credential_context.static,
