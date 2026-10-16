@@ -11,9 +11,13 @@ output "bastion_vault" {
 output "bastion_vault_pki" {
   description = "Certificate chain and mount path of the Bastion Vault PKI hierarchy."
   value = {
-    root_cert_pem           = vault_pki_secret_backend_root_cert.root.certificate
-    intermediate_cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
-    intermediate_mount_path = vault_mount.pki_intermediate.path
+    root_cert_pem = vault_pki_secret_backend_root_cert.root["primary"].certificate
+    root_certs = {
+      for name, root in vault_pki_secret_backend_root_cert.root : name => {
+        mount_path = vault_mount.pki_root[name].path
+        cert_pem   = root.certificate
+      }
+    }
     constrained_intermediates = {
       for name, mount in vault_mount.pki_constrained : name => {
         owner      = local.constrained_intermediates[name].owner
@@ -36,7 +40,11 @@ output "bastion_vault_tenant" {
   description = "Owner codes of the tenants registered on the Bastion Vault, and the cert role through which the operator Vault Proxy of each tenant logs in, keyed by owner code."
   value = {
     owner_codes   = keys(local.tenants)
-    operator_role = { for code, role in vault_cert_auth_backend_role.operator : code => role.name if contains(keys(local.tenants), code) }
+    operator_role = {
+      for name, role in vault_cert_auth_backend_role.operator :
+      trimprefix(name, "tenant-") => role.name
+      if startswith(name, "tenant-") && contains(keys(local.tenants), trimprefix(name, "tenant-"))
+    }
   }
 }
 

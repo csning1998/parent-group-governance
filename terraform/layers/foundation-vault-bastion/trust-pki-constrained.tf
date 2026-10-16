@@ -6,6 +6,7 @@ locals {
     # The mount signs the SPIRE Parent CA, which signs the SPIRE Child CA.
     "pki-spire" = {
       owner                 = local.platform_tenant
+      root_ca_id            = "primary"
       common_name           = "On-prem SPIRE Upstream Intermediate CA"
       max_path_length       = 2
       permitted_dns_domains = local.spire_trust_domains
@@ -23,6 +24,7 @@ locals {
     # The subtree of the Downstream Vault CA excludes the Bastion listener names and the SPIFFE trust domain.
     "pki-downstream" = {
       owner                 = local.platform_tenant
+      root_ca_id            = "primary"
       common_name           = "On-prem Downstream Vault Intermediate CA"
       max_path_length       = 2
       permitted_dns_domains = concat([local.platform_trust.domain_suffix], local.platform_trust.downstream_extra_dns_domains)
@@ -36,6 +38,7 @@ locals {
     # The mount issues leaf certificates alone, since the zero path length forbids a subordinate CA.
     "pki-platform" = {
       owner                 = local.platform_tenant
+      root_ca_id            = "primary"
       common_name           = "On-prem Platform Leaf Intermediate CA"
       max_path_length       = 0
       permitted_dns_domains = [local.platform_trust.domain_suffix, local.platform_trust.kubernetes_cluster_domain]
@@ -117,7 +120,7 @@ resource "vault_pki_secret_backend_root_sign_intermediate" "pki_constrained_sign
   for_each = local.constrained_intermediates
 
   provider = vault.bastion
-  backend  = vault_mount.pki_root.path
+  backend  = vault_mount.pki_root[each.value.root_ca_id].path
 
   csr                  = vault_pki_secret_backend_intermediate_cert_request.pki_constrained_csr[each.key].csr
   common_name          = each.value.common_name
@@ -133,7 +136,7 @@ resource "vault_pki_secret_backend_root_sign_intermediate" "pki_constrained_sign
   excluded_uri_domains  = each.value.excluded_uri_domains
   excluded_ip_ranges    = each.value.excluded_ip_ranges
 
-  issuer_ref = vault_pki_secret_backend_root_cert.root.issuer_id
+  issuer_ref = vault_pki_secret_backend_root_cert.root[each.value.root_ca_id].issuer_id
 }
 
 resource "vault_pki_secret_backend_intermediate_set_signed" "pki_constrained_set" {
