@@ -30,9 +30,9 @@ The following rules of the organization naming standard apply directly in this r
 
 ## Section 3. Operator Identities and Access Roles
 
-1. An operator identity is a key of `operator_vault_proxy.identities` in `workstation-topology.yaml`: `governance`, `platform-foundation`, `parent-group-governance`, and `service-admin-passwords`.
-2. A certificate authentication role and its client certificate CN MUST carry the prefix `operator-` before the identity, as in `operator-parent-group-governance` and `operator-service-admin-passwords`.
-3. An identity MUST declare its `access_tier` as `governance`, `tenant`, `foundation`, or `rotation`. The Go domain type `AccessRole` MUST carry the tiers which the CLI resolves, `foundation` and `rotation`.
+1. An operator identity is a key of `operator_vault_proxy.identities` in `workstation-topology.yaml`: `administrator`, `credential-distributor`, `credential-rotator`, and `tenant-<owner_code>`.
+2. A certificate authentication role and its client certificate CN MUST carry the prefix `operator-` before the identity, as in `operator-administrator` and `operator-credential-distributor`.
+3. An identity MUST declare its `access_tier` as `administrator`, `credential-distributor`, `tenant`, or `credential-rotator`. The Go domain type `AccessRole` MUST carry the tiers which the CLI resolves.
 4. A tenant identifier MUST be an owner code formatted as lowercase alphanumerics delimited by hyphens, matching the repository name of the tenant.
 5. A tenant operator AppRole in the Bastion Vault MUST follow the pattern `<owner_code>-terraform-operator`.
 
@@ -41,7 +41,10 @@ The following rules of the organization naming standard apply directly in this r
 1. The private infrastructure secrets engine MUST reside at the KV-v2 mount `secret/`.
 2. The public platform facts registry MUST reside at the KV-v2 mount `registry/`.
 3. The root certificate authority MUST reside at the PKI mount `pki-root/`.
-4. Intermediate certificate authorities MUST reside under the PKI mount `pki-intermediate/`.
+4. Intermediate certificate authorities MUST reside under their respective scoped PKI mounts:
+    - `pki-intermediate-spire/` for the upstream SPIRE authority.
+    - `pki-intermediate-vault-downstream/` for Downstream Vault internal PKI.
+    - `pki-leaf-platform/` for leaf certificates.
 5. The Downstream Vault transit auto-unseal engine MUST reside at the Transit mount `transit-unseal/`.
 6. The workstation operator proxy authentication engine MUST reside at the cert mount `operator-cert/`.
 7. The GitLab CI job authentication engine MUST reside at the JWT mount `gitlab-saas-ci-job-jwt-provider/`.

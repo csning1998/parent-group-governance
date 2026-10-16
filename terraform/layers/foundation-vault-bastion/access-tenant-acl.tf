@@ -19,7 +19,7 @@ locals {
   acl_cross_tenant_grants = {
     (local.platform_tenant) = [
       {
-        path       = "${vault_mount.pki_constrained["pki-downstream"].path}/root/sign-intermediate"
+        path       = "${vault_mount.pki_constrained["pki-intermediate-vault-downstream"].path}/root/sign-intermediate"
         capability = "issue"
         reason     = "security-vault-downstream-pki signs the Downstream Vault intermediate CA through the platform-foundation Vault Proxy."
       },

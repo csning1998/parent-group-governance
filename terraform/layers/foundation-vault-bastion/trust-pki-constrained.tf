@@ -4,7 +4,7 @@
 locals {
   constrained_intermediates = {
     # The mount signs the SPIRE Parent CA, which signs the SPIRE Child CA.
-    "pki-spire" = {
+    "pki-intermediate-spire" = {
       owner                 = local.platform_tenant
       root_ca_id            = "primary"
       common_name           = "On-prem SPIRE Upstream Intermediate CA"
@@ -22,7 +22,7 @@ locals {
       }
     }
     # The subtree of the Downstream Vault CA excludes the Bastion listener names and the SPIFFE trust domain.
-    "pki-downstream" = {
+    "pki-intermediate-vault-downstream" = {
       owner                 = local.platform_tenant
       root_ca_id            = "primary"
       common_name           = "On-prem Downstream Vault Intermediate CA"
@@ -36,7 +36,7 @@ locals {
       assignable            = null
     }
     # The mount issues leaf certificates alone, since the zero path length forbids a subordinate CA.
-    "pki-platform" = {
+    "pki-leaf-platform" = {
       owner                 = local.platform_tenant
       root_ca_id            = "primary"
       common_name           = "On-prem Platform Leaf Intermediate CA"
