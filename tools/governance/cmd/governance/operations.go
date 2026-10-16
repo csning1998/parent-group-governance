@@ -22,10 +22,10 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
 
-// accessFoundation and accessRotation name the operator identities of workstation-topology.yaml which this CLI uses.
+// accessAdministrator and accessCredentialRotator name the operator identities of workstation-topology.yaml which this CLI uses.
 const (
-	accessFoundation = topology.AccessRoleFoundation
-	accessRotation   = topology.AccessRoleRotation
+	accessAdministrator     = topology.AccessRoleAdministrator
+	accessCredentialRotator = topology.AccessRoleCredentialRotator
 )
 
 const msgCancelled = "Cancelled."
@@ -158,7 +158,7 @@ func (a *app) initVault(ctx context.Context) error {
 }
 
 func (a *app) newRotationClient() (*vaultapi.Client, error) {
-	cfg, err := a.buildProxyConfig(accessRotation)
+	cfg, err := a.buildProxyConfig(accessCredentialRotator)
 	if err != nil {
 		return nil, err
 	}
@@ -193,11 +193,11 @@ func (a *app) revokeRootToken(ctx context.Context) error {
 		a.out.Print(ui.Info, msgCancelled)
 		return nil
 	}
-	cfg, err := a.buildProxyConfig(accessFoundation)
+	cfg, err := a.buildProxyConfig(accessAdministrator)
 	if err != nil {
 		return err
 	}
-	ep, err := a.topology.ResolveProxyEndpoint(a.home, accessFoundation)
+	ep, err := a.topology.ResolveProxyEndpoint(a.home, accessAdministrator)
 	if err != nil {
 		return err
 	}

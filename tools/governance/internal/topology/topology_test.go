@@ -79,28 +79,28 @@ operator_vault_proxy:
   user_config_dir: ".config/vault-proxy"
   placeholder_token: "proxy-supplied"
   identities:
-    governance:
+    credential-distributor:
       listen_port: 8210
-      access_tier: "governance"
-    service-admin-passwords:
+      access_tier: "credential-distributor"
+    credential-rotator:
       listen_port: 8213
-      access_tier: "rotation"
+      access_tier: "credential-rotator"
 `)
 	topo, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 
-	got, err := topo.ResolveProxyEndpoint("/home/u", AccessRoleRotation)
+	got, err := topo.ResolveProxyEndpoint("/home/u", AccessRoleCredentialRotator)
 	if err != nil {
 		t.Fatalf("ResolveProxyEndpoint: %v", err)
 	}
 	want := ProxyEndpoint{
-		Identity:   "service-admin-passwords",
+		Identity:   "credential-rotator",
 		Address:    "https://127.0.0.1:8213",
 		CACert:     "/home/u/.config/vault-proxy/ca.pem",
-		ClientCert: "/home/u/.config/vault-proxy/service-admin-passwords/client.pem",
-		ClientKey:  "/home/u/.config/vault-proxy/service-admin-passwords/client-key.pem",
+		ClientCert: "/home/u/.config/vault-proxy/credential-rotator/client.pem",
+		ClientKey:  "/home/u/.config/vault-proxy/credential-rotator/client-key.pem",
 		Token:      "proxy-supplied",
 	}
 	if got != want {
@@ -110,10 +110,10 @@ operator_vault_proxy:
 
 func TestResolveProxyEndpoint_RequiresExactlyOneIdentity(t *testing.T) {
 	topo := VaultTopology{OperatorVaultProxy: OperatorVaultProxy{Identities: map[string]ProxyIdentity{
-		"first":  {ListenPort: 1, AccessTier: "rotation"},
-		"second": {ListenPort: 2, AccessTier: "rotation"},
+		"first":  {ListenPort: 1, AccessTier: "credential-rotator"},
+		"second": {ListenPort: 2, AccessTier: "credential-rotator"},
 	}}}
-	for _, access := range []AccessRole{AccessRoleRotation, AccessRoleFoundation} {
+	for _, access := range []AccessRole{AccessRoleCredentialRotator, AccessRoleAdministrator} {
 		if _, err := topo.ResolveProxyEndpoint("/home/u", access); err == nil {
 			t.Errorf("ResolveProxyEndpoint(%s) error = nil, want a rejection", access)
 		}

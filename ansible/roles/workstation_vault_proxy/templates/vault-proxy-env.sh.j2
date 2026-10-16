@@ -42,7 +42,7 @@ else
   usage
 fi
 
-{% set state_identity = (operator_vault_proxy.identities | dict2items | selectattr('value.access_tier', 'equalto', 'governance') | first).key %}
+{% set state_identity = (operator_vault_proxy.identities | dict2items | selectattr('value.access_tier', 'equalto', 'credential-distributor') | first).key %}
 {% set state_read = 'vault kv get -mount=' ~ operator_vault_proxy.state_backend.vault_kv_mount ~ ' -field=' ~ operator_vault_proxy.state_backend.vault_kv_field ~ ' ' ~ operator_vault_proxy.state_backend.vault_kv_path %}
 # The identity root reads the shared GitLab token with the token helper, since root applies the cert roles which every
 # Proxy needs. Every other identity reads the token through the {{ state_identity }} Proxy.

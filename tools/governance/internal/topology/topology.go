@@ -19,10 +19,10 @@ const FileName = "workstation-topology.yaml"
 type AccessRole string
 
 const (
-	// AccessRoleFoundation identifies the operator proxy carrying foundation privileges.
-	AccessRoleFoundation AccessRole = "foundation"
-	// AccessRoleRotation identifies the operator proxy carrying credential rotation privileges.
-	AccessRoleRotation AccessRole = "rotation"
+	// AccessRoleAdministrator identifies the operator proxy carrying administrator privileges.
+	AccessRoleAdministrator AccessRole = "administrator"
+	// AccessRoleCredentialRotator identifies the operator proxy carrying credential rotation privileges.
+	AccessRoleCredentialRotator AccessRole = "credential-rotator"
 )
 
 // BastionVault is the listener topology of the Bastion Vault server.
@@ -47,7 +47,7 @@ func (b BastionVault) ListenerIPs() []net.IP {
 // ProxyIdentity defines one operator proxy instance listening on loopback and mapping to a Vault cert role.
 type ProxyIdentity struct {
 	ListenPort int    `yaml:"listen_port"` // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)
-	AccessTier string `yaml:"access_tier"` // logical privilege tier of the operator role (governance, tenant, foundation, rotation)
+	AccessTier string `yaml:"access_tier"` // logical privilege tier of the operator role (credential-distributor, tenant, administrator, credential-rotator)
 }
 
 // OperatorVaultProxy holds client connection parameters and identity mappings for operator Vault proxies.
