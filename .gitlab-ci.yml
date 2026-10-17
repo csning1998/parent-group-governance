@@ -21,6 +21,8 @@ include:
       ansible_globs: ["ansible/**/*"]
   - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/lang-go@1.7.3
     inputs:
+      go_image: "golang:1.27-alpine" # ML-DSA certificate handling MUST build with Go 1.27
+      golangci_image: "golangci/golangci-lint:v2.15.0-alpine"
       go_dir: "tools/governance"
       go_fmt_path: "./tools/governance"
       go_globs:
