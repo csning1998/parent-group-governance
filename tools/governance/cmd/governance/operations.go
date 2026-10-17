@@ -101,7 +101,7 @@ func (a *app) enableVaultKV(ctx context.Context) error {
 
 // ensureLocalCA generates the local CA when vault/tls holds none, since a new CA invalidates every issued certificate.
 func (a *app) ensureLocalCA(_ context.Context) error {
-	if _, err := os.Stat(a.newVaultPaths().CACertFile()); err == nil {
+	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err == nil {
 		return nil
 	}
 	return a.issueVaultTLS()

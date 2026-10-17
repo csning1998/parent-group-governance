@@ -27,6 +27,8 @@ The following rules of the organization naming standard apply directly in this r
 3. The noun `downstream` MUST designate the platform service Vault instance managed by `platform-foundation`.
 4. The terms `bootstrap`, `bootstrapper`, and `shared-vault` MUST NOT serve as Vault instance nouns.
 5. The term `production` MUST designate the deployment environment stage alone.
+6. The noun `Vault Transport Root CA` MUST designate either of the two certificate authorities minted outside Vault under `vault/tls/` (ML-DSA-87 and EC P-384) establishing transport layer security for local loopback listeners, publish listeners, and operator proxy mTLS sessions.
+7. The noun `Platform PKI Root CA` MUST designate the internal certificate authority anchored at the PKI mount `pki-root/` with Subject CommonName `On-prem Infrastructure Root CA`, establishing issuing trust for downstream intermediate certificate authorities, SPIRE servers, and platform workloads.
 
 ## Section 3. Operator Identities and Access Roles
 
@@ -40,7 +42,7 @@ The following rules of the organization naming standard apply directly in this r
 
 1. The private infrastructure secrets engine MUST reside at the KV-v2 mount `secret/`.
 2. The public platform facts registry MUST reside at the KV-v2 mount `registry/`.
-3. The root certificate authority MUST reside at the PKI mount `pki-root/`.
+3. The Platform PKI Root CA MUST reside at the PKI mount `pki-root/`.
 4. Intermediate certificate authorities MUST reside under the PKI mount `pki-intermediate/`.
 5. The Downstream Vault transit auto-unseal engine MUST reside at the Transit mount `transit-unseal/`.
 6. The workstation operator proxy authentication engine MUST reside at the cert mount `operator-cert/`.

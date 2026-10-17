@@ -51,11 +51,11 @@ func GenerateTLS(dir string, listeners Listeners) error {
 		return fmt.Errorf("vaultops: mkdir %s: %w", dir, err)
 	}
 
-	mldsaCA, err := issueSelfSignedRootCA(dir, tlsNameMLDSACA, "MetaProvisionVaultCA ML-DSA-87", generateMLDSA87Key)
+	mldsaCA, err := issueSelfSignedRootCA(dir, tlsNameMLDSACA, "Vault Transport Root CA ML-DSA-87", generateMLDSA87Key)
 	if err != nil {
 		return err
 	}
-	ecCA, err := issueSelfSignedRootCA(dir, tlsNameECCA, "MetaProvisionVaultCA EC P-384", generateECP384Key)
+	ecCA, err := issueSelfSignedRootCA(dir, tlsNameECCA, "Vault Transport Root CA EC P-384", generateECP384Key)
 	if err != nil {
 		return err
 	}

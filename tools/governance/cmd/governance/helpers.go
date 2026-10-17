@@ -14,7 +14,7 @@ func (a *app) newVaultPaths() vaultops.Paths {
 func (a *app) newBastionVaultConfig() vaultclient.Config {
 	return vaultclient.Config{
 		Address:    a.topology.BastionVault.APIEndpoint(),
-		CACertPath: a.newVaultPaths().CACertFile(),
+		CACertPath: a.newVaultPaths().TransportRootMLDSA87CACertFile(),
 	}
 }
 

@@ -59,7 +59,7 @@ func TestPathsHelpers(t *testing.T) {
 		{"InitFile", p.InitFile(), "/root/vault/keys/init-output.json"},
 		{"UnsealKeyFile", p.UnsealKeyFile(), "/root/vault/keys/unseal.key"},
 		{"RootTokenFile", p.RootTokenFile(), "/home/u/.vault-token"},
-		{"CACertFile", p.CACertFile(), "/root/vault/tls/ca-ml-dsa-87.pem"},
+		{"TransportRootMLDSA87CACertFile", p.TransportRootMLDSA87CACertFile(), "/root/vault/tls/ca-ml-dsa-87.pem"},
 	}
 	for _, c := range cases {
 		want := filepath.FromSlash(c.want)

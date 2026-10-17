@@ -667,12 +667,12 @@ type Paths struct {
     Home        string
 }
 
-func (p Paths) TLSDir() string        { return filepath.Join(p.ProjectRoot, "vault", "tls") }
-func (p Paths) CACertFile() string    { return filepath.Join(p.TLSDir(), tlsNameMLDSACA+".pem") }
-func (p Paths) KeysDir() string       { return filepath.Join(p.ProjectRoot, "vault", "keys") }
-func (p Paths) InitFile() string      { return filepath.Join(p.KeysDir(), "init-output.json") }
-func (p Paths) UnsealKeyFile() string { return filepath.Join(p.KeysDir(), "unseal.key") }
-func (p Paths) RootTokenFile() string { return filepath.Join(p.Home, ".vault-token") }
+func (p Paths) TLSDir() string                         { return filepath.Join(p.ProjectRoot, "vault", "tls") }
+func (p Paths) TransportRootMLDSA87CACertFile() string { return filepath.Join(p.TLSDir(), tlsNameMLDSACA+".pem") }
+func (p Paths) KeysDir() string                        { return filepath.Join(p.ProjectRoot, "vault", "keys") }
+func (p Paths) InitFile() string                       { return filepath.Join(p.KeysDir(), "init-output.json") }
+func (p Paths) UnsealKeyFile() string                  { return filepath.Join(p.KeysDir(), "unseal.key") }
+func (p Paths) RootTokenFile() string                  { return filepath.Join(p.Home, ".vault-token") }
 ```
 
 集中的效果是目錄配置只有一個定義點。`Init` 寫入的 `init-output.json`、`Unseal` 讀取的 `unseal.key`、命令層建立 client 時驗證用的 `ca-ml-dsa-87.pem` 分屬三個不同的流程，如果各自用字面值組路徑，調整 `vault/` 底下的配置就必須同時改動三處，而漏改的那一處只會在執行到那條路徑時才失敗。
@@ -685,7 +685,7 @@ func (p Paths) RootTokenFile() string { return filepath.Join(p.Home, ".vault-tok
 func (a *app) newBastionVaultConfig() vaultclient.Config {
     return vaultclient.Config{
         Address:    a.topology.BastionVault.APIEndpoint(),
-        CACertPath: a.newVaultPaths().CACertFile(),
+        CACertPath: a.newVaultPaths().TransportRootMLDSA87CACertFile(),
     }
 }
 
@@ -723,7 +723,7 @@ if err := os.MkdirAll(dir, 0o755); err != nil {
 
 清空而不是逐一覆寫，是因為這八個檔案必須來自同一次產生。CA 憑證是客戶端的信任錨點，listener 憑證是伺服器出示的憑證，如果只覆寫其中一部分，客戶端會拿新的 CA 去驗證舊的伺服器憑證，握手一定失敗，而錯誤訊息只會說憑證無法驗證，不會指出真正的原因是兩者版次不同。這也是選單上這個項目標註會摧毀既有檔案、並且在執行前要求輸入確認的理由。
 
-兩個 CA 由同一個 `issueSelfSignedRootCA` 產生，差別只在金鑰產生函數與 `CommonName`（`MetaProvisionVaultCA ML-DSA-87` 與 `MetaProvisionVaultCA EC P-384`）。兩個 CA 的主體名稱不同，客戶端把兩個 CA 放進同一個信任庫時，建鏈不會混淆：
+兩個 CA 由同一個 `issueSelfSignedRootCA` 產生，差別只在金鑰產生函數與 `CommonName`（`Vault Transport Root CA ML-DSA-87` 與 `Vault Transport Root CA EC P-384`）。兩個 CA 的主體名稱不同，客戶端把兩個 CA 放進同一個信任庫時，建鏈不會混淆：
 
 ```go
 template := &x509.Certificate{

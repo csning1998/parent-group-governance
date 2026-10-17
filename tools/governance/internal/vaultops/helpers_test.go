@@ -51,8 +51,8 @@ func loadCert(t *testing.T, path string) *x509.Certificate {
 func newTestOperator(t *testing.T, p Paths, address string) *Operator {
 	t.Helper()
 	var caCertPath string
-	if _, err := os.Stat(p.CACertFile()); err == nil {
-		caCertPath = p.CACertFile()
+	if _, err := os.Stat(p.TransportRootMLDSA87CACertFile()); err == nil {
+		caCertPath = p.TransportRootMLDSA87CACertFile()
 	}
 	server := vaultclient.Config{
 		Address:    address,

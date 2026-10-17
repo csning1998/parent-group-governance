@@ -21,8 +21,8 @@ func NewPaths(projectRoot, home string) Paths {
 // TLSDir returns the directory where the CAs and listener certificates MUST reside.
 func (p Paths) TLSDir() string { return filepath.Join(p.ProjectRoot, "vault", "tls") }
 
-// CACertFile returns the certificate file path of the local ML-DSA-87 root CA.
-func (p Paths) CACertFile() string {
+// TransportRootMLDSA87CACertFile returns the certificate file path of the local ML-DSA-87 transport root CA.
+func (p Paths) TransportRootMLDSA87CACertFile() string {
 	return filepath.Join(p.TLSDir(), tlsNameMLDSACA+".pem")
 }
 
