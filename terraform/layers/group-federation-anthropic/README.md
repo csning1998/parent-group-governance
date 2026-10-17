@@ -63,7 +63,7 @@ vault kv put -mount=secret parent-group-governance/ai-provider-console/anthropic
     anthropic_admin_api_key="$ANTHROPIC_AUTH_TOKEN"
 
 export TF_HTTP_USERNAME='gitlab-ci-token'
-export TF_HTTP_PASSWORD=$(VAULT_ADDR='https://172.16.0.1:8200' VAULT_CACERT="$HOME/GitLab/csning1998-lab/parent-group-governance/vault/tls/ca.pem" VAULT_TOKEN=$(cat $HOME/.vault-token) vault kv get -field=token secret/parent-group-governance/terraform/state-backend)
+export TF_HTTP_PASSWORD=$(VAULT_ADDR='https://172.16.0.1:8200' VAULT_CACERT="$HOME/GitLab/csning1998-lab/parent-group-governance/vault/tls/ca-ec-p384.pem" VAULT_TOKEN=$(cat $HOME/.vault-token) vault kv get -field=token secret/parent-group-governance/terraform/state-backend)
 ```
 
 ### Step C. Execute Terraform Layer Deployment

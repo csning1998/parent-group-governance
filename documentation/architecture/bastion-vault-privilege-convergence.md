@@ -13,13 +13,13 @@ This document records the privilege boundaries, roots of trust, fact publication
 
 ### Item B. Terminology Definitions
 
-- **Bastion Vault**: The `hashicorp/vault:2.0` OSS instance running via podman compose on the operator workstation, listening on `127.0.0.1:8200` and `10.20.0.1:8200`.
+- **Bastion Vault**: The `hashicorp/vault:2.2.0` OSS instance running via podman compose on the operator workstation, listening on `127.0.0.1:8200` and `10.20.0.1:8200`.
 - **Tenant**: A product repository granted a restricted set of privileges on the Bastion Vault and identified by an owner code, such as `platform-foundation`.
 - **Owner Code**: An identifier string for a tenant, formatted as lowercase alphanumerics connected by hyphens, such as `platform-foundation`, denoted as `<code>` below.
 - **root token**: The Bastion Vault root token, which `~/.vault-token` holds during the bootstrap and a break-glass alone.
 - **Operator identity**: An entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `governance`, `platform-foundation`, `parent-group-governance`, or `service-admin-passwords`, with `access_tier` `governance`, `tenant`, `foundation`, or `rotation`.
 - **Operator Vault Proxy**: The Vault Proxy of one operator identity on the operator workstation, which logs in through the cert auth mount `operator-cert` and overwrites the token of every request on its loopback mTLS listener.
-- **Operator cert role**: The cert auth role `operator-<identity>`, which admits the client certificate of CN `operator-<identity>` signed by the local CA of `vault/tls`.
+- **Operator cert role**: The cert auth role `operator-<identity>`, which admits the client certificate of CN `operator-<identity>` signed by the ML-DSA-87 CA of `vault/tls`.
 - **Assignment Scope**: The set of policy names which a tenant role on one class of auth mount is allowed to carry.
 - **registry**: The KV v2 mount `registry`, in which pgg publishes the facts needed by tenants and which only pgg writes.
 - **Name Constraints**: The certificate extension defined by RFC 5280 which restricts the names which certificates issued under a given CA certificate may carry.
@@ -128,7 +128,7 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 | Attribute              | Value                                                                                                                                   | Rationale                                                                                                                       |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `name`                 | `operator-<identity>`                                                                                                                   | The role name matches the CN which the role admits.                                                                             |
-| `certificate`          | The local CA `vault/tls/ca.pem`                                                                                                         | The CA of the Bastion listener signs the client certificates, hence the workstation holds one CA alone.                         |
+| `certificate`          | The ML-DSA-87 CA `vault/tls/ca-ml-dsa-87.pem`                                                                                           | The CA of the loopback listener signs the client certificates, hence the operator path trusts one CA alone.                     |
 | `allowed_common_names` | `operator-<identity>`                                                                                                                   | A certificate of one identity cannot log in through the role of another identity.                                               |
 | `token_policies`       | `operator-<identity>` for tier `governance`, `foundation`, or `rotation`; the tenant ACL and `registry-reader-<code>` for tier `tenant` | A governance identity reads group keys alone. Foundation and rotation hold scoped administrative policies. Tenant holds Item E. |
 | `token_ttl`            | 3600s                                                                                                                                   | The Proxy renews the token within the TTL.                                                                                      |
@@ -141,10 +141,10 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 
 The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Workstation Prerequisites` installs the Proxies.
 
-1. The role generates an ECDSA P-256 client key of mode `0600` per identity, and the local CA signs a client certificate of CN `operator-<identity>` for 365 days. A second certificate of CN `vault-proxy-<identity>` serves the loopback listener of the Proxy.
+1. The role generates an ECDSA P-384 client key of mode `0600` per identity, and the ML-DSA-87 CA signs a client certificate of CN `operator-<identity>` for 365 days. A second certificate of CN `vault-proxy-<identity>` serves the loopback listener of the Proxy.
 2. The role reissues a certificate within 30 days of expiry, or when the certificate no longer verifies against the CA.
 3. The systemd user unit `vault-proxy@<identity>.service` runs `vault proxy` with `auto_auth` method `cert`, `api_proxy` with `use_auto_auth_token = "force"`, and a TCP listener on `127.0.0.1` at the port of the identity.
-4. The listener sets `tls_require_and_verify_client_cert` with the local CA, hence a process without the client key of the identity cannot reach the Proxy.
+4. The listener sets `tls_require_and_verify_client_cert` with the ML-DSA-87 CA, hence a process without the client key of the identity cannot reach the Proxy.
 5. `vault-proxy-env <identity>` prints `VAULT_ADDR` of the Proxy, `VAULT_CACERT`, `VAULT_CLIENT_CERT`, `VAULT_CLIENT_KEY`, the placeholder `VAULT_TOKEN`, `TERRAFORM_VAULT_SKIP_CHILD_TOKEN=true`, and `TF_HTTP_USERNAME` with `TF_HTTP_PASSWORD`. A `.envrc` of each repository or layer loads the output through direnv.
 
 #### Item D.3 Token Boundary Guarantees
@@ -405,7 +405,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 | Package or role                        | File                                      | Responsibility                                                                                                        |
 | -------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `internal/topology`                    | `topology.go`                             | Loads `bastion_vault` of `workstation-topology.yaml`, the Bastion endpoint and the listener certificate addresses     |
-| `internal/vaultops`                    | `vaultops.go`, `vaultops_tls.go`          | Vault lifecycle and the local CA, with the endpoint and the listener addresses of the topology alone                  |
+| `internal/vaultops`                    | `operator.go`, `paths.go`, `root.go`, `tls.go` | Vault lifecycle and the local CA, with the endpoint and the listener addresses of the topology alone                  |
 | `pkg/secretrotate`                     | `factory_default.go`                      | `AwaitFactoryDefault`, which `vault init` uses to verify that each service still accepts its factory default          |
 | `cmd/governance`                       | `operations.go`, `commands.go`, `menu.go` | `host apply-all` and the first menu item, which run SELinux, libvirt, the local CA when absent, and the Vault Proxies |
 | Ansible role `workstation_vault_proxy` | `tasks/`, `templates/`                    | Client certificates, Proxy configurations, systemd user units, and `vault-proxy-env`                                  |
@@ -420,7 +420,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 
 1. `./governance` removes every Vault variable which the Vault API client reads, such as `VAULT_ADDR`, `VAULT_CACERT`, and `VAULT_SKIP_VERIFY`, before any command runs. The Vault API client reads the process environment inside `NewClient`, and an ambient value therefore overrides or breaks an explicitly configured client. Without the removal, a stale `VAULT_CACERT` of a wiped TLS directory stops the CLI which regenerates the TLS directory, and the Proxy environment of a `.envrc` reroutes the root operations of the CLI to a Proxy. Every test package which builds a Vault client clears the same variables in `TestMain`.
 2. `./governance vault init` sends no Vault request when a service of `service_admin_passwords` rejects its factory default password.
-3. `./governance host apply-all` generates the local CA only when `vault/tls/ca.pem` is absent, since a new CA invalidates the listener certificate, every client certificate of the Proxies, and every operator cert role.
+3. `./governance host apply-all` generates the local CAs only when `vault/tls/ca-ml-dsa-87.pem` is absent, since a new CA invalidates the listener certificates, every client certificate of the Proxies, and every operator cert role.
 4. A blank answer to the become password prompt cancels the run before any playbook starts.
 
 ### Item D. Testing
@@ -428,7 +428,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 | File                                                                    | Tests                      | Coverage                                                                                                  |
 | ----------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `internal/topology/topology_test.go`                                    | `TestLoad_*`               | Endpoint and listener addresses of the topology, rejection of an incomplete `bastion_vault`, missing file |
-| `internal/vaultops/vaultops_tls_test.go`                                | `TestGenerateTLS*`         | Chain validity, subject alternative names of the topology, refusal without listener addresses, key types  |
+| `internal/vaultops/tls_test.go`                                         | `TestGenerateTLS*`         | Chain validity, subject alternative names of the topology, refusal without listener addresses, key types  |
 | `pkg/secretrotate/factory_default_test.go`                              | `TestAwaitFactoryDefault*` | Waiting for the service, the retained state verdict, and a credential without a factory default           |
 | `cmd/governance/menu_test.go`                                           | `TestBuildMenuOptions_*`   | Apply All first, Quit last, each host step alone, and the service admin password labels                   |
 | `ansible/roles/workstation_vault_audit/tests/test_vault_audit_check.py` | 20 pytest test cases       | 6 detection rules, log rotation and truncation, state persistence                                         |
@@ -711,7 +711,7 @@ Root token usage and rejected role writes MUST appear in the systemd journal.
 6. `meta-gitlab-project` in mp still reads state from other pgg layers. mp therefore still requires a GitLab token with read privileges on the pgg project.
 7. `workstation-topology.yaml` declares the Bastion publish address, while `bastion_publish_cidr` of the platform trust facts declares the publish network. A precondition ties both, and the two values remain two declaration sources.
 8. The client private key of each operator identity resides below `~/.config/vault-proxy` with mode `0600`. A process of the operator account reads the key and logs in as the identity until the certificate expires.
-9. `vault/tls/ca-key.pem` signs a client certificate for any operator identity, hence the key is equivalent to every operator identity. The file carries mode `0600`.
+9. `vault/tls/ca-ml-dsa-87-key.pem` signs a client certificate for any operator identity, hence the key is equivalent to every operator identity. The file carries mode `0600`.
 10. Every classical signature of the hierarchy, ECDSA P-384 included, is quantum vulnerable. NIST IR 8547 initial public draft disallows quantum vulnerable signatures after 2035, and the root therefore MUST be replaced by a root of a quantum resistant algorithm before 2035-12-31.
 
 ### Item B. Next Steps

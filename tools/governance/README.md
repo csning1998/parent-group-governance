@@ -419,9 +419,9 @@ if err != nil {
 a.topology = topo
 ```
 
-`topology.Load` 回傳 `topology.VaultTopology`，要求 `bastion_vault` 同時宣告 `loopback_address`、`publish_address` 兩個 IP 與一個合法的 `port`，缺任何一項就讓工具在啟動時中止。`APIEndpoint()` 組出 `https://<loopback_address>:<port>`，`ListenerIPs()` 回傳 listener 憑證必須列入的兩個 IP。同一份檔案也是 Ansible 渲染 `vault.hcl` 與防火牆規則、Terraform 建立 cert role 的來源，所以位址只在一處宣告。
+`topology.Load` 回傳 `topology.VaultTopology`，要求 `bastion_vault` 同時宣告 `loopback_address`、`publish_address` 兩個 IP 與一個合法的 `port`，缺任何一項就讓工具在啟動時中止。`APIEndpoint()` 組出 `https://<loopback_address>:<port>`，命令層的 `newBastionVaultListeners` 再把兩個 IP 組成 `vaultops.Listeners`，分別交給 loopback 與 publish 的 listener 憑證。同一份檔案也是 Ansible 渲染 `vault.hcl` 與防火牆規則、Terraform 建立 cert role 的來源，所以位址只在一處宣告。
 
-這個設計取代了舊的三段式退回鏈：`credentials.yaml` 的 `vault.address`、`.env` 的 `BASTION_VAULT_ADDR`、`vaultops` 寫死的預設值。三處各自持有同一個位址字面值，修改時必須同步，漏改的那一處只會在執行到那條路徑時才失敗。現在 `vaultops.NewPaths` 直接接收 `topology.BastionVault`，沒有任何預設值可以退回。
+這個設計取代了舊的三段式退回鏈：`credentials.yaml` 的 `vault.address`、`.env` 的 `BASTION_VAULT_ADDR`、`vaultops` 寫死的預設值。三處各自持有同一個位址字面值，修改時必須同步，漏改的那一處只會在執行到那條路徑時才失敗。現在只有命令層讀取 `topology.BastionVault`，再以 `vaultclient.Config` 與 `vaultops.Listeners` 注入 `vaultops`，沒有任何預設值可以退回。
 
 ## Section 3. 宣告式設定解析
 
@@ -642,13 +642,13 @@ sequenceDiagram
     participant Vault as Bastion Vault
 
     Op->>VaultOps: GenerateTLS
-    VaultOps->>Disk: 寫入 ca.pem 與 vault.pem 及兩把私鑰
+    VaultOps->>Disk: 寫入兩個 CA、兩張 listener 憑證及四把私鑰
 
     Op->>VaultOps: Init
     VaultOps->>Vault: sys/init 要求 5 把金鑰門檻 3
     Vault-->>VaultOps: 金鑰與 root token
     VaultOps->>Disk: 寫入 init-output.json 與 unseal.key
-    VaultOps->>Disk: persistBootstrapRootToken 寫入 ~/.vault-token
+    VaultOps->>Disk: PersistTokenFile 寫入 ~/.vault-token
     VaultOps->>Vault: Unseal 逐把送出金鑰
 
     Op->>VaultOps: EnableKVEngine
@@ -663,91 +663,96 @@ sequenceDiagram
 
 ```go
 type Paths struct {
-    ProjectRoot      string
-    AnsibleDir       string
-    Home             string
-    bastionVaultAddr string
-    listenerIPs      []net.IP
+    ProjectRoot string
+    Home        string
 }
 
-func (p Paths) resolveKeysDir() string       { return filepath.Join(p.ProjectRoot, "vault", "keys") }
-func (p Paths) ResolveTLSDir() string        { return filepath.Join(p.ProjectRoot, "vault", "tls") }
-func (p Paths) resolveInitFile() string      { return filepath.Join(p.resolveKeysDir(), "init-output.json") }
-func (p Paths) resolveUnsealKeyFile() string { return filepath.Join(p.resolveKeysDir(), "unseal.key") }
-func (p Paths) resolveRootTokenFile() string { return filepath.Join(p.Home, ".vault-token") }
-func (p Paths) resolveCACertFile() string    { return filepath.Join(p.ResolveTLSDir(), "ca.pem") }
+func (p Paths) TLSDir() string        { return filepath.Join(p.ProjectRoot, "vault", "tls") }
+func (p Paths) CACertFile() string    { return filepath.Join(p.TLSDir(), tlsNameMLDSACA+".pem") }
+func (p Paths) KeysDir() string       { return filepath.Join(p.ProjectRoot, "vault", "keys") }
+func (p Paths) InitFile() string      { return filepath.Join(p.KeysDir(), "init-output.json") }
+func (p Paths) UnsealKeyFile() string { return filepath.Join(p.KeysDir(), "unseal.key") }
+func (p Paths) RootTokenFile() string { return filepath.Join(p.Home, ".vault-token") }
 ```
 
-集中的效果是目錄配置只有一個定義點。`Init` 寫入的 `init-output.json`、`Unseal` 讀取的 `unseal.key`、`newClient` 驗證用的 `ca.pem` 分屬三個不同的流程，如果各自用字面值組路徑，調整 `vault/` 底下的配置就必須同時改動三處，而漏改的那一處只會在執行到那條路徑時才失敗。
+集中的效果是目錄配置只有一個定義點。`Init` 寫入的 `init-output.json`、`Unseal` 讀取的 `unseal.key`、命令層建立 client 時驗證用的 `ca-ml-dsa-87.pem` 分屬三個不同的流程，如果各自用字面值組路徑，調整 `vault/` 底下的配置就必須同時改動三處，而漏改的那一處只會在執行到那條路徑時才失敗。
 
-`resolveRootTokenFile` 指向 `~/.vault-token` 而不是專案目錄底下，理由跟其他路徑不同：這是 Vault 官方命令列工具預設讀取的位置。把 token 寫在這裡，操作者在這支工具跑完之後可以直接下 `vault kv get` 之類的指令排查，不需要額外設定環境變數。
+`RootTokenFile` 指向 `~/.vault-token` 而不是專案目錄底下，理由跟其他路徑不同：這是 Vault 官方命令列工具預設讀取的位置。把 token 寫在這裡，操作者在這支工具跑完之後可以直接下 `vault kv get` 之類的指令排查，不需要額外設定環境變數。
 
-`bastionVaultAddr` 與 `listenerIPs` 是未匯出的，兩者只能經由 `NewPaths` 從 `topology.BastionVault` 取得：
+`Paths` 只持有檔案位置。Vault 端點與 listener 位址是部署宣告，由命令層 `cmd/governance/helpers.go` 從 `topology.BastionVault` 組成兩個值後注入：
 
 ```go
-func NewPaths(projectRoot, ansibleDir, home string, bastion topology.BastionVault) Paths {
-    return Paths{
-        ProjectRoot:      projectRoot,
-        AnsibleDir:       ansibleDir,
-        Home:             home,
-        bastionVaultAddr: bastion.APIEndpoint(),
-        listenerIPs:      bastion.ListenerIPs(),
+func (a *app) newBastionVaultConfig() vaultclient.Config {
+    return vaultclient.Config{
+        Address:    a.topology.BastionVault.APIEndpoint(),
+        CACertPath: a.newVaultPaths().CACertFile(),
+    }
+}
+
+func (a *app) newBastionVaultListeners() vaultops.Listeners {
+    return vaultops.Listeners{
+        Loopback: net.ParseIP(a.topology.BastionVault.LoopbackAddress),
+        Publish:  net.ParseIP(a.topology.BastionVault.PublishAddress),
     }
 }
 ```
 
-不匯出的理由是兩個值必須來自同一份拓撲宣告。套件外如果能直接組出 `Paths`，就能塞入一個與 `vault.hcl` listener 不一致的位址，或讓 `GenerateTLS` 簽出一張缺 IP 的憑證。`Paths` 沒有任何預設位址，`GenerateTLS` 在 `listenerIPs` 為空時直接拒絕。
+`vaultops` 因此不匯入部署 schema，`NewOperator(paths, server, out)` 接收 `vaultclient.Config`，`GenerateTLS(dir, listeners)` 接收 `Listeners`。兩個值都來自同一份拓撲宣告，與 `vault.hcl` 的 listener 同源。`Listeners` 沒有任何預設位址，`GenerateTLS` 在任一個 IP 為空時直接拒絕。
 
 ### Item B. TLS 憑證的產生
 
-`GenerateTLS` 產生一組自簽的憑證授權單位（CA）與一張由它簽發的伺服器憑證，兩者都放在 `vault/tls/` 底下。第一個動作是把整個目錄清空：
+`GenerateTLS` 產生兩個自簽的憑證授權單位（CA）與兩張 listener 憑證，全部放在 `vault/tls/` 底下：
+
+| 檔案                                        | 金鑰      | 簽發者         | 用途                                                              |
+| ------------------------------------------- | --------- | -------------- | ----------------------------------------------------------------- |
+| `ca-ml-dsa-87.pem`、`ca-ml-dsa-87-key.pem`  | ML-DSA-87 | 自簽           | loopback listener、每個 Vault Proxy 的 client 與 listener 憑證    |
+| `ca-ec-p384.pem`、`ca-ec-p384-key.pem`      | EC P-384  | 自簽           | publish listener 與 metrics listener                              |
+| `loopback.pem`、`loopback-key.pem`          | ML-DSA-87 | `ca-ml-dsa-87` | loopback listener                                                 |
+| `publish.pem`、`publish-key.pem`            | EC P-384  | `ca-ec-p384`   | publish listener 與 metrics listener                              |
+
+publish 這條鏈維持 EC P-384，因為 guest 上的 SPIRE 1.15.4 以 Go 1.26 編譯，無法驗證 ML-DSA 鏈，取捨見 `planning/platform-pki-mechanism.md` Section 3 Item A。第一個動作是把整個目錄清空：
 
 ```go
-tlsDir := p.ResolveTLSDir()
-if err := os.RemoveAll(tlsDir); err != nil {
-    return fmt.Errorf("vaultops: remove %s: %w", tlsDir, err)
+if err := os.RemoveAll(dir); err != nil {
+    return fmt.Errorf("vaultops: remove %s: %w", dir, err)
 }
-if err := os.MkdirAll(tlsDir, 0o755); err != nil {
-    return fmt.Errorf("vaultops: mkdir %s: %w", tlsDir, err)
+if err := os.MkdirAll(dir, 0o755); err != nil {
+    return fmt.Errorf("vaultops: mkdir %s: %w", dir, err)
 }
 ```
 
-清空而不是逐一覆寫，是因為這四個檔案必須來自同一次產生。`ca.pem` 是客戶端的信任錨點，`vault.pem` 是伺服器出示的憑證，如果只覆寫其中一部分，客戶端會拿新的 CA 去驗證舊的伺服器憑證，握手一定失敗，而錯誤訊息只會說憑證無法驗證，不會指出真正的原因是兩者版次不同。這也是選單上這個項目標註會摧毀既有檔案、並且在執行前要求輸入確認的理由。
+清空而不是逐一覆寫，是因為這八個檔案必須來自同一次產生。CA 憑證是客戶端的信任錨點，listener 憑證是伺服器出示的憑證，如果只覆寫其中一部分，客戶端會拿新的 CA 去驗證舊的伺服器憑證，握手一定失敗，而錯誤訊息只會說憑證無法驗證，不會指出真正的原因是兩者版次不同。這也是選單上這個項目標註會摧毀既有檔案、並且在執行前要求輸入確認的理由。
 
-CA 的模板如下：
+兩個 CA 由同一個 `issueSelfSignedRootCA` 產生，差別只在金鑰產生函數與 `CommonName`（`MetaProvisionVaultCA ML-DSA-87` 與 `MetaProvisionVaultCA EC P-384`）。兩個 CA 的主體名稱不同，客戶端把兩個 CA 放進同一個信任庫時，建鏈不會混淆：
 
 ```go
-caTemplate := &x509.Certificate{
-    SerialNumber:          caSerial,
-    Subject:               pkix.Name{CommonName: "MetaProvisionVaultCA"},
-    NotBefore:             time.Now().Add(-5 * time.Minute),
-    NotAfter:              time.Now().AddDate(1, 0, 0),
+template := &x509.Certificate{
+    Subject:               pkix.Name{CommonName: commonName},
     KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
     BasicConstraintsValid: true,
     IsCA:                  true,
 }
 ```
 
-`NotBefore` 刻意往前推五分鐘，用來吸收主機與容器之間的時鐘偏差。憑證剛產生就立刻被使用，如果生效時間正好等於產生時間，而驗證方的時鐘比簽發方慢幾秒，這張憑證在對方眼中會是「尚未生效」而遭拒絕。往前推一段固定的緩衝，代價只是憑證提早幾分鐘生效，換掉一整類難以重現的啟動失敗。
+序號、`NotBefore` 與 `NotAfter` 由 `createCertificate` 統一填入，`NotBefore` 刻意往前推五分鐘，用來吸收主機與容器之間的時鐘偏差。憑證剛產生就立刻被使用，如果生效時間正好等於產生時間，而驗證方的時鐘比簽發方慢幾秒，這張憑證在對方眼中會是「尚未生效」而遭拒絕。往前推一段固定的緩衝，代價只是憑證提早幾分鐘生效，換掉一整類難以重現的啟動失敗。
 
-伺服器憑證的主體替代名稱是關鍵欄位：
+兩張 listener 憑證的主體替代名稱是關鍵欄位：
 
 ```go
-serverTemplate := &x509.Certificate{
-    SerialNumber: serverSerial,
-    Subject:      pkix.Name{CommonName: "localhost"},
-    NotBefore:    time.Now().Add(-5 * time.Minute),
-    NotAfter:     time.Now().AddDate(1, 0, 0),
-    KeyUsage:     x509.KeyUsageDigitalSignature,
-    ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-    DNSNames:     []string{"localhost"},
-    IPAddresses:  p.listenerIPs,
+loopback := &x509.Certificate{
+    Subject:     pkix.Name{CommonName: "localhost"},
+    DNSNames:    []string{"localhost"},
+    IPAddresses: []net.IP{listeners.Loopback},
+}
+publish := &x509.Certificate{
+    Subject:     pkix.Name{CommonName: listeners.Publish.String()},
+    IPAddresses: []net.IP{listeners.Publish},
 }
 ```
 
-CA 與伺服器的金鑰都是 ECDSA P-256，由 `ecdsa.GenerateKey(elliptic.P256(), rand.Reader)` 產生。ECDSA 金鑰不做金鑰加密，因此伺服器憑證的 `KeyUsage` 只有 `DigitalSignature`。演算法的取捨與實測數據見 `documentation/architecture/bastion-vault-privilege-convergence.md` _Section 7 Item H_。
+`issueListenerCert` 為兩張憑證補上 `KeyUsage: DigitalSignature` 與 `ExtKeyUsage: ServerAuth`。ML-DSA 與 ECDSA 都只做簽章，不做金鑰加密。
 
-`DNSNames` 與 `IPAddresses` 同時列出三個名稱，因為同一台 Vault 會被用不同的形式連上：容器內部走 `localhost`，主機上的 CLI、Terraform 與 Vault Proxy 走 `loopback_address`，虛擬機走 publish 網段的 `publish_address`。現行的 TLS 驗證只看主體替代名稱而不再參考 `CommonName`，任何一個沒有列進去的形式都會在握手時被判定為名稱不符。兩個 IP 都來自 `workstation-topology.yaml`，與 `vault.hcl` 的 listener 同源，所以不需要另外維護。
+每張憑證只列出自己 listener 的名稱：容器內部與主機上的 CLI、Terraform、Vault Proxy 走 `localhost` 或 `loopback_address`，虛擬機走 `publish_address`。現行的 TLS 驗證只看主體替代名稱而不再參考 `CommonName`，因此 loopback 憑證無法冒充 publish listener，反之亦然。兩個 IP 都來自 `workstation-topology.yaml`，與 `vault.hcl` 的 listener 同源，所以不需要另外維護。
 
 序號取自密碼學亂數而不是遞增計數：
 
@@ -761,24 +766,22 @@ func generateCertificateSerial() (*big.Int, error) {
 
 規範要求同一個 CA 簽發的憑證序號不得重複。遞增計數需要在磁碟上保存目前的計數值，而這個工具每次重新產生都會清空整個目錄，計數值無處可存。128 位元的亂數把重複機率壓到可忽略，同時不需要保存任何狀態。
 
-四個檔案的權限分成兩級：
+八個檔案的權限分成兩級：
 
 ```go
-writePrivateKeyFile(filepath.Join(resolveTLSDir, "ca-key.pem"), caKey)
-writePEMFile(filepath.Join(resolveTLSDir, "ca.pem"), "CERTIFICATE", ..., 0o644)
-writePrivateKeyFile(filepath.Join(resolveTLSDir, "vault-key.pem"), serverKey)
-writePEMFile(filepath.Join(resolveTLSDir, "vault.pem"), "CERTIFICATE", ..., 0o644)
+writePEMFile(filepath.Join(dir, name+"-key.pem"), "PRIVATE KEY", keyDER, 0o600)
+writePEMFile(filepath.Join(dir, name+".pem"), "CERTIFICATE", der, 0o644)
 ```
 
-兩把私鑰由 `writePrivateKeyFile` 以 PKCS #8（`PRIVATE KEY`）寫成 `0o600`，兩張憑證是 `0o644`。憑證本來就是要交給對方看的公開資料，而且 Vault 容器與客戶端都需要讀得到；私鑰一旦外流，持有者可以冒充這台 Vault，所以只有擁有者能讀。
+四把私鑰由 `writeCertificatePair` 以 PKCS #8（`PRIVATE KEY`）寫成 `0o600`，四張憑證是 `0o644`。Go 1.27 的 `x509.MarshalPKCS8PrivateKey` 對 ML-DSA 只寫出 32 位元組的 seed，Vault 與 OpenSSL 都讀得了這個格式，而 Go 拒絕展開後的 ML-DSA 私鑰格式。憑證本來就是要交給對方看的公開資料，而且 Vault 容器與客戶端都需要讀得到；私鑰一旦外流，持有者可以冒充這台 Vault，所以只有擁有者能讀。
 
 ### Item C. 初始化與金鑰的持久化
 
 `Init` 的第一行是一個檔案存在檢查，擋在所有網路動作之前：
 
 ```go
-if _, err := os.Stat(p.resolveInitFile()); err == nil {
-    return fmt.Errorf("vaultops: %s already exists, refusing to re-init", p.resolveInitFile())
+if _, err := os.Stat(op.paths.InitFile()); err == nil {
+    return fmt.Errorf("vaultops: %s already exists, refusing to re-init", op.paths.InitFile())
 }
 ```
 
@@ -789,7 +792,7 @@ if _, err := os.Stat(p.resolveInitFile()); err == nil {
 初始化參數採用五把金鑰、門檻三把：
 
 ```go
-resp, err := client.Sys().InitWithContext(ctx, &vaultapi.InitRequest{SecretShares: 5, SecretThreshold: 3})
+resp, err := op.client.Sys().InitWithContext(ctx, &vaultapi.InitRequest{SecretShares: 5, SecretThreshold: 3})
 ```
 
 這是 Shamir 秘密分享的標準配置。門檻低於總數代表遺失兩把金鑰仍然可以解封，門檻高於一代表單獨一把金鑰外流不足以解封。
@@ -797,23 +800,24 @@ resp, err := client.Sys().InitWithContext(ctx, &vaultapi.InitRequest{SecretShare
 持久化的順序值得注意：
 
 ```go
-func persistInitOutput(p Paths, resp *vaultapi.InitResponse) error {
-    if err := os.MkdirAll(p.resolveKeysDir(), 0o700); err != nil {
-        return fmt.Errorf("vaultops: mkdir %s: %w", p.resolveKeysDir(), err)
+func (op *Operator) persistInitOutput(resp *vaultapi.InitResponse) error {
+    keysDir := op.paths.KeysDir()
+    if err := os.MkdirAll(keysDir, 0o700); err != nil {
+        return fmt.Errorf("vaultops: mkdir %s: %w", keysDir, err)
     }
 
     raw, err := json.Marshal(resp)
     if err != nil {
         return fmt.Errorf("vaultops: marshal init response: %w", err)
     }
-    if err := os.WriteFile(p.resolveInitFile(), raw, 0o600); err != nil {
-        return fmt.Errorf("vaultops: write %s: %w", p.resolveInitFile(), err)
+    if err := os.WriteFile(op.paths.InitFile(), raw, 0o600); err != nil {
+        return fmt.Errorf("vaultops: write %s: %w", op.paths.InitFile(), err)
     }
     if len(resp.KeysB64) == 0 {
-        return fmt.Errorf("vaultops: no unseal keys in init response")
+        return errors.New("vaultops: the init response does not contain unseal keys")
     }
-    if err := os.WriteFile(p.resolveUnsealKeyFile(), []byte(strings.Join(resp.KeysB64, "\n")+"\n"), 0o600); err != nil {
-        return fmt.Errorf("vaultops: write %s: %w", p.resolveUnsealKeyFile(), err)
+    if err := os.WriteFile(op.paths.UnsealKeyFile(), []byte(strings.Join(resp.KeysB64, "\n")+"\n"), 0o600); err != nil {
+        return fmt.Errorf("vaultops: write %s: %w", op.paths.UnsealKeyFile(), err)
     }
     return nil
 }
@@ -823,17 +827,17 @@ func persistInitOutput(p Paths, resp *vaultapi.InitResponse) error {
 
 目錄權限是 `0o700`、兩個檔案是 `0o600`，因為這裡存的是解封金鑰與 root token，等同於整座 Vault 的完整存取權。
 
-`unseal.key` 與 `init-output.json` 內容重疊，前者只是把 base64 金鑰一行一個攤平。分成兩個檔案的理由是消費者不同：`init-output.json` 保留完整回應供人工排查，`unseal.key` 給 `applyUnsealKeys` 用最單純的格式逐行讀取，不需要每次解封都重新解析 JSON 結構。
+`unseal.key` 與 `init-output.json` 內容重疊，前者只是把 base64 金鑰一行一個攤平。分成兩個檔案的理由是消費者不同：`init-output.json` 保留完整回應供人工排查，`unseal.key` 給 `Unseal` 與 `GenerateRoot` 用最單純的格式逐行讀取，不需要每次解封都重新解析 JSON 結構。
 
 `Init` 的後半段依序是持久化、寫出 bootstrap 用的 root token、自動解封：
 
 ```go
-out.Print(ui.Info, "Keys saved to "+p.resolveKeysDir())
+op.out.Print(ui.Info, "Keys saved to "+op.paths.KeysDir())
 
-if err := persistBootstrapRootToken(p); err != nil {
+if err := vaultclient.PersistTokenFile(op.paths.Home, resp.RootToken); err != nil {
     return err
 }
-if err := Unseal(ctx, p, out); err != nil {
+if err := op.Unseal(ctx); err != nil {
     return fmt.Errorf("vaultops: auto-unseal after init: %w", err)
 }
 ```
@@ -845,13 +849,14 @@ if err := Unseal(ctx, p, out); err != nil {
 `Unseal` 的前兩個動作都是提早退出的檢查：
 
 ```go
-keysRaw, err := os.ReadFile(p.resolveUnsealKeyFile())
+keysRaw, err := os.ReadFile(op.paths.UnsealKeyFile())
 if err != nil {
-    return fmt.Errorf("vaultops: unseal keys not found at %s, run Init first: %w", p.resolveUnsealKeyFile(), err)
+    return fmt.Errorf("vaultops: unseal keys not found at %s, run Init first: %w", op.paths.UnsealKeyFile(), err)
 }
 
-if _, sealed, err := ProbeBastionSealState(ctx, p); err == nil && !sealed {
-    out.Print(ui.Info, "Bastion Vault is already unsealed.")
+status, err := op.client.Sys().SealStatusWithContext(ctx)
+if err == nil && !status.Sealed {
+    op.out.Print(ui.Info, "Vault is already unsealed.")
     return nil
 }
 ```
@@ -863,17 +868,14 @@ if _, sealed, err := ProbeBastionSealState(ctx, p); err == nil && !sealed {
 金鑰的送出方式是整個檔案全部送出：
 
 ```go
-func applyUnsealKeys(ctx context.Context, client *vaultapi.Client, keysRaw []byte) error {
-    for _, key := range strings.Split(strings.TrimSpace(string(keysRaw)), "\n") {
-        key = strings.TrimSpace(key)
-        if key == "" {
-            continue
-        }
-        if _, err := client.Sys().UnsealWithContext(ctx, key); err != nil {
-            return fmt.Errorf("vaultops: unseal: %w", err)
-        }
+for _, key := range strings.Split(strings.TrimSpace(string(keysRaw)), "\n") {
+    key = strings.TrimSpace(key)
+    if key == "" {
+        continue
     }
-    return nil
+    if _, err := op.client.Sys().UnsealWithContext(ctx, key); err != nil {
+        return fmt.Errorf("vaultops: unseal: %w", err)
+    }
 }
 ```
 
@@ -882,19 +884,27 @@ func applyUnsealKeys(ctx context.Context, client *vaultapi.Client, keysRaw []byt
 送完之後不直接宣告成功，而是輪詢確認：
 
 ```go
-func waitUntilUnsealed(ctx context.Context, p Paths, timeout time.Duration) error {
+func (op *Operator) waitUntilUnsealed(ctx context.Context, timeout time.Duration) error {
     deadline := time.Now().Add(timeout)
+    ticker := time.NewTicker(500 * time.Millisecond)
+    defer ticker.Stop()
+
     for time.Now().Before(deadline) {
-        if _, sealed, err := ProbeBastionSealState(ctx, p); err == nil && !sealed {
+        status, err := op.client.Sys().SealStatusWithContext(ctx)
+        if err == nil && !status.Sealed {
             return nil
         }
-        time.Sleep(500 * time.Millisecond)
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        case <-ticker.C:
+        }
     }
-    return fmt.Errorf("vaultops: still reporting sealed after 5s of unseal attempts")
+    return fmt.Errorf("vaultops: still reporting sealed after %v of unseal attempts", timeout)
 }
 ```
 
-輪詢的必要性在於解封完成與 Vault 對外回報自己已解封之間存在時間差，尤其是 Vault 還要完成內部的初始化工作。直接在送完最後一把金鑰之後就回報成功，接下來的 `EnableKVEngine` 有機會打在一個還沒準備好的端點上。呼叫端傳入的逾時上限是 10 秒，而錯誤訊息的字面寫的是 5 秒，兩者並不一致，閱讀輸出時需要留意。
+輪詢的必要性在於解封完成與 Vault 對外回報自己已解封之間存在時間差，尤其是 Vault 還要完成內部的初始化工作。直接在送完最後一把金鑰之後就回報成功，接下來的 `EnableKVEngine` 有機會打在一個還沒準備好的端點上。呼叫端傳入的逾時上限是 10 秒，錯誤訊息引用同一個值。輪詢等待同時監聽 `ctx`，操作者中止時不必等到逾時。
 
 ### Item E. KV2 引擎的啟用
 
@@ -904,12 +914,12 @@ func waitUntilUnsealed(ctx context.Context, p Paths, timeout time.Duration) erro
 mounts, err := client.Sys().ListMountsWithContext(ctx)
 if err == nil {
     if _, exists := mounts["secret/"]; exists {
-        out.Print(ui.Info, "kv-v2 secrets engine is already enabled.")
+        op.out.Print(ui.Info, "kv-v2 secrets engine is already enabled.")
         return nil
     }
 }
 
-out.Print(ui.Task, "'secret/' path not found, enabling kv-v2...")
+op.out.Print(ui.Task, "'secret/' path not found, enabling kv-v2...")
 if err := client.Sys().MountWithContext(ctx, "secret", &vaultapi.MountInput{Type: "kv-v2"}); err != nil {
     return fmt.Errorf("vaultops: enable kv-v2: %w", err)
 }
@@ -923,12 +933,12 @@ if err := client.Sys().MountWithContext(ctx, "secret", &vaultapi.MountInput{Type
 
 ### Item F. Root token 的生命週期與輪替用的 client
 
-root token 只服務 bootstrap。`persistBootstrapRootToken` 在 `Init` 時把 `init-output.json` 的 `root_token` 寫到 token helper 檔 `~/.vault-token`，供 `enable-kv`、首次寫入 state backend token 與平台信任事實、首次套用 `foundation-vault-bastion` 使用。解封不再同步 token，`.env` 也不保存 token，理由是撤銷之後任何自動同步都會把已撤銷或不該存在的 token 寫回磁碟。
+root token 只服務 bootstrap。`Init` 以 `vaultclient.PersistTokenFile` 把初始化回應的 `root_token` 寫到 token helper 檔 `~/.vault-token`，供 `enable-kv`、首次寫入 state backend token 與平台信任事實、首次套用 `foundation-vault-bastion` 使用。解封不再同步 token，`.env` 也不保存 token，理由是撤銷之後任何自動同步都會把已撤銷或不該存在的 token 寫回磁碟。
 
 `RevokeRoot` 結束 bootstrap，執行順序如下：
 
 1. `~/.vault-token` 沒有 token 時回傳 `ErrNoRootToken`。
-2. 經 foundation 身分的 Vault Proxy 呼叫 `auth/token/lookup-self`，token 必須持有該身分的 policy，否則回傳 `ErrFoundationNotReady`。這個前置條件防止撤銷後 Bastion Vault 沒有任何管理者。
+2. 經接手身分呼叫 `auth/token/lookup-self`，token 必須持有該身分的 policy，否則回傳 `ErrSuccessorNotReady`。命令層傳入 foundation 身分的 Vault Proxy 作為接手身分。這個前置條件防止撤銷後 Bastion Vault 沒有任何管理者。
 3. 以 root token 呼叫 `lookup-self`，policy 必須包含 `root`，避免誤撤其他 token。
 4. 呼叫 `auth/token/revoke-self`，接著刪除 `~/.vault-token`，並把 `init-output.json` 的 `root_token` 清空，unseal key 保留。
 
@@ -938,30 +948,15 @@ root token 只服務 bootstrap。`persistBootstrapRootToken` 在 `Init` 時把 `
 
 ### Item G. 狀態探測與呈現
 
-同一件事有兩個查詢函數，回傳形狀不同，對應兩種不同的用途：
+`vaultops` 不提供狀態查詢函數，兩個消費者各自使用既有的介面：
 
 ```go
-func InspectBastionStatus(ctx context.Context, p Paths) vaultclient.SealStatus {
-    return vaultclient.InspectStatus(ctx, vaultclient.Config{
-        Address:    p.bastionVaultAddr,
-        CACertPath: p.resolveCACertFile(),
-    })
-}
+bastion := vaultclient.InspectStatus(ctx, a.newBastionVaultConfig())
 ```
 
-`InspectBastionStatus` 委託 `vaultclient.InspectStatus` 進行探測，完全不回傳錯誤，任何失敗都收斂成零值，而零值的意義是 `Reachable` 為否。這是因為它的消費者是 _Section 9_ 的狀態橫幅，橫幅要做的事情是把 Vault 目前的狀況顯示成四種狀態之一，而「連不上」本身就是其中一種正常要顯示的狀態，不是應該中斷選單的例外。
+_Section 9_ 的狀態橫幅直接呼叫 `vaultclient.InspectStatus`。這個函數完全不回傳錯誤，任何失敗都收斂成零值，而零值的意義是 `Reachable` 為否。橫幅要做的事情是把 Vault 目前的狀況顯示成四種狀態之一，而「連不上」本身就是其中一種正常要顯示的狀態，不是應該中斷選單的例外。
 
-```go
-func ProbeBastionSealState(ctx context.Context, p Paths) (running, sealed bool, err error) {
-    client, err := p.newBastionClientWithToken("")
-    if err != nil {
-        return false, false, err
-    }
-    return vaultclient.ProbeSealState(ctx, client)
-}
-```
-
-`ProbeBastionSealState` 的消費者是 _Item D_ 的解封流程控制，需要的是「現在還封著嗎」這個布林判斷。它只在 client 建構失敗時回傳錯誤，查詢失敗則以 `running` 為否表示，同樣不當成錯誤。這個區分讓 `waitUntilUnsealed` 的輪詢迴圈可以用同一個條件式處理「還連不上」與「連得上但還封著」兩種都應該繼續等待的情況。
+_Item D_ 的 `Unseal` 與 `waitUntilUnsealed` 以 `Operator` 持有的 client 呼叫 `SealStatusWithContext`。查詢失敗與仍然封著都視為「繼續等待」，讓輪詢迴圈用同一個條件式處理「還連不上」與「連得上但還封著」兩種情況。client 由 `NewOperator` 建構，建構失敗在命令層取得 `Operator` 時就回傳錯誤。
 
 ## Section 5. Vault 儲存佈局與讀寫原語
 
@@ -1942,7 +1937,7 @@ for {
 - 若在已解封狀態下偵測到 `~/.vault-token` 仍殘留 root token，會顯示警告，提醒操作者在 bootstrap 結束後執行撤銷。
 
 ```go
-bastion := vaultops.InspectBastionStatus(ctx, a.newVaultPaths())
+bastion := vaultclient.InspectStatus(ctx, a.newBastionVaultConfig())
 switch {
 case !bastion.Reachable:
     a.out.Print(ui.Error, "Bastion Vault: Stopped")
@@ -2001,7 +1996,7 @@ return lastErr
 
 #### 1. Bastion Vault 初始化防禦（`initVault`）
 
-在真正執行 `vaultops.Init` 之前，`initVault` 設計了一道關鍵的連線與狀態防線：
+在真正執行 `Operator.Init` 之前，`initVault` 設計了一道關鍵的連線與狀態防線：
 
 ```go
 waitCtx, cancel := context.WithTimeout(ctx, serviceReadyTimeout)
@@ -2024,7 +2019,11 @@ if len(retained) > 0 {
     return fmt.Errorf("%w: rebuild the service of %s, as README Section 4 Item D describes, before vault init",
         errRetainedServiceState, strings.Join(retained, ", "))
 }
-return vaultops.Init(ctx, a.newVaultPaths(), a.out)
+op, err := a.newVaultOperator()
+if err != nil {
+    return err
+}
+return op.Init(ctx)
 ```
 
 這項檢查設有 5 分鐘上限（`serviceReadyTimeout`）。針對每一組宣告了出廠預設密碼的服務，它會反覆輪詢直到服務就緒，並確認服務當前是否仍接受出廠預設值。
@@ -2058,7 +2057,7 @@ if becomePass == "" {
 
 1. 套用 SELinux 政策與檔案上下文（`buildSELinuxPlaybook`）。
 2. 配置 Libvirt 虛擬網路與 Bastion Vault 儲存目錄（`buildLibvirtPlaybook`）。
-3. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA，確保後續 Vault Proxy 能取得正確簽署的伺服器與客戶端憑證。
+3. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca-ml-dsa-87.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA，確保後續 Vault Proxy 能取得正確簽署的伺服器與客戶端憑證。
 4. 部署本機 Vault Proxies（`buildVaultProxyPlaybook`）。
 
 #### 3. 身分代理與安全輪替（`buildProxyConfig`、`newRotationClient`、`revokeRootToken`）
