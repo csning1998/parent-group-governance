@@ -63,7 +63,8 @@ resource "vault_auth_backend" "operator_cert" {
   description = "Client certificates of the operator Vault Proxies on the workstation, signed by the local CA."
 }
 
-# A governance identity reads the state backend token and the group keys of workstation-topology.yaml, and writes nothing.
+# A governance identity reads the state backend token and the read paths of workstation-topology.yaml, and writes the
+# secrets below its write prefixes alone.
 resource "vault_policy" "operator_governance" {
   for_each = local.operator_governance_identities
 
@@ -76,6 +77,12 @@ resource "vault_policy" "operator_governance" {
         for p in concat([local.operator_proxy.state_backend.vault_kv_path], each.value.allowed_read_secret_paths) :
         "${local.operator_proxy.state_backend.vault_kv_mount}/data/${p}" => { capabilities = local.acl_capability.read }
       },
+      merge([for p in each.value.allowed_write_secret_paths : {
+        "${local.operator_proxy.state_backend.vault_kv_mount}/data/${p}/*"     = { capabilities = local.acl_capability.kv_data }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/metadata/${p}/*" = { capabilities = local.acl_capability.kv_metadata }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/delete/${p}/*"   = { capabilities = local.acl_capability.kv_version }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/destroy/${p}/*"  = { capabilities = local.acl_capability.kv_version }
+      }]...),
     )
   })
 }
