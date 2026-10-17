@@ -31,7 +31,7 @@ resource "vault_kv_secret_v2" "registry_tenant_bastion" {
   data_json = jsonencode({
     vault = jsonencode({
       endpoint             = local.bastion_vault_endpoint
-      listener_ca_cert_pem = data.local_file.bastion_vault_ca.content
+      listener_ca_cert_pem = data.local_file.bastion_vault_publish_ca.content
       approle_mount_path   = vault_auth_backend.approle.path
     })
     pki = jsonencode({

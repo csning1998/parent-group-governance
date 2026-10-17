@@ -1,6 +1,6 @@
 
 # Each operator identity of workstation-topology.yaml logs in through its Vault Proxy with a client certificate,
-# which the local CA of vault/tls signs. A role admits the CN of its own identity alone.
+# which the ML-DSA-87 CA of vault/tls signs. A role admits the CN of its own identity alone.
 locals {
   operator_proxy = local.workstation.operator_vault_proxy
 
@@ -140,7 +140,7 @@ resource "vault_cert_auth_backend_role" "operator" {
   provider             = vault.bastion
   backend              = vault_auth_backend.operator_cert.path
   name                 = "operator-${each.key}"
-  certificate          = data.local_file.bastion_vault_ca.content
+  certificate          = data.local_file.bastion_vault_operator_ca.content
   allowed_common_names = ["operator-${each.key}"]
   token_policies       = local.operator_policy_names[each.key]
   token_ttl            = 60 * 60
