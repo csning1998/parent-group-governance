@@ -26,9 +26,9 @@
     }}
 
 # The copy keeps every caller off the repository path, and the source stays authoritative.
-- name: "A4. Copy the local CA certificate next to the identities"
+- name: "A4. Copy the ML-DSA-87 CA certificate next to the identities"
   ansible.builtin.copy:
-    src: "{{ workstation_vault_proxy_ca_dir }}/ca.pem"
+    src: "{{ workstation_vault_proxy_ca_dir }}/ca-ml-dsa-87.pem"
     dest: "{{ _workstation_vault_proxy_base_dir }}/ca.pem"
     remote_src: true
     owner: "{{ workstation_vault_proxy_operator_user }}"

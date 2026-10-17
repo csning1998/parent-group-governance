@@ -2,7 +2,7 @@
 # Public contract. The CLI injects every value below, and the playbook loads workstation-topology.yaml,
 # which declares bastion_vault and operator_proxy.
 workstation_vault_proxy_operator_user: ""
-# The absolute path of vault/tls in the repository, which holds the local CA certificate and key.
+# The absolute path of vault/tls in the repository, which holds the ML-DSA-87 CA certificate and key.
 workstation_vault_proxy_ca_dir: ""
 
 # Days of validity of each issued certificate, and the remaining days below which the role issues a new one.
