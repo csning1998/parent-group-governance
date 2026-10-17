@@ -47,25 +47,25 @@ This document records the privilege boundaries, roots of trust, fact publication
 
 Each row in the table below represents a threat scenario. The unmitigated consequence column details what an attacker can achieve in the absence of controls, and the countermeasure column points to the corresponding section of this document.
 
-| ID  | Scenario                                                                 | Unmitigated Consequence                                                                                                                                                                                                                                                                                                                                 | Countermeasure                       |
-| --- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| T1  | A tenant has write access to both policies and auth roles simultaneously | The tenant writes a policy containing `path "*"` and assigns the policy to a role of the tenant, obtaining full Bastion Vault privileges, including intermediate CA issuance and transit key decryption                                                                                                                                                 | Section 3 Item E                     |
-| T2  | `allowed_parameters` matches policy names via glob patterns              | Strings like `<code>-a,other` are split into two distinct policies by the auth method, allowing the tenant to assign policies outside its assignment scope                                                                                                                                                                                              | Section 3 Item E.1                   |
-| T3  | Operator login credentials are issued by Terraform                       | Secret IDs or tokens enter state files, outputs, and KV storage, allowing any layer with read access to pgg state to log in as the operator identity indefinitely                                                                                                                                                                                       | Section 3 Item D                     |
-| T4  | mp reads pgg state via `terraform_remote_state`                          | The reader acquires the entire state snapshot. If the GitLab token used for reading carries the Maintainer role, the reader could tamper with pgg state to induce unintended actions during the next apply                                                                                                                                              | Section 4 Item C                     |
-| T5  | Published facts reside on paths writable by the tenant                   | The tenant tampers with the domains or CIDR blocks constraining itself, causing subsequent layers reading those facts to apply relaxed values                                                                                                                                                                                                           | Section 4 Item C.2                   |
-| T6  | Platform trust facts can be overridden by tfvars, `-var`, or `TF_VAR_`   | An uncommitted local value can relax Name Constraints without visibility in the code review process                                                                                                                                                                                                                                                     | Section 4 Item A                     |
-| T7  | Intermediate CAs lack Name Constraints                                   | A compromised SPIRE or Downstream Vault CA can issue certificates for `127.0.0.1` or `10.20.0.1` to spoof the Bastion Vault listener. An attacker who also controls the network path, such as DNS or routing, receives the tokens of clients which trust the `pki-root` bundle. Clients pinned to `MetaProvisionVaultCA` reject the spoofed certificate | Section 4 Item B                     |
-| T8  | Downstream Vault CA is allowed to issue SPIFFE URIs                      | A compromised Downstream Vault can issue arbitrary SVIDs to impersonate any workload identity                                                                                                                                                                                                                                                           | Section 4 Item B.2                   |
-| T9  | The transit unseal policy is assignable on shared mounts                 | A leaked tenant token creates a GitLab CI JWT role with overly broad claims and attaches the transit unseal policy, allowing any CI job with network reachability to the Bastion Vault to decrypt the Downstream Vault root key once the CI job also obtains the encrypted root key from the Downstream Vault storage                                   | Section 3 Item E.3                   |
-| T10 | The transit key is exportable or allows plaintext backup                 | An attacker obtaining the key and the encrypted root key from the Downstream Vault storage can decrypt the root key offline without leaving any decrypt entries in audit logs                                                                                                                                                                           | Section 4 Item D                     |
-| T11 | The terminal outputs token accessors                                     | An accessor captured in scrollback can be used by an identity holding `lookup-accessor` or `revoke-accessor` privileges to inspect or revoke operator tokens                                                                                                                                                                                            | Section 5 Item C                     |
-| T12 | Audit devices are disabled or modified without detection                 | Operations executed by an attacker after disabling audit logging leave no traces, making post-incident investigation impossible                                                                                                                                                                                                                         | Section 5                            |
-| T13 | An operator login credential is intercepted in transit                   | The interceptor replays the credential and logs in as the operator identity, and the legitimate workflow does not notice the second login                                                                                                                                                                                                               | Section 3 Item D.3                   |
-| T14 | The root token or ambient `VAULT_TOKEN` is sent with requests            | The root token reaches a Proxy or an operator shell, effectively elevating the operator identity to root                                                                                                                                                                                                                                                | Section 3 Item D.3, Section 6 Item C |
-| T15 | Operator tokens reside in shell environments                             | Every process of the shell inherits the token, and a token printed or captured from the environment stays valid within its TTL for other processes on the same host                                                                                                                                                                                     | Section 3 Item D.3                   |
-| T16 | A tenant manages leaf roles on an issuing mount without Name Constraints | The tenant creates a role without name restrictions on `pki-intermediate` and issues a certificate for `127.0.0.1` or `10.20.0.1` which chains to `pki-root`, without compromising any CA                                                                                                                                                               | Section 4 Item B.2                   |
-| T17 | A CA signer policy is assignable on the GitLab CI JWT mount              | A CI job assigned `pki-spire-signer-<code>` signs a SPIRE CA under `pki-spire` and mints any SVID of the trust domain                                                                                                                                                                                                                                   | Section 3 Item E.3                   |
+| ID  | Scenario                                                                 | Unmitigated Consequence                                                                                                                                                                                                                                                                                                                              | Countermeasure                       |
+| --- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| T1  | A tenant has write access to both policies and auth roles simultaneously | The tenant writes a policy containing `path "*"` and assigns the policy to a role of the tenant, obtaining full Bastion Vault privileges, including intermediate CA issuance and transit key decryption                                                                                                                                              | Section 3 Item E                     |
+| T2  | `allowed_parameters` matches policy names via glob patterns              | Strings like `<code>-a,other` are split into two distinct policies by the auth method, allowing the tenant to assign policies outside its assignment scope                                                                                                                                                                                           | Section 3 Item E.1                   |
+| T3  | Operator login credentials are issued by Terraform                       | Secret IDs or tokens enter state files, outputs, and KV storage, allowing any layer with read access to pgg state to log in as the operator identity indefinitely                                                                                                                                                                                    | Section 3 Item D                     |
+| T4  | mp reads pgg state via `terraform_remote_state`                          | The reader acquires the entire state snapshot. If the GitLab token used for reading carries the Maintainer role, the reader could tamper with pgg state to induce unintended actions during the next apply                                                                                                                                           | Section 4 Item C                     |
+| T5  | Published facts reside on paths writable by the tenant                   | The tenant tampers with the domains or CIDR blocks constraining itself, causing subsequent layers reading those facts to apply relaxed values                                                                                                                                                                                                        | Section 4 Item C.2                   |
+| T6  | Platform trust facts can be overridden by tfvars, `-var`, or `TF_VAR_`   | An uncommitted local value can relax Name Constraints without visibility in the code review process                                                                                                                                                                                                                                                  | Section 4 Item A                     |
+| T7  | Intermediate CAs lack Name Constraints                                   | A compromised SPIRE or Downstream Vault CA can issue certificates for `127.0.0.1` or `10.20.0.1` to spoof the Bastion Vault listener. An attacker controlling the network path, such as DNS or routing, receives the tokens of clients which trust the `pki-root` bundle. Clients pinned to `Vault Transport Root CA` reject the spoofed certificate | Section 4 Item B                     |
+| T8  | Downstream Vault CA is allowed to issue SPIFFE URIs                      | A compromised Downstream Vault can issue arbitrary SVIDs to impersonate any workload identity                                                                                                                                                                                                                                                        | Section 4 Item B.2                   |
+| T9  | The transit unseal policy is assignable on shared mounts                 | A leaked tenant token creates a GitLab CI JWT role with overly broad claims and attaches the transit unseal policy, allowing any CI job with network reachability to the Bastion Vault to decrypt the Downstream Vault root key once the CI job also obtains the encrypted root key from the Downstream Vault storage                                | Section 3 Item E.3                   |
+| T10 | The transit key is exportable or allows plaintext backup                 | An attacker obtaining the key and the encrypted root key from the Downstream Vault storage can decrypt the root key offline without leaving any decrypt entries in audit logs                                                                                                                                                                        | Section 4 Item D                     |
+| T11 | The terminal outputs token accessors                                     | An accessor captured in scrollback can be used by an identity holding `lookup-accessor` or `revoke-accessor` privileges to inspect or revoke operator tokens                                                                                                                                                                                         | Section 5 Item C                     |
+| T12 | Audit devices are disabled or modified without detection                 | Operations executed by an attacker after disabling audit logging leave no traces, making post-incident investigation impossible                                                                                                                                                                                                                      | Section 5                            |
+| T13 | An operator login credential is intercepted in transit                   | The interceptor replays the credential and logs in as the operator identity, and the legitimate workflow does not notice the second login                                                                                                                                                                                                            | Section 3 Item D.3                   |
+| T14 | The root token or ambient `VAULT_TOKEN` is sent with requests            | The root token reaches a Proxy or an operator shell, effectively elevating the operator identity to root                                                                                                                                                                                                                                             | Section 3 Item D.3, Section 6 Item C |
+| T15 | Operator tokens reside in shell environments                             | Every process of the shell inherits the token, and a token printed or captured from the environment stays valid within its TTL for other processes on the same host                                                                                                                                                                                  | Section 3 Item D.3                   |
+| T16 | A tenant manages leaf roles on an issuing mount without Name Constraints | The tenant creates a role without name restrictions on `pki-intermediate` and issues a certificate for `127.0.0.1` or `10.20.0.1` which chains to `pki-root`, without compromising any CA                                                                                                                                                            | Section 4 Item B.2                   |
+| T17 | A CA signer policy is assignable on the GitLab CI JWT mount              | A CI job assigned `pki-intermediate-spire-signer-<code>` signs a SPIRE CA under `pki-intermediate-spire` and mints any SVID of the trust domain                                                                                                                                                                                                      | Section 3 Item E.3                   |
 
 ### Item D. Existing Constraints
 
@@ -208,23 +208,23 @@ The tenant ACL comprises five categories of rules.
 | kv           | `secret/data/<code>/*`, `secret/metadata/<code>/*`, `secret/delete/<code>/*`, `secret/destroy/<code>/*`, `sys/internal/ui/mounts/secret/*` | Data read and write, metadata management, version deletion and destruction       |
 | auth mount   | `sys/auth`, `sys/auth/<code>-*`, `sys/mounts/auth/<code>-*`, `auth/<code>-*`                                                               | Creation and configuration of tenant owned auth mounts                           |
 | auth role    | `auth/approle/role/<code>-*`, `auth/gitlab-saas-ci-job-jwt-provider/role/<code>-*`                                                         | Management of tenant roles on the shared mounts                                  |
-| pki          | `sys/mounts/pki-platform`, `pki-platform/roles/<code>-*`, `pki-platform/issue/<code>-*`                                                    | Management of tenant leaf roles on the constrained leaf mount, and leaf issuance |
-| cross tenant | `pki-downstream/root/sign-intermediate`                                                                                                    | Grants registered one by one, each with an explicit reason                       |
+| pki          | `sys/mounts/pki-leaf-platform`, `pki-leaf-platform/roles/<code>-*`, `pki-leaf-platform/issue/<code>-*`                                     | Management of tenant leaf roles on the constrained leaf mount, and leaf issuance |
+| cross tenant | `pki-intermediate-vault-downstream/root/sign-intermediate`                                                                                 | Grants registered one by one, each with an explicit reason                       |
 
 #### Item E.3 Assignment Scopes
 
 1. Each rule which writes auth roles belongs to one assignment scope.
 2. An assignment scope admits `default`, `registry-reader-<code>`, and the assignable policies which name the scope.
 3. Transit unseal policies stay in the owned scope, which contains the Kubernetes auth mounts used by the Downstream Vault pods.
-4. `pki-spire-signer-<code>` stays in the approle scope, which contains the AppRole of the SPIRE Parent upstream authority.
+4. `pki-intermediate-spire-signer-<code>` stays in the approle scope, which contains the AppRole of the SPIRE Parent upstream authority.
 5. The gitlab scope admits neither a signer policy nor an issuer policy, because a CI job role carries claims which the tenant chooses.
 6. `registry/<code>/bastion` publishes the policy names of each scope in the field `assignable_policies`.
 
-| Scope   | Applicable Paths                                     | Assignable Policies                                                                            |
-| ------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| owned   | `auth/<code>-*`                                      | `default`, `registry-reader-<code>`, `pki-platform-issuer-<code>`, `transit-unseal-<consumer>` |
-| approle | `auth/approle/role/<code>-*`                         | `default`, `registry-reader-<code>`, `pki-spire-signer-<code>`                                 |
-| gitlab  | `auth/gitlab-saas-ci-job-jwt-provider/role/<code>-*` | `default`, `registry-reader-<code>`                                                            |
+| Scope   | Applicable Paths                                     | Assignable Policies                                                                                 |
+| ------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| owned   | `auth/<code>-*`                                      | `default`, `registry-reader-<code>`, `pki-leaf-platform-issuer-<code>`, `transit-unseal-<consumer>` |
+| approle | `auth/approle/role/<code>-*`                         | `default`, `registry-reader-<code>`, `pki-intermediate-spire-signer-<code>`                         |
+| gitlab  | `auth/gitlab-saas-ci-job-jwt-provider/role/<code>-*` | `default`, `registry-reader-<code>`                                                                 |
 
 ### Item F. L3 Component Operator
 
@@ -237,11 +237,11 @@ The tenant ACL comprises five categories of rules.
 
 Workload identities are declared by mp. Permissions on the Bastion side originate from the assignable policies of Item E.3.
 
-| Workload                         | Authentication Method              | Policy                       | Bindings                                                                                     |
-| -------------------------------- | ---------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
-| SPIRE Parent upstream authority  | Shared AppRole mount               | `pki-spire-signer-<code>`    | Secret ID and token bound to the address of the SPIRE Parent node on `vault-bastion-publish` |
-| Transit seal of Downstream Vault | Tenant owned Kubernetes auth mount | `transit-unseal-<consumer>`  | `vault` ServiceAccount in the `vault` namespace, dedicated audience, `token_bound_cidrs`     |
-| cert-manager of Downstream Vault | Tenant owned Kubernetes auth mount | `pki-platform-issuer-<code>` | Tenant leaf role of the Vault listener on `pki-platform`                                     |
+| Workload                         | Authentication Method              | Policy                                 | Bindings                                                                                     |
+| -------------------------------- | ---------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
+| SPIRE Parent upstream authority  | Shared AppRole mount               | `pki-intermediate-spire-signer-<code>` | Secret ID and token bound to the address of the SPIRE Parent node on `vault-bastion-publish` |
+| Transit seal of Downstream Vault | Tenant owned Kubernetes auth mount | `transit-unseal-<consumer>`            | `vault` ServiceAccount in the `vault` namespace, dedicated audience, `token_bound_cidrs`     |
+| cert-manager of Downstream Vault | Tenant owned Kubernetes auth mount | `pki-leaf-platform-issuer-<code>`      | Tenant leaf role of the Vault listener on `pki-leaf-platform`                                |
 
 The migration of the SPIRE Parent and the Downstream Vault to these policies is listed in Section 10 Item B.
 
@@ -249,16 +249,16 @@ The migration of the SPIRE Parent and the Downstream Vault to these policies is 
 
 pgg declares five categories of policies. The tenant cannot rewrite these policies, because the tenant ACL does not grant any write on `sys/policies/acl`.
 
-| Policy                             | Allowed Paths                                                                                                                                     | Holder                                 |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `transit-unseal-<consumer>`        | Updates on `transit-unseal/encrypt/<key>`, `transit-unseal/decrypt/<key>`, and `auth/token/renew-self`                                            | Auto unsealing Vault clusters          |
-| `registry-reader-<code>`           | Reads on `registry/data/<code>/*`, `registry/data/platform/*`, and `sys/internal/ui/mounts/registry`                                              | Tenant cert role and tenant workloads  |
-| `pki-spire-signer-<code>`          | Updates on `pki-spire/root/sign-intermediate`                                                                                                     | SPIRE Parent upstream authority        |
-| `pki-platform-issuer-<code>`       | Updates on `pki-platform/issue/<code>-*` and `pki-platform/sign/<code>-*`                                                                         | cert-manager of the Downstream Vault   |
-| `gitlab-ci-code-reviewer-read`     | Reads on `secret/data/parent-group-governance/ci/*`                                                                                               | Automated code reviewer GitLab CI jobs |
-| `operator-governance`              | Reads on the state backend token and the group keys of the governance identity                                                                    | Governance cert role                   |
-| `operator-parent-group-governance` | Management of every mount, auth method, audit device, and policy of `foundation-vault-bastion`, and the KV paths below `parent-group-governance/` | Foundation cert role                   |
-| `operator-service-admin-passwords` | Reads and writes on the paths of `service_admin_passwords` alone                                                                                  | Rotation cert role                     |
+| Policy                                 | Allowed Paths                                                                                                                                     | Holder                                 |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `transit-unseal-<consumer>`            | Updates on `transit-unseal/encrypt/<key>`, `transit-unseal/decrypt/<key>`, and `auth/token/renew-self`                                            | Auto unsealing Vault clusters          |
+| `registry-reader-<code>`               | Reads on `registry/data/<code>/*`, `registry/data/platform/*`, and `sys/internal/ui/mounts/registry`                                              | Tenant cert role and tenant workloads  |
+| `pki-intermediate-spire-signer-<code>` | Updates on `pki-intermediate-spire/root/sign-intermediate`                                                                                        | SPIRE Parent upstream authority        |
+| `pki-leaf-platform-issuer-<code>`      | Updates on `pki-leaf-platform/issue/<code>-*` and `pki-leaf-platform/sign/<code>-*`                                                               | cert-manager of the Downstream Vault   |
+| `gitlab-ci-code-reviewer-read`         | Reads on `secret/data/parent-group-governance/ci/*`                                                                                               | Automated code reviewer GitLab CI jobs |
+| `operator-governance`                  | Reads on the state backend token and the group keys of the governance identity                                                                    | Governance cert role                   |
+| `operator-parent-group-governance`     | Management of every mount, auth method, audit device, and policy of `foundation-vault-bastion`, and the KV paths below `parent-group-governance/` | Foundation cert role                   |
+| `operator-service-admin-passwords`     | Reads and writes on the paths of `service_admin_passwords` alone                                                                                  | Rotation cert role                     |
 
 ## Section 4. Root of Trust and Fact Publication
 
@@ -270,12 +270,12 @@ This section addresses T6 from Section 2 Item C. Platform trust facts govern the
 
 | Field                          | Source                | Example                                           | Purpose                                                                                                               |
 | ------------------------------ | --------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `domain_suffix`                | Bastion KV            | `example.internal`                                | Platform domain, permitted DNS scope for `pki-downstream` and `pki-platform`                                          |
+| `domain_suffix`                | Bastion KV            | `example.internal`                                | Platform domain, permitted DNS scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`                  |
 | `stages`                       | Bastion KV, JSON list | `["production"]`                                  | Derivation of the SPIRE trust domain, formatted as `<stage>.<domain_suffix>`                                          |
-| `network_cidr`                 | Bastion KV            | `10.20.0.0/16`                                    | Platform network CIDR, permitted IP scope for `pki-downstream` and `pki-platform`                                     |
+| `network_cidr`                 | Bastion KV            | `10.20.0.0/16`                                    | Platform network CIDR, permitted IP scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`             |
 | `bastion_publish_cidr`         | Bastion KV            | `10.20.0.0/24`                                    | Bastion publish network CIDR, excluded IP scope, and the source of the Bastion publish address in `token_bound_cidrs` |
 | `downstream_extra_dns_domains` | Code constant         | `hubble-grpc.cilium.io`, `hubble-relay.cilium.io` | Fixed suffixes under which Cilium names Hubble mTLS peers                                                             |
-| `kubernetes_cluster_domain`    | Code constant         | `cluster.local`                                   | Permitted DNS scope for `pki-platform`, which covers the Service names of in-cluster raft peers                       |
+| `kubernetes_cluster_domain`    | Code constant         | `cluster.local`                                   | Permitted DNS scope for `pki-leaf-platform`, which covers the Service names of in-cluster raft peers                  |
 
 1. The instance values MUST reside in `secret/parent-group-governance/platform-trust`, which only the root token writes.
 2. `platform-trust.example.json` documents the fields with example values. Git ignores the instance file `platform-trust.json`.
@@ -291,30 +291,30 @@ This section addresses T7, T8, and T16 from Section 2 Item C. The trust bundles 
 
 #### Item B.1 PKI Hierarchy
 
-| Mount              | Issuer      | Purpose                                                                                                                  | `max_path_length` |
-| ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------- |
-| `pki-root`         | Self-signed | Infrastructure Root CA, `prevent_destroy`                                                                                | Unlimited         |
-| `pki-intermediate` | `pki-root`  | Bootstrap Issuing Intermediate without Name Constraints, on which tenants do not hold any grant                          | 0                 |
-| `pki-spire`        | `pki-root`  | Target issuer of the SPIRE Parent CA, which in turn signs the SPIRE Child CA, with the migration in Section 10 Item B    | 2                 |
-| `pki-downstream`   | `pki-root`  | Target issuer of the Downstream Vault CA, which in turn signs one mesh CA layer, with the migration in Section 10 Item B | 2                 |
-| `pki-platform`     | `pki-root`  | Leaf issuer for tenant roles, such as the listener certificates of the SPIRE Parent and the Downstream Vault             | 0                 |
+| Mount                               | Issuer      | Purpose                                                                                                                  | `max_path_length` |
+| ----------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------- |
+| `pki-root`                          | Self-signed | Infrastructure Root CA, `prevent_destroy`                                                                                | Unlimited         |
+| `pki-intermediate`                  | `pki-root`  | Bootstrap Issuing Intermediate without Name Constraints, on which tenants do not hold any grant                          | 0                 |
+| `pki-intermediate-spire`            | `pki-root`  | Target issuer of the SPIRE Parent CA, which in turn signs the SPIRE Child CA, with the migration in Section 10 Item B    | 2                 |
+| `pki-intermediate-vault-downstream` | `pki-root`  | Target issuer of the Downstream Vault CA, which in turn signs one mesh CA layer, with the migration in Section 10 Item B | 2                 |
+| `pki-leaf-platform`                 | `pki-root`  | Leaf issuer for tenant roles, such as the listener certificates of the SPIRE Parent and the Downstream Vault             | 0                 |
 
-pgg embeds the Name Constraints of `pki-spire`, `pki-downstream`, and `pki-platform` into the intermediate CA certificates through `root/sign-intermediate` on `pki-root`. Subordinate callers cannot omit or loosen these restrictions.
+pgg embeds the Name Constraints of `pki-intermediate-spire`, `pki-intermediate-vault-downstream`, and `pki-leaf-platform` into the intermediate CA certificates through `root/sign-intermediate` on `pki-root`. Subordinate callers cannot omit or loosen these restrictions.
 
 Every intermediate mount holds an ECDSA P-256 key. `pki-root` holds an ECDSA P-384 key and expires on 2035-12-31. Section 7 Item H records the measurements and the trade-offs of the key algorithms.
 
 #### Item B.2 Constraint Details
 
-| Mount            | Permitted                                                              | Excluded                                                              |
-| ---------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `pki-spire`      | DNS and URI: SPIRE trust domain                                        | All IPv4 and IPv6                                                     |
-| `pki-downstream` | DNS `domain_suffix` and Hubble names, IP `network_cidr`                | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
-| `pki-platform`   | DNS `domain_suffix` and `kubernetes_cluster_domain`, IP `network_cidr` | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
+| Mount                               | Permitted                                                              | Excluded                                                              |
+| ----------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `pki-intermediate-spire`            | DNS and URI: SPIRE trust domain                                        | All IPv4 and IPv6                                                     |
+| `pki-intermediate-vault-downstream` | DNS `domain_suffix` and Hubble names, IP `network_cidr`                | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
+| `pki-leaf-platform`                 | DNS `domain_suffix` and `kubernetes_cluster_domain`, IP `network_cidr` | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
 
-1. `pki-spire` excludes all IP addresses, preventing certificates issued by SPIRE from spoofing Bastion addresses `127.0.0.1` or `10.20.0.1`.
-2. `pki-downstream` excludes URIs under the platform domain and every subdomain of the platform domain, a range which contains the SPIFFE trust domain, preventing the Downstream Vault from issuing SVIDs.
-3. `pki-downstream` excludes the Bastion publish CIDR, ensuring that a compromised Downstream Vault cannot issue listener certificates for the Bastion Vault.
-4. `pki-platform` permits neither a loopback address nor the Bastion publish CIDR, and a tenant leaf role therefore cannot issue a Bastion listener certificate.
+1. `pki-intermediate-spire` excludes all IP addresses, preventing certificates issued by SPIRE from spoofing Bastion addresses `127.0.0.1` or `10.20.0.1`.
+2. `pki-intermediate-vault-downstream` excludes URIs under the platform domain and every subdomain of the platform domain, a range which contains the SPIFFE trust domain, preventing the Downstream Vault from issuing SVIDs.
+3. `pki-intermediate-vault-downstream` excludes the Bastion publish CIDR, ensuring that a compromised Downstream Vault cannot issue listener certificates for the Bastion Vault.
+4. `pki-leaf-platform` permits neither a loopback address nor the Bastion publish CIDR, and a tenant leaf role therefore cannot issue a Bastion listener certificate.
 5. The Downstream Vault listener certificate MUST NOT carry `localhost` or `127.0.0.1`.
 6. The raft peers of the Downstream Vault MUST join through names under `kubernetes_cluster_domain`.
 7. `pki-intermediate` carries a zero path length, which keeps the mount from signing a CA.
@@ -402,13 +402,13 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 
 ### Item A. Package Architecture
 
-| Package or role                        | File                                      | Responsibility                                                                                                        |
-| -------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `internal/topology`                    | `topology.go`                             | Loads `bastion_vault` of `workstation-topology.yaml`, the Bastion endpoint and the listener certificate addresses     |
+| Package or role                        | File                                           | Responsibility                                                                                                        |
+| -------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `internal/topology`                    | `topology.go`                                  | Loads `bastion_vault` of `workstation-topology.yaml`, the Bastion endpoint and the listener certificate addresses     |
 | `internal/vaultops`                    | `operator.go`, `paths.go`, `root.go`, `tls.go` | Vault lifecycle and the local CA, with the endpoint and the listener addresses of the topology alone                  |
-| `pkg/secretrotate`                     | `factory_default.go`                      | `AwaitFactoryDefault`, which `vault init` uses to verify that each service still accepts its factory default          |
-| `cmd/governance`                       | `operations.go`, `commands.go`, `menu.go` | `host apply-all` and the first menu item, which run SELinux, libvirt, the local CA when absent, and the Vault Proxies |
-| Ansible role `workstation_vault_proxy` | `tasks/`, `templates/`                    | Client certificates, Proxy configurations, systemd user units, and `vault-proxy-env`                                  |
+| `pkg/secretrotate`                     | `factory_default.go`                           | `AwaitFactoryDefault`, which `vault init` uses to verify that each service still accepts its factory default          |
+| `cmd/governance`                       | `operations.go`, `commands.go`, `menu.go`      | `host apply-all` and the first menu item, which run SELinux, libvirt, the local CA when absent, and the Vault Proxies |
+| Ansible role `workstation_vault_proxy` | `tasks/`, `templates/`                         | Client certificates, Proxy configurations, systemd user units, and `vault-proxy-env`                                  |
 
 ### Item B. Commands and Menus
 
@@ -611,20 +611,20 @@ vault kv get -format=json registry/platform-foundation/bastion | jq '.data.data 
 vault kv get -field=spire_trust_domains registry/platform/trust
 vault kv put registry/platform-foundation/bastion x=y
 vault write auth/approle/role/platform-foundation-scope-test token_policies=transit-unseal-platform-foundation-vault-downstream
-vault write auth/gitlab-saas-ci-job-jwt-provider/role/platform-foundation-scope-test token_policies=pki-spire-signer-platform-foundation
+vault write auth/gitlab-saas-ci-job-jwt-provider/role/platform-foundation-scope-test token_policies=pki-intermediate-spire-signer-platform-foundation
 vault write pki-intermediate/roles/platform-foundation-scope-test allow_any_name=true
 vault kv metadata get secret/platform-foundation/terraform/approle
 ```
 
-| Command                                                     | Expected Result                                                           |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Read `registry/platform-foundation/bastion`                 | Fields are `assignable_policies`, `pki`, `transit_unseal`, `vault`        |
-| Read `registry/platform/trust`                              | `["production.example.internal"]`                                         |
-| Write to registry                                           | 403 permission denied                                                     |
-| Assign transit unseal policy on shared AppRole mount        | 403 permission denied, and triggers a `denied policy or role write` alert |
-| Assign `pki-spire-signer-<code>` on the GitLab CI JWT mount | 403 permission denied, and triggers a `denied policy or role write` alert |
-| Create a tenant role on `pki-intermediate`                  | 403 permission denied                                                     |
-| Legacy approle KV                                           | `No value found`                                                          |
+| Command                                                                  | Expected Result                                                           |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Read `registry/platform-foundation/bastion`                              | Fields are `assignable_policies`, `pki`, `transit_unseal`, `vault`        |
+| Read `registry/platform/trust`                                           | `["production.example.internal"]`                                         |
+| Write to registry                                                        | 403 permission denied                                                     |
+| Assign transit unseal policy on shared AppRole mount                     | 403 permission denied, and triggers a `denied policy or role write` alert |
+| Assign `pki-intermediate-spire-signer-<code>` on the GitLab CI JWT mount | 403 permission denied, and triggers a `denied policy or role write` alert |
+| Create a tenant role on `pki-intermediate`                               | 403 permission denied                                                     |
+| Legacy approle KV                                                        | `No value found`                                                          |
 
 ### Step D. Name Constraints Verification
 
@@ -634,10 +634,10 @@ Verification of Name Constraints comprises two parts. The first verifies that Va
 # The names and addresses inside the test certificates are examples. vault-proxy-env root prints the listener and CA.
 eval "$(vault-proxy-env root)"
 vault read -field=certificate pki-root/cert/ca > root.pem
-vault read -field=certificate pki-spire/cert/ca > inter.pem
+vault read -field=certificate pki-intermediate-spire/cert/ca > inter.pem
 
 openssl req -new -newkey rsa:2048 -nodes -keyout test-ca.key -subj "/CN=nc-test.production.example.internal" -out test-ca.csr
-vault write -format=json pki-spire/root/sign-intermediate csr=@test-ca.csr \
+vault write -format=json pki-intermediate-spire/root/sign-intermediate csr=@test-ca.csr \
   common_name=nc-test.production.example.internal exclude_cn_from_sans=true \
   uri_sans=spiffe://production.example.internal/nc-test ttl=1h > test-ca.json
 jq -r .data.certificate test-ca.json > test-ca.pem
@@ -648,27 +648,27 @@ openssl x509 -req -in leaf.csr -CA test-ca.pem -CAkey test-ca.key -CAcreateseria
 cat test-ca.pem inter.pem > chain.pem
 openssl verify -CAfile root.pem -untrusted chain.pem leaf.pem
 
-vault write pki-spire/revoke serial_number="$(jq -r .data.serial_number test-ca.json)"
+vault write pki-intermediate-spire/revoke serial_number="$(jq -r .data.serial_number test-ca.json)"
 unset VAULT_ADDR VAULT_CACERT TF_HTTP_USERNAME TF_HTTP_PASSWORD
 ```
 
 The expected output of `openssl verify` for non-compliant names is `excluded subtree violation` or `permitted subtree violation`. Swapping `subjectAltName` with names from the table below allows testing additional scenarios:
 
-| Mount            | Expected Pass                                                                                      | Expected Rejection                                                                                                      |
-| ---------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `pki-spire`      | `URI:spiffe://production.example.internal/ns/a/sa/b`                                               | `URI:spiffe://evil.example/ns/a`, `IP:10.20.0.1`, `IP:127.0.0.1`, `DNS:localhost`                                       |
-| `pki-downstream` | `DNS:keycloak.production.example.internal,IP:10.20.130.250`, `DNS:a.default.hubble-grpc.cilium.io` | `IP:10.20.0.1`, `IP:127.0.0.1`, `DNS:localhost`, `DNS:gitlab.com`, `URI:spiffe://production.example.internal/ns/a/sa/b` |
+| Mount                               | Expected Pass                                                                                      | Expected Rejection                                                                                                      |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `pki-intermediate-spire`            | `URI:spiffe://production.example.internal/ns/a/sa/b`                                               | `URI:spiffe://evil.example/ns/a`, `IP:10.20.0.1`, `IP:127.0.0.1`, `DNS:localhost`                                       |
+| `pki-intermediate-vault-downstream` | `DNS:keycloak.production.example.internal,IP:10.20.130.250`, `DNS:a.default.hubble-grpc.cilium.io` | `IP:10.20.0.1`, `IP:127.0.0.1`, `DNS:localhost`, `DNS:gitlab.com`, `URI:spiffe://production.example.internal/ns/a/sa/b` |
 
-The test CA for `pki-downstream` does not have a URI SAN. The request MUST supply `alt_names=nc-test.example.internal` instead. Experimental results recorded on 2026-10-03 are as follows:
+The test CA for `pki-intermediate-vault-downstream` does not have a URI SAN. The request MUST supply `alt_names=nc-test.example.internal` instead. Experimental results recorded on 2026-10-03 are as follows:
 
-| Item                                                             | Result                                                                                                                            |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Vault rejects non-compliant names during issuance                | `pki-spire` Bastion IP and external DNS, and `pki-downstream` `localhost`, Bastion IP, and SVID, all 5 items rejected             |
-| Subordinate self-signed leaf certificates under `pki-spire`      | 1 expected pass succeeded, 4 expected rejections were all rejected                                                                |
-| Subordinate self-signed leaf certificates under `pki-downstream` | 2 expected passes succeeded, 5 expected rejections were all rejected                                                              |
-| Path length                                                      | Test CA `pathlen` decrements from 2 to 1. Scenarios exceeding path limits remain untested                                         |
-| `pki-platform` issuance through a tenant role on 2026-10-04      | 2 expected passes succeeded. Vault rejected `localhost`, `127.0.0.1`, the Bastion publish address, `gitlab.com`, and a SPIFFE URI |
-| `pki-platform` subordinate CA on 2026-10-04                      | The CA certificate carries `pathlen:0`, and a tenant call on `root/sign-intermediate` returned 403                                |
+| Item                                                                                | Result                                                                                                                                                |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vault rejects non-compliant names during issuance                                   | `pki-intermediate-spire` Bastion IP and external DNS, and `pki-intermediate-vault-downstream` `localhost`, Bastion IP, and SVID, all 5 items rejected |
+| Subordinate self-signed leaf certificates under `pki-intermediate-spire`            | 1 expected pass succeeded, 4 expected rejections were all rejected                                                                                    |
+| Subordinate self-signed leaf certificates under `pki-intermediate-vault-downstream` | 2 expected passes succeeded, 5 expected rejections were all rejected                                                                                  |
+| Path length                                                                         | Test CA `pathlen` decrements from 2 to 1. Scenarios exceeding path limits remain untested                                                             |
+| `pki-leaf-platform` issuance through a tenant role on 2026-10-04                    | 2 expected passes succeeded. Vault rejected `localhost`, `127.0.0.1`, the Bastion publish address, `gitlab.com`, and a SPIFFE URI                     |
+| `pki-leaf-platform` subordinate CA on 2026-10-04                                    | The CA certificate carries `pathlen:0`, and a tenant call on `root/sign-intermediate` returned 403                                                    |
 
 ### Step E. Secret Scanning on State Files
 
@@ -717,7 +717,7 @@ Root token usage and rejected role writes MUST appear in the systemd journal.
 ### Item B. Next Steps
 
 1. Rebuild mp to read `registry`, removing every `terraform_remote_state` reference to `foundation-vault-bastion`.
-2. Move the SPIRE Parent upstream authority to `pki-spire`, the Downstream Vault intermediate CA to `pki-downstream`, and every listener certificate to `pki-platform`.
+2. Move the SPIRE Parent upstream authority to `pki-intermediate-spire`, the Downstream Vault intermediate CA to `pki-intermediate-vault-downstream`, and every listener certificate to `pki-leaf-platform`.
 3. Integrate the secret scanning routine from Section 9 Step E into pgg CI pipelines.
 4. Conduct verification testing for path length limit rejections when exceeding allowed CA tiers.
 5. Consolidate the publish address of `workstation-topology.yaml` and `bastion_publish_cidr` into one declaration source.
