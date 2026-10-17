@@ -1,10 +1,8 @@
 package topology
 
 import (
-	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 )
 
@@ -18,7 +16,7 @@ func writeTopology(t *testing.T, content string) string {
 	return path
 }
 
-func TestLoad_DerivesEndpointAndListenerIPs(t *testing.T) {
+func TestLoad_DerivesEndpoint(t *testing.T) {
 	path := writeTopology(t, `bastion_vault:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
@@ -32,10 +30,6 @@ operator_vault_proxy:
 	}
 	if endpoint := got.BastionVault.APIEndpoint(); endpoint != "https://127.0.0.1:8200" {
 		t.Errorf("APIEndpoint() = %q, want https://127.0.0.1:8200", endpoint)
-	}
-	want := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("172.16.0.1")}
-	if ips := got.BastionVault.ListenerIPs(); !slices.EqualFunc(ips, want, net.IP.Equal) {
-		t.Errorf("ListenerIPs() = %v, want %v", ips, want)
 	}
 }
 

@@ -26,8 +26,9 @@ func TestDecodeRootToken_RejectsMalformedInput(t *testing.T) {
 func TestGenerateRoot_CancelsBelowTheThreshold(t *testing.T) {
 	srv, cancelled := generateRootServer(t, false, 3, "hvs.example-break-glass-token000")
 	p := newGenerateRootPaths(t, srv.URL, "key1\nkey2\n")
+	op := newTestOperator(t, p, srv.URL)
 
-	if err := GenerateRoot(context.Background(), p, discardOut()); err == nil {
+	if err := op.GenerateRoot(context.Background()); err == nil {
 		t.Fatal("GenerateRoot error = nil, want the threshold failure")
 	}
 	if !cancelled.Load() || vaultclient.ReadTokenFile(p.Home) != "" {
@@ -38,8 +39,9 @@ func TestGenerateRoot_CancelsBelowTheThreshold(t *testing.T) {
 func TestGenerateRoot_RefusesAnAttemptInProgress(t *testing.T) {
 	srv, _ := generateRootServer(t, true, 3, "hvs.example-break-glass-token000")
 	p := newGenerateRootPaths(t, srv.URL, "key1\n")
+	op := newTestOperator(t, p, srv.URL)
 
-	if err := GenerateRoot(context.Background(), p, discardOut()); !errors.Is(err, ErrGenerateRootInProgress) {
+	if err := op.GenerateRoot(context.Background()); !errors.Is(err, ErrGenerateRootInProgress) {
 		t.Errorf("GenerateRoot error = %v, want ErrGenerateRootInProgress", err)
 	}
 }
@@ -49,7 +51,8 @@ func TestGenerateRoot_RefusesAnExistingTokenFile(t *testing.T) {
 	if err := vaultclient.PersistTokenFile(p.Home, "s.existing"); err != nil {
 		t.Fatal(err)
 	}
-	if err := GenerateRoot(context.Background(), p, discardOut()); !errors.Is(err, ErrRootTokenPresent) {
+	op := newTestOperator(t, p, "http://127.0.0.1:8200")
+	if err := op.GenerateRoot(context.Background()); !errors.Is(err, ErrRootTokenPresent) {
 		t.Errorf("GenerateRoot error = %v, want ErrRootTokenPresent", err)
 	}
 }
@@ -58,72 +61,47 @@ func TestGenerateRoot_WritesTheDecodedToken(t *testing.T) {
 	const token = "hvs.example-break-glass-token000"
 	srv, _ := generateRootServer(t, false, 3, token)
 	p := newGenerateRootPaths(t, srv.URL, "key1\nkey2\nkey3\nkey4\nkey5\n")
+	op := newTestOperator(t, p, srv.URL)
 
-	if err := GenerateRoot(context.Background(), p, discardOut()); err != nil {
+	if err := op.GenerateRoot(context.Background()); err != nil {
 		t.Fatalf("GenerateRoot: %v", err)
 	}
 	if got := vaultclient.ReadTokenFile(p.Home); got != token {
 		t.Errorf("token file = %q, want %q", got, token)
 	}
-	assertMode(t, p.resolveRootTokenFile(), 0o600)
+	assertMode(t, p.RootTokenFile(), 0o600)
 }
 
-func TestPersistBootstrapRootToken(t *testing.T) {
-	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
-	writeInitFile(t, p, `{"root_token":"s.abc123"}`)
-
-	if err := persistBootstrapRootToken(p); err != nil {
-		t.Fatalf("persistBootstrapRootToken: %v", err)
-	}
-	if got := vaultclient.ReadTokenFile(p.Home); got != "s.abc123" {
-		t.Errorf("token file = %q, want s.abc123", got)
-	}
-	assertMode(t, p.resolveRootTokenFile(), 0o600)
-}
-
-func TestPersistBootstrapRootToken_RejectsAnUnusableInitFile(t *testing.T) {
-	for name, content := range map[string]string{"malformed": "not json", "empty token": `{"root_token":""}`} {
-		t.Run(name, func(t *testing.T) {
-			p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
-			writeInitFile(t, p, content)
-			if err := persistBootstrapRootToken(p); err == nil {
-				t.Error("persistBootstrapRootToken error = nil, want a rejection")
-			}
-			if got := vaultclient.ReadTokenFile(p.Home); got != "" {
-				t.Errorf("token file = %q, want none", got)
-			}
-		})
-	}
-}
-
-func TestRevokeRoot_KeepsRootWithoutAFoundationLogin(t *testing.T) {
+func TestRevokeRoot_KeepsRootWithoutASuccessorLogin(t *testing.T) {
 	var revoked atomic.Bool
-	bastion := tokenServer(t, []string{"root"}, &revoked)
-	foundation := tokenServer(t, []string{"default"}, new(atomic.Bool))
-	p := newLiveTestPaths(t, bastion.URL)
+	target := tokenServer(t, []string{"root"}, &revoked)
+	successor := tokenServer(t, []string{"default"}, new(atomic.Bool))
+	p := prepareTestPaths(t)
 	if err := vaultclient.PersistTokenFile(p.Home, "s.root"); err != nil {
 		t.Fatal(err)
 	}
 
-	err := RevokeRoot(context.Background(), p, vaultclient.Config{Address: foundation.URL, Token: "proxy-supplied"}, "operator-example-foundation", discardOut())
-	if !errors.Is(err, ErrFoundationNotReady) {
-		t.Fatalf("RevokeRoot error = %v, want ErrFoundationNotReady", err)
+	op := newTestOperator(t, p, target.URL)
+	err := op.RevokeRoot(context.Background(), vaultclient.Config{Address: successor.URL, Token: "proxy-supplied"}, "successor-policy")
+	if !errors.Is(err, ErrSuccessorNotReady) {
+		t.Fatalf("RevokeRoot error = %v, want ErrSuccessorNotReady", err)
 	}
 	if revoked.Load() || vaultclient.ReadTokenFile(p.Home) != "s.root" {
-		t.Error("RevokeRoot revoked or removed the root token without a foundation login")
+		t.Error("RevokeRoot revoked or removed the root token without a successor login")
 	}
 }
 
 func TestRevokeRoot_RefusesATokenOtherThanRoot(t *testing.T) {
 	var revoked atomic.Bool
-	bastion := tokenServer(t, []string{"default"}, &revoked)
-	foundation := tokenServer(t, []string{"operator-example-foundation"}, new(atomic.Bool))
-	p := newLiveTestPaths(t, bastion.URL)
+	target := tokenServer(t, []string{"default"}, &revoked)
+	successor := tokenServer(t, []string{"successor-policy"}, new(atomic.Bool))
+	p := prepareTestPaths(t)
 	if err := vaultclient.PersistTokenFile(p.Home, "s.other"); err != nil {
 		t.Fatal(err)
 	}
 
-	err := RevokeRoot(context.Background(), p, vaultclient.Config{Address: foundation.URL}, "operator-example-foundation", discardOut())
+	op := newTestOperator(t, p, target.URL)
+	err := op.RevokeRoot(context.Background(), vaultclient.Config{Address: successor.URL}, "successor-policy")
 	if !errors.Is(err, ErrNoRootToken) || revoked.Load() {
 		t.Errorf("RevokeRoot error = %v, revoked = %v, want ErrNoRootToken without a revocation", err, revoked.Load())
 	}
@@ -131,22 +109,24 @@ func TestRevokeRoot_RefusesATokenOtherThanRoot(t *testing.T) {
 
 func TestRevokeRoot_RequiresATokenFile(t *testing.T) {
 	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
-	if err := RevokeRoot(context.Background(), p, vaultclient.Config{}, "operator-example-foundation", discardOut()); !errors.Is(err, ErrNoRootToken) {
+	op := newTestOperator(t, p, "http://127.0.0.1:8200")
+	if err := op.RevokeRoot(context.Background(), vaultclient.Config{}, "successor-policy"); !errors.Is(err, ErrNoRootToken) {
 		t.Errorf("RevokeRoot error = %v, want ErrNoRootToken", err)
 	}
 }
 
-func TestRevokeRoot_RevokesOnceTheFoundationIdentityLogsIn(t *testing.T) {
+func TestRevokeRoot_RevokesOnceTheSuccessorIdentityLogsIn(t *testing.T) {
 	var revoked atomic.Bool
-	bastion := tokenServer(t, []string{"root"}, &revoked)
-	foundation := tokenServer(t, []string{"default", "operator-example-foundation"}, new(atomic.Bool))
-	p := newLiveTestPaths(t, bastion.URL)
+	target := tokenServer(t, []string{"root"}, &revoked)
+	successor := tokenServer(t, []string{"default", "successor-policy"}, new(atomic.Bool))
+	p := prepareTestPaths(t)
 	writeInitFile(t, p, `{"root_token":"s.root","unseal_keys_b64":["key1"]}`)
 	if err := vaultclient.PersistTokenFile(p.Home, "s.root"); err != nil {
 		t.Fatal(err)
 	}
 
-	err := RevokeRoot(context.Background(), p, vaultclient.Config{Address: foundation.URL, Token: "proxy-supplied"}, "operator-example-foundation", discardOut())
+	op := newTestOperator(t, p, target.URL)
+	err := op.RevokeRoot(context.Background(), vaultclient.Config{Address: successor.URL, Token: "proxy-supplied"}, "successor-policy")
 	if err != nil {
 		t.Fatalf("RevokeRoot: %v", err)
 	}
@@ -156,7 +136,7 @@ func TestRevokeRoot_RevokesOnceTheFoundationIdentityLogsIn(t *testing.T) {
 	if got := vaultclient.ReadTokenFile(p.Home); got != "" {
 		t.Errorf("token file = %q, want removed", got)
 	}
-	data, err := os.ReadFile(p.resolveInitFile())
+	data, err := os.ReadFile(p.InitFile())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +145,7 @@ func TestRevokeRoot_RevokesOnceTheFoundationIdentityLogsIn(t *testing.T) {
 	}
 }
 
-// generateRootServer completes an attempt after threshold keys and encodes token with the one-time password.
+// generateRootServer completes an attempt after threshold keys and encodes the token with the one-time password.
 func generateRootServer(t *testing.T, started bool, threshold int, token string) (*httptest.Server, *atomic.Bool) {
 	t.Helper()
 	const otp = "0123456789abcdefghijklmnopqrstuv"
@@ -175,7 +155,7 @@ func generateRootServer(t *testing.T, started bool, threshold int, token string)
 	mux.HandleFunc("/v1/sys/generate-root/attempt", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			_ = json.NewEncoder(w).Encode(map[string]any{"started": started})
+			_ = json.NewEncoder(w).Encode(map[string]any{"started": started, "progress": int(progress.Load()), "required": threshold})
 		case http.MethodDelete:
 			cancelled.Store(true)
 			w.WriteHeader(http.StatusNoContent)
@@ -207,17 +187,17 @@ func generateRootServer(t *testing.T, started bool, threshold int, token string)
 
 func newGenerateRootPaths(t *testing.T, addr, keys string) Paths {
 	t.Helper()
-	p := newLiveTestPaths(t, addr)
-	if err := os.MkdirAll(p.resolveKeysDir(), 0o700); err != nil {
+	p := prepareTestPaths(t)
+	if err := os.MkdirAll(p.KeysDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p.resolveUnsealKeyFile(), []byte(keys), 0o600); err != nil {
+	if err := os.WriteFile(p.UnsealKeyFile(), []byte(keys), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return p
 }
 
-// tokenServer answers lookup-self with policies and records a revoke-self.
+// tokenServer answers lookup-self with policies and records a revoke-self call.
 func tokenServer(t *testing.T, policies []string, revoked *atomic.Bool) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -235,10 +215,10 @@ func tokenServer(t *testing.T, policies []string, revoked *atomic.Bool) *httptes
 
 func writeInitFile(t *testing.T, p Paths, content string) {
 	t.Helper()
-	if err := os.MkdirAll(p.resolveKeysDir(), 0o700); err != nil {
+	if err := os.MkdirAll(p.KeysDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p.resolveInitFile(), []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(p.InitFile(), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

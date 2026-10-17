@@ -6,7 +6,6 @@ import (
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultops"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/secretrotate"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
@@ -57,7 +56,7 @@ func (a *app) printVaultStatusBanner(ctx context.Context) {
 		a.out.PrintDivider("")
 	}
 
-	bastion := vaultops.InspectBastionStatus(ctx, a.newVaultPaths())
+	bastion := vaultclient.InspectStatus(ctx, a.newBastionVaultConfig())
 	switch {
 	case !bastion.Reachable:
 		a.out.Print(ui.Error, "Bastion Vault: Stopped")
