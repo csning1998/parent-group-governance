@@ -85,6 +85,7 @@ func (op *Operator) Unseal(ctx context.Context) error {
 		return nil
 	}
 
+	submitted := 0
 	for _, key := range strings.Split(strings.TrimSpace(string(keysRaw)), "\n") {
 		key = strings.TrimSpace(key)
 		if key == "" {
@@ -93,6 +94,10 @@ func (op *Operator) Unseal(ctx context.Context) error {
 		if _, err := op.client.Sys().UnsealWithContext(ctx, key); err != nil {
 			return fmt.Errorf("vaultops: unseal: %w", err)
 		}
+		submitted++
+	}
+	if submitted == 0 {
+		return fmt.Errorf("vaultops: %s does not contain an unseal key", op.paths.UnsealKeyFile())
 	}
 
 	if err := op.waitUntilUnsealed(ctx, 10*time.Second); err != nil {

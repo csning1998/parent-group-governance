@@ -7,33 +7,46 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"sync"
 	"testing"
 )
 
-// newFakeUnsealServer records submitted unseal keys and fails requests at or after failOnKeyIndex.
-func newFakeUnsealServer(t *testing.T, failOnKeyIndex int) (*httptest.Server, *[]string) {
+// newFakeUnsealServer records submitted unseal keys, reports unsealed after an accepted key, and fails requests at or
+// after failOnKeyIndex.
+func newFakeUnsealServer(t *testing.T, failOnKeyIndex int) (*httptest.Server, func() []string) {
 	t.Helper()
-	received := &[]string{}
+	var mu sync.Mutex
+	var received []string
+	sealed := true
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/sys/seal-status", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"sealed": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"sealed": sealed})
 	})
 	mux.HandleFunc("/v1/sys/unseal", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Key string `json:"key"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		*received = append(*received, body.Key)
-		if failOnKeyIndex >= 0 && len(*received)-1 >= failOnKeyIndex {
+		mu.Lock()
+		defer mu.Unlock()
+		received = append(received, body.Key)
+		if failOnKeyIndex >= 0 && len(received)-1 >= failOnKeyIndex {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		sealed = false
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"sealed": false})
 	})
 	srv := httptest.NewServer(mux)
-	return srv, received
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(received)
+	}
 }
 
 // TestUnsealParsesLineByLine covers blank-line skipping, a blank-only file, and CRLF line trimming.
@@ -60,9 +73,12 @@ func TestUnsealParsesLineByLine(t *testing.T) {
 			}
 			op := newTestOperator(t, p, srv.URL)
 
-			_ = op.Unseal(context.Background())
-			if !slices.Equal(*received, c.wantReceived) {
-				t.Errorf("received = %v, want %v", *received, c.wantReceived)
+			err := op.Unseal(context.Background())
+			if (err == nil) != (c.wantReceived != nil) {
+				t.Errorf("Unseal error = %v, want an error exactly when no key is submitted", err)
+			}
+			if got := received(); !slices.Equal(got, c.wantReceived) {
+				t.Errorf("received = %v, want %v", got, c.wantReceived)
 			}
 		})
 	}
@@ -85,7 +101,7 @@ func TestUnsealStopsAtFirstFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("Unseal: want error, got nil")
 	}
-	if !slices.Equal(*received, []string{"key-one", "key-two"}) {
-		t.Errorf("received = %v, want submission to stop at the failing key without sending key-three", *received)
+	if got := received(); !slices.Equal(got, []string{"key-one", "key-two"}) {
+		t.Errorf("received = %v, want submission to stop at the failing key without sending key-three", got)
 	}
 }
