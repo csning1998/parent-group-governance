@@ -80,16 +80,21 @@ The operator can install these CLIs using the supported Ansible role `workstatio
 cd ansible && ansible-playbook playbooks/workstation_cloud_cli.yaml --ask-become-pass && cd -
 ```
 
-Authentication is an interactive manual step. The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to running `terraform apply` across `group-federation-anthropic` or `administration-gitlab-project`, the operator MUST log in, extract the temporary access token, and record the credential into Bastion Vault at `parent-group-governance/ai-provider-console/anthropic`.
+Anthropic authentication requires two credentials in Bastion Vault at `parent-group-governance/ai-provider-console/anthropic`:
+
+- `anthropic_admin_api_key`: The Admin API key, written once by the operator.
+- `anthropic_oauth_access_token`: A short-lived OAuth token, refreshed immediately before each apply.
+
+The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to applying `group-federation-anthropic` or `administration-gitlab-project`, the operator MUST authenticate via the Anthropic CLI and write the fresh OAuth token with `vault kv patch` through the `parent-group-governance` identity. Provider client credential mappings are documented in `terraform/layers/group-federation-anthropic/README.md` Section 1 Item B.
 
 ```bash
 ant auth login --profile <profile> --scope "org:admin"
-export ANTHROPIC_AUTH_TOKEN="$(ant auth print-credentials --profile <profile> --access-token)"
-vault kv put -mount=secret parent-group-governance/ai-provider-console/anthropic \
-    anthropic_admin_api_key="$ANTHROPIC_AUTH_TOKEN"
+eval "$(vault-proxy-env parent-group-governance)"
+vault kv patch -mount=secret -method=rw parent-group-governance/ai-provider-console/anthropic \
+    anthropic_oauth_access_token="$(ant auth print-credentials --profile <profile> --access-token)"
 ```
 
-The profile defaults to `issuer-gitlab-saas`. Because the exported token expires within minutes, the operator MUST refresh the token and re-commit the value to Bastion Vault prior to each apply.
+The profile defaults to `issuer-gitlab-saas`. Because the OAuth token expires within minutes, the operator MUST write a fresh token to Bastion Vault prior to each apply.
 
 ### Item D. Anthropic WIF Multi-Tenancy Architecture
 
@@ -434,7 +439,8 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 
     vault kv put \
         secret/parent-group-governance/ai-provider-console/anthropic \
-        anthropic_admin_api_key='sk-ant-replace-corresponding-placeholder-api-key'
+        anthropic_admin_api_key='sk-ant-admin-replace-corresponding-placeholder-api-key' \
+        anthropic_oauth_access_token='replace-corresponding-org-admin-oauth-token'
 
     vault kv put \
         secret/parent-group-governance/github/publication \

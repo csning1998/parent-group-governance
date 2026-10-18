@@ -10,13 +10,36 @@ The `group-federation-anthropic` layer manages the root Anthropic Workload Ident
 
 - The layer registers the root OIDC trust issuer `issuer-gitlab-saas` pointing to `https://gitlab.com`.
 - The layer publishes organization identifiers and issuer trust contracts via Terraform Remote State Outputs for downstream consumption.
-- The layer does not provision downstream workspaces, service accounts, or federation rules; multi-tenant project isolation is delegated to project layers invoking `provisioner-workload-identity-federation`.
+- The layer does not provision downstream workspaces, service accounts, or federation rules. Multi-tenant project isolation is delegated to project layers invoking `provisioner-workload-identity-federation`.
 
 ### Item B. Ephemeral Credential Model
 
-The Anthropic Terraform provider authenticates using an ephemeral administrator access token read from Bastion Vault in memory.
+The Anthropic Terraform provider authenticates with two credentials read from Bastion Vault in memory.
 
-- The provider reads the `anthropic_admin_api_key` field from the Bastion Vault path `parent-group-governance/ai-provider-console/anthropic`.
+- The Bastion Vault path `parent-group-governance/ai-provider-console/anthropic` holds two fields, and the operator owns both.
+
+    | Vault field                    | Content                                                | Lifetime       | Provider argument |
+    | ------------------------------ | ------------------------------------------------------ | -------------- | ----------------- |
+    | `anthropic_admin_api_key`      | The Admin API key (`sk-ant-admin...`) from the Console | Until revoked  | `admin_api_key`   |
+    | `anthropic_oauth_access_token` | The org:admin OAuth token of Section 3 Step A          | Within minutes | `auth_token`      |
+
+- The provider builds one client per argument and never falls back from one client to the other, hence each field MUST hold its own credential type.
+
+    | Provider argument | Client       | Header                  | Endpoints                                                   |
+    | ----------------- | ------------ | ----------------------- | ----------------------------------------------------------- |
+    | `admin_api_key`   | Admin client | `x-api-key`             | Workspaces, workspace members, the organization data source |
+    | `auth_token`      | OAuth client | `authorization: Bearer` | Federation issuers, federation rules, service accounts      |
+
+- The federation and service account endpoints reject an Admin API key for reads and for writes.
+- The Admin API accepts an OAuth token in `authorization: Bearer` alone, hence an OAuth token in `anthropic_admin_api_key` MUST NOT be used.
+- The provider does not refresh a token, hence the operator MUST write a fresh OAuth token immediately before each apply with `vault kv patch -method=rw`, which keeps the Admin API key.
+- `ant auth print-credentials` refreshes the token of a logged in profile.
+- The provider configuration takes precedence over the environment, hence `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_ADMIN_API_KEY` of the shell do not affect the layer.
+- Sources:
+    - [Manage WIF with the Admin API](https://platform.claude.com/docs/en/manage-claude/wif-admin-api)
+    - [Admin API](https://platform.claude.com/docs/en/manage-claude/admin-api)
+    - [`internal/admin/admin_client.go`](https://github.com/ippontech/terraform-provider-anthropic/blob/main/internal/admin/admin_client.go) of the provider, which sets `x-api-key`
+    - The provider schema of `terraform providers schema -json` for `ippontech/anthropic` 1.43.5
 - The layer declares the Vault secret datasource as `ephemeral`, preventing credential persistence inside Terraform state files.
 - The root layer does not publish project-level WIF binding secrets back to Vault, preserving multi-tenant boundary isolation.
 
@@ -51,20 +74,27 @@ The operator exports the profile name and logs in interactively to mint a short-
 export ANTHROPIC_PROFILE="issuer-gitlab-saas"
 
 ant auth login --profile "${ANTHROPIC_PROFILE}" --scope "org:admin"
-export ANTHROPIC_AUTH_TOKEN="$(ant auth print-credentials --profile "${ANTHROPIC_PROFILE}" --access-token)"
 ```
 
 ### Step B. Commit Credential to Bastion Vault and Export Backend Credentials
 
-The operator writes the temporary administrator token to Bastion Vault and exports HTTP state backend credentials.
+The operator writes the credentials to Bastion Vault through the `parent-group-governance` identity with the HTTP state backend credentials exported.
 
-```bash
-vault kv put -mount=secret parent-group-governance/ai-provider-console/anthropic \
-    anthropic_admin_api_key="$ANTHROPIC_AUTH_TOKEN"
+1. The operator creates an Admin API key on the Admin API Keys page of the Console and writes the key once. The command reads the key from stdin, hence the key does not enter the shell history.
 
-export TF_HTTP_USERNAME='gitlab-ci-token'
-export TF_HTTP_PASSWORD=$(VAULT_ADDR='https://172.16.0.1:8200' VAULT_CACERT="$HOME/GitLab/csning1998-lab/parent-group-governance/vault/tls/ca-ec-p384.pem" VAULT_TOKEN=$(cat $HOME/.vault-token) vault kv get -field=token secret/parent-group-governance/terraform/state-backend)
-```
+    ```bash
+    eval "$(vault-proxy-env parent-group-governance)"
+    vault kv put -mount=secret parent-group-governance/ai-provider-console/anthropic \
+        anthropic_admin_api_key=-
+    ```
+
+2. The operator writes a fresh OAuth token immediately before each apply. The read and write method of `vault kv patch` keeps the Admin API key, since the identity policy grants no `patch` capability.
+
+    ```bash
+    eval "$(vault-proxy-env parent-group-governance)"
+    vault kv patch -mount=secret -method=rw parent-group-governance/ai-provider-console/anthropic \
+        anthropic_oauth_access_token="$(ant auth print-credentials --profile "${ANTHROPIC_PROFILE}" --access-token)"
+    ```
 
 ### Step C. Execute Terraform Layer Deployment
 

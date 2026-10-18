@@ -29,7 +29,7 @@ ephemeral "vault_kv_secret_v2" "state_backend" {
   name     = "parent-group-governance/terraform/state-backend"
 }
 
-ephemeral "vault_kv_secret_v2" "anthropic_admin_key" {
+ephemeral "vault_kv_secret_v2" "anthropic_console" {
   provider = vault.bastion
   mount    = "secret"
   name     = "parent-group-governance/ai-provider-console/anthropic"
