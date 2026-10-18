@@ -158,7 +158,7 @@ az cognitiveservices account show \
 The operator validates that consuming layers can resolve the remote state.
 
 ```bash
-cd ../governance-gitlab-project
+cd ../administration-gitlab-project
 terraform init
 terraform plan
 ```

@@ -166,7 +166,7 @@ The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Work
 
 The tenant registry lists platforms alone, and a repository of the group registers no tenant for the governance layer. Every governance layer of the group runs through the governance Proxy.
 
-1. The policy `operator-governance` reads `parent-group-governance/terraform/state-backend` and the paths of `allowed_read_secret_paths` of the identity in `workstation-topology.yaml`, and writes nothing.
+1. The policy `operator-credential-distributor` reads `parent-group-governance/terraform/state-backend` and the paths of `allowed_read_secret_paths` of the identity in `workstation-topology.yaml`, and writes nothing.
 2. The paths of `allowed_read_secret_paths` are the group keys: the Anthropic admin key, the GitHub publication token, the SonarQube analysis token, and the two bot tokens below `gitlab-ci-with-code-reviewer/integration`.
 3. The Workload Identity Federation module writes no Vault path, hence a governance layer holds no Vault write privilege.
 
@@ -256,7 +256,7 @@ pgg declares five categories of policies. The tenant cannot rewrite these polici
 | `pki-intermediate-spire-signer-<code>` | Updates on `pki-intermediate-spire/root/sign-intermediate`                                                                                        | SPIRE Parent upstream authority        |
 | `pki-leaf-platform-issuer-<code>`      | Updates on `pki-leaf-platform/issue/<code>-*` and `pki-leaf-platform/sign/<code>-*`                                                               | cert-manager of the Downstream Vault   |
 | `gitlab-ci-code-reviewer-read`         | Reads on `secret/data/parent-group-governance/ci/*`                                                                                               | Automated code reviewer GitLab CI jobs |
-| `operator-governance`                  | Reads on the state backend token and the group keys of the governance identity                                                                    | Governance cert role                   |
+| `operator-credential-distributor`      | Reads on the state backend token and the group keys of the governance identity                                                                    | Governance cert role                   |
 | `operator-parent-group-governance`     | Management of every mount, auth method, audit device, and policy of `foundation-vault-bastion`, and the KV paths below `parent-group-governance/` | Foundation cert role                   |
 | `operator-service-admin-passwords`     | Reads and writes on the paths of `service_admin_passwords` alone                                                                                  | Rotation cert role                     |
 

@@ -10,4 +10,4 @@ README.md                           @csning1998
 [Critical Infrastructure]
 terraform/layers/group-governance/     @csning1998
 terraform/layers/group-gitlab-runner/  @csning1998
-terraform/layers/governance-gitlab-project/  @csning1998
+terraform/layers/administration-gitlab-project/  @csning1998

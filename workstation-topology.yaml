@@ -44,8 +44,8 @@ operator_vault_proxy:
     terraform_http_username: "gitlab-ci-token"
   identities:
     # Dedicated loopback proxy for group-level governance Terraform layers with bot read access and owned binding writes.
-    # Consumed by access-operator-proxy.tf to build operator-governance policy and vault-proxy@.service.
-    governance:
+    # Consumed by access-operator-proxy.tf to build operator-credential-distributor policy and vault-proxy@.service.
+    credential-distributor:
       listen_port: 8210
       access_tier: "governance"
       allowed_read_secret_paths:

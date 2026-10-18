@@ -26,7 +26,7 @@ ignores:
         - data_json.vault
       reason: The registry holds endpoints, mount paths, policy names, and public certificates.
 
-  governance-gitlab-project:
+  administration-gitlab-project:
     - address: module.workload_identity_federation.vault_kv_secret_v2.binding["anthropic"]
       paths:
         - data_json.federation_rule_id

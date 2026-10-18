@@ -137,7 +137,7 @@ gcloud services list --enabled --project="${GCP_PROJECT_ID}" --filter="NAME:(iam
 The operator validates that consuming layers can resolve the remote state.
 
 ```bash
-cd ../governance-gitlab-project
+cd ../administration-gitlab-project
 terraform init
 terraform plan
 ```

@@ -49,7 +49,7 @@ else
         echo "vault-proxy-env is missing, run the first menu item of ./governance in parent-group-governance" >&2
         exit 1
     fi
-    proxy_env=$(vault-proxy-env governance)
+    proxy_env=$(vault-proxy-env credential-distributor)
     sonar_token=$(eval "${proxy_env}" && vault kv get -mount=secret -field="${sonar_token_field}" "${sonar_token_path}")
     unset proxy_env
 
