@@ -90,8 +90,9 @@ The operator account MUST hold the admin, owner, or primary owner role in the An
 ```bash
 ant auth login --profile <profile> --scope "org:admin"
 eval "$(vault-proxy-env parent-group-governance)"
-vault kv patch -mount=secret -method=rw parent-group-governance/ai-provider-console/anthropic \
-    anthropic_oauth_access_token="$(ant auth print-credentials --profile <profile> --access-token)"
+ant auth print-credentials --profile <profile> --access-token | tr -d '\n' | \
+    vault kv patch -mount=secret -method=rw parent-group-governance/ai-provider-console/anthropic \
+        anthropic_oauth_access_token=-
 ```
 
 The profile defaults to `issuer-gitlab-saas`. Because the OAuth token expires within minutes, the operator MUST write a fresh token to Bastion Vault prior to each apply.
@@ -424,40 +425,30 @@ The layer `group-sonarqube` writes the path `sonarqube/ci-analysis-bot`. The `./
 
 The order follows the upstream state column of Item B. The Bastion Vault instance MUST be unsealed with the KV version 2 engine mounted before the first layer is applied. The platform trust facts MUST reside at `secret/parent-group-governance/platform-trust` before `foundation-vault-bastion` is planned. Step 1 to Step 4 run with the root token, which `eval "$(vault-proxy-env root)"` selects, and every later step runs in the layer directory with the `.envrc` of Item A.
 
-1. Write the shared GitLab token into the field `token` as listed below. Any path modification MUST be reflected across consuming Terraform layers.
+1. Write the shared GitLab token into the field `token` as listed below. Any path modification MUST be reflected across consuming Terraform layers. The function `put_secret` prompts for each value without echo and writes the value to Vault through stdin without a trailing newline, hence no value enters the shell history or the argument list of `vault`, which other local users can read through `/proc/<pid>/cmdline`.
 
     ```bash
     cd $HOME/GitLab/csning1998-lab/parent-group-governance
+
+    put_secret() {
+        printf '%s %s: ' "$1" "$2" && read -rs secret_value && echo
+        printf '%s' "$secret_value" | vault kv put -mount=secret "$1" "$2=-"
+        unset secret_value
+    }
 
     vault kv put \
         secret/parent-group-governance/platform-trust \
         @terraform/layers/foundation-vault-bastion/platform-trust.json
 
-    vault kv put \
-        secret/parent-group-governance/terraform/state-backend \
-        token='glpat-replace-corresponding-placeholder-token'
-
-    vault kv put \
-        secret/parent-group-governance/ai-provider-console/anthropic \
-        anthropic_admin_api_key='sk-ant-admin-replace-corresponding-placeholder-api-key' \
-        anthropic_oauth_access_token='replace-corresponding-org-admin-oauth-token'
-
-    vault kv put \
-        secret/parent-group-governance/github/publication \
-        deploy_token='ghp_replace-corresponding-placeholder-token'
-
-    vault kv put \
-        secret/gitlab-ci-with-code-reviewer/terraform/state-backend \
-        token='glpat-replace-corresponding-placeholder-token'
-
-    vault kv put \
-        secret/gitlab-ci-with-code-reviewer/integration/code-reviewer-bot \
-        token='glpat-replace-corresponding-placeholder-token'
-
-    vault kv put \
-        secret/gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot \
-        token='glpat-replace-corresponding-placeholder-token'
+    put_secret parent-group-governance/terraform/state-backend token
+    put_secret parent-group-governance/ai-provider-console/anthropic anthropic_admin_api_key
+    put_secret parent-group-governance/github/publication deploy_token
+    put_secret gitlab-ci-with-code-reviewer/terraform/state-backend token
+    put_secret gitlab-ci-with-code-reviewer/integration/code-reviewer-bot token
+    put_secret gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot token
     ```
+
+    The operator writes `anthropic_oauth_access_token` immediately before Step 6 as described in Section 2 Item C, since the OAuth token expires within minutes.
 
 2. Copy `terraform/layers/foundation-vault-bastion/platform-trust.example.json` to `platform-trust.json` in the same directory, and replace every example value with the value of the deployment. Git ignores `platform-trust.json`.
 3. Write the facts: `vault kv put secret/parent-group-governance/platform-trust @terraform/layers/foundation-vault-bastion/platform-trust.json`.

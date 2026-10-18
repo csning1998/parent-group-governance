@@ -84,16 +84,18 @@ The operator writes the credentials to Bastion Vault through the `parent-group-g
 
     ```bash
     eval "$(vault-proxy-env parent-group-governance)"
-    vault kv put -mount=secret parent-group-governance/ai-provider-console/anthropic \
+    printf 'Admin API key: ' && read -rs anthropic_key && echo
+    printf '%s' "$anthropic_key" | vault kv put -mount=secret parent-group-governance/ai-provider-console/anthropic \
         anthropic_admin_api_key=-
     ```
 
-2. The operator writes a fresh OAuth token immediately before each apply. The read and write method of `vault kv patch` keeps the Admin API key, since the identity policy grants no `patch` capability.
+2. The operator writes a fresh OAuth token immediately before each apply. The read and write method of `vault kv patch` keeps the Admin API key, since the identity policy grants no `patch` capability. The token reaches `vault` through stdin without its trailing newline, since other local users can read an argument through `/proc/<pid>/cmdline`, and `key=-` stores stdin verbatim.
 
     ```bash
     eval "$(vault-proxy-env parent-group-governance)"
-    vault kv patch -mount=secret -method=rw parent-group-governance/ai-provider-console/anthropic \
-        anthropic_oauth_access_token="$(ant auth print-credentials --profile "${ANTHROPIC_PROFILE}" --access-token)"
+    ant auth print-credentials --profile "${ANTHROPIC_PROFILE}" --access-token | tr -d '\n' | \
+        vault kv patch -mount=secret -method=rw parent-group-governance/ai-provider-console/anthropic \
+            anthropic_oauth_access_token=-
     ```
 
 ### Step C. Execute Terraform Layer Deployment
