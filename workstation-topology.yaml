@@ -43,7 +43,7 @@ operator_vault_proxy:
     vault_kv_field: "token"
     terraform_http_username: "gitlab-ci-token"
   identities:
-    # Dedicated loopback proxy for group-level governance Terraform layers with bot read access and owned binding writes.
+    # Dedicated loopback proxy for group-level governance Terraform layers with bot read access.
     # Consumed by access-operator-proxy.tf to build operator-credential-distributor policy and vault-proxy@.service.
     credential-distributor:
       listen_port: 8210
@@ -55,9 +55,7 @@ operator_vault_proxy:
         - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
         - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
         - "gitlab-ci-with-code-reviewer/terraform/state-backend"
-      # Each prefix grants read, write, and deletion on the secrets below the prefix, which a governance layer owns.
-      allowed_write_secret_paths:
-        - "gitlab-ci-with-code-reviewer/workload-identity-federation"
+      allowed_write_secret_paths: []
     # Dedicated loopback proxy for platform-foundation Terraform layers requiring tenant ACL.
     # Consumed by access-operator-proxy.tf to bind tenant ACL policies and registry reader.
     platform-foundation:

@@ -17,7 +17,7 @@ This document records the privilege boundaries, roots of trust, fact publication
 - **Tenant**: A product repository granted a restricted set of privileges on the Bastion Vault and identified by an owner code, such as `platform-foundation`.
 - **Owner Code**: An identifier string for a tenant, formatted as lowercase alphanumerics connected by hyphens, such as `platform-foundation`, denoted as `<code>` below.
 - **root token**: The Bastion Vault root token, which `~/.vault-token` holds during the bootstrap and a break-glass alone.
-- **Operator identity**: An entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `governance`, `platform-foundation`, `parent-group-governance`, or `service-admin-passwords`, with `access_tier` `governance`, `tenant`, `foundation`, or `rotation`.
+- **Operator identity**: An entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor`, `platform-foundation`, `parent-group-governance`, or `service-admin-passwords`, with `access_tier` `governance`, `tenant`, `foundation`, or `rotation`.
 - **Operator Vault Proxy**: The Vault Proxy of one operator identity on the operator workstation, which logs in through the cert auth mount `operator-cert` and overwrites the token of every request on its loopback mTLS listener.
 - **Operator cert role**: The cert auth role `operator-<identity>`, which admits the client certificate of CN `operator-<identity>` signed by the ML-DSA-87 CA of `vault/tls`.
 - **Assignment Scope**: The set of policy names which a tenant role on one class of auth mount is allowed to carry.
@@ -125,15 +125,15 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 
 `foundation-vault-bastion/access-operator-proxy.tf` declares the cert auth mount `operator-cert` and one cert role per entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`.
 
-| Attribute              | Value                                                                                                                                   | Rationale                                                                                                                       |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                 | `operator-<identity>`                                                                                                                   | The role name matches the CN which the role admits.                                                                             |
-| `certificate`          | The ML-DSA-87 CA `vault/tls/ca-ml-dsa-87.pem`                                                                                           | The CA of the loopback listener signs the client certificates, hence the operator path trusts one CA alone.                     |
-| `allowed_common_names` | `operator-<identity>`                                                                                                                   | A certificate of one identity cannot log in through the role of another identity.                                               |
-| `token_policies`       | `operator-<identity>` for tier `governance`, `foundation`, or `rotation`; the tenant ACL and `registry-reader-<code>` for tier `tenant` | A governance identity reads group keys alone. Foundation and rotation hold scoped administrative policies. Tenant holds Item E. |
-| `token_ttl`            | 3600s                                                                                                                                   | The Proxy renews the token within the TTL.                                                                                      |
-| `token_max_ttl`        | 14400s                                                                                                                                  | The Proxy logs in again after the maximum TTL.                                                                                  |
-| `token_bound_cidrs`    | `127.0.0.1/32`                                                                                                                          | The Proxies connect through the loopback listener, and a token presented from any other source fails.                           |
+| Attribute              | Value                                                                                                                                       | Rationale                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                 | `operator-<identity>`                                                                                                                       | The role name matches the CN which the role admits.                                                                             |
+| `certificate`          | The ML-DSA-87 CA `vault/tls/ca-ml-dsa-87.pem`                                                                                               | The CA of the loopback listener signs the client certificates, hence the operator path trusts one CA alone.                     |
+| `allowed_common_names` | `operator-<identity>`                                                                                                                       | A certificate of one identity cannot log in through the role of another identity.                                               |
+| `token_policies`       | `operator-<identity>` for tier `governance`, `foundation`, or `rotation`, and the tenant ACL and `registry-reader-<code>` for tier `tenant` | A governance identity reads group keys alone. Foundation and rotation hold scoped administrative policies. Tenant holds Item E. |
+| `token_ttl`            | 3600s                                                                                                                                       | The Proxy renews the token within the TTL.                                                                                      |
+| `token_max_ttl`        | 14400s                                                                                                                                      | The Proxy logs in again after the maximum TTL.                                                                                  |
+| `token_bound_cidrs`    | `127.0.0.1/32`                                                                                                                              | The Proxies connect through the loopback listener, and a token presented from any other source fails.                           |
 
 `terraform_data.operator_identities_validation` stops the plan when an identity declares an `access_tier` other than `governance`, `tenant`, `foundation`, or `rotation`, when there is not exactly one `governance` identity, exactly one `foundation` identity, and exactly one `rotation` identity, or when a tenant identity names no tenant of `access-tenant.tf`. Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
 
@@ -166,9 +166,9 @@ The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Work
 
 The tenant registry lists platforms alone, and a repository of the group registers no tenant for the governance layer. Every governance layer of the group runs through the governance Proxy.
 
-1. The policy `operator-credential-distributor` reads `parent-group-governance/terraform/state-backend` and the paths of `allowed_read_secret_paths` of the identity in `workstation-topology.yaml`, and writes nothing.
+1. The policy `operator-credential-distributor` reads `parent-group-governance/terraform/state-backend` and the paths of `allowed_read_secret_paths` of the identity in `workstation-topology.yaml`, and writes nothing, since `allowed_write_secret_paths` lists no prefix.
 2. The paths of `allowed_read_secret_paths` are the group keys: the Anthropic admin key, the GitHub publication token, the SonarQube analysis token, and the two bot tokens below `gitlab-ci-with-code-reviewer/integration`.
-3. The Workload Identity Federation module writes no Vault path, hence a governance layer holds no Vault write privilege.
+3. The Workload Identity Federation module writes no Vault path, hence `allowed_write_secret_paths` lists no prefix, and a governance layer holds no Vault write privilege.
 
 #### Item D.6 Foundation Identity
 
@@ -459,12 +459,12 @@ For risks associated with rejecting this choice, refer to T3, T13, T14, and T15.
 3. Cost: The client private key is a long lived credential on the operator workstation. The local CA key signs a client certificate for any identity. The certificates expire after 365 days, and a run of the Proxy role within 30 days of expiry renews the certificates.
 4. Rejected alternatives and rationales are summarized in the table below:
 
-| Alternative                                                   | Rationale for Rejection                                                                                               |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Terraform issues secret IDs and writes them to KV and outputs | Secret IDs never expire and persist in state files                                                                    |
-| A wrapped AppRole secret ID per sub-shell session             | The token lives in the shell environment, every session needs the root token, and editors and direnv lose the session |
-| A token role session per owner code                           | The token lives in the shell environment, and the role needs `allowed_entity_aliases = ["*"]`                         |
-| The `api_proxy` stanza of Vault Agent                         | HashiCorp deprecated the stanza in favor of Vault Proxy                                                               |
+| Alternative                                                      | Rationale for Rejection                                                                                               |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Terraform issues secret IDs and writes the IDs to KV and outputs | Secret IDs never expire and persist in state files                                                                    |
+| A wrapped AppRole secret ID per sub-shell session                | The token lives in the shell environment, every session needs the root token, and editors and direnv lose the session |
+| A token role session per owner code                              | The token lives in the shell environment, and the role needs `allowed_entity_aliases = ["*"]`                         |
+| The `api_proxy` stanza of Vault Agent                            | HashiCorp deprecated the stanza in favor of Vault Proxy                                                               |
 
 ### Item C. Fact Publication Channel
 
