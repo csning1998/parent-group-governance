@@ -3,10 +3,8 @@
 # Consumers SHALL treat this file as the authoritative single source of truth across Ansible, Terraform, and Go CLI.
 
 # Infrastructure Plane: Network interfaces and listener port bindings for the Bastion Vault daemon.
-# Consumed by:
-# - Ansible workstation_libvirt (templates/vault.hcl.j2, templates/libvirt-to-host.xml.j2)
-# - Terraform foundation-vault-bastion (context.tf, trust-platform-facts.tf)
-# - Go tools/governance/internal/topology (topology.go)
+# Consumers: Ansible workstation_libvirt (vault.hcl.j2, libvirt-to-host.xml.j2), Terraform foundation-vault-bastion
+# (context.tf, trust-platform-facts.tf), and Go tools/governance/internal/topology (topology.go).
 bastion_vault:
   # Loopback interface IP address bound for host-local management and local proxy traffic.
   # Rendered into vault.hcl.j2 loopback listener and cluster_addr.
@@ -25,10 +23,8 @@ bastion_vault:
   metrics_port: 8202
 
 # Access Plane: Local mTLS forwarding proxies mediating operator and Terraform connections to Vault.
-# Consumed by:
-# - Ansible workstation_vault_proxy (templates/proxy.hcl.j2, templates/vault-proxy-env.sh.j2, tasks/)
-# - Terraform foundation-vault-bastion (access-operator-proxy.tf)
-# - Go tools/governance/internal/topology (topology.go)
+# Consumers: Ansible workstation_vault_proxy (proxy.hcl.j2, vault-proxy-env.sh.j2, tasks/), Terraform
+# foundation-vault-bastion (access-operator-proxy.tf), and Go tools/governance/internal/topology (topology.go).
 operator_vault_proxy:
   # Vault TLS certificate auth mount path matching Common Name operator-<identity>.
   # Rendered into foundation-vault-bastion access-operator-proxy.tf and proxy.hcl.j2.
@@ -47,9 +43,9 @@ operator_vault_proxy:
     vault_kv_field: "token"
     terraform_http_username: "gitlab-ci-token"
   identities:
-    # Dedicated loopback proxy for group-level governance Terraform layers with read-only bot access.
-    # Consumed by access-operator-proxy.tf to build operator-governance policy and vault-proxy@.service.
-    governance:
+    # Dedicated loopback proxy for group-level governance Terraform layers with bot read access.
+    # Consumed by access-operator-proxy.tf to build operator-credential-distributor policy and vault-proxy@.service.
+    credential-distributor:
       listen_port: 8210
       access_tier: "governance"
       allowed_read_secret_paths:
@@ -58,6 +54,8 @@ operator_vault_proxy:
         - "parent-group-governance/sonarqube/ci-analysis-bot"
         - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
         - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+        - "gitlab-ci-with-code-reviewer/terraform/state-backend"
+      allowed_write_secret_paths: []
     # Dedicated loopback proxy for platform-foundation Terraform layers requiring tenant ACL.
     # Consumed by access-operator-proxy.tf to bind tenant ACL policies and registry reader.
     platform-foundation:
@@ -75,11 +73,8 @@ operator_vault_proxy:
       access_tier: "rotation"
 
 # Credential Lifecycle Plane: Declarative registry of infrastructure service credentials rotated by Go CLI.
-# Consumed by:
-# - Terraform foundation-vault-bastion (access-operator-proxy.tf to generate rotation policy)
-# - Go tools/governance/pkg/credentials (credentials.go)
-# - Go tools/governance/pkg/httprotate (httprotate.go)
-# - Go tools/governance/cmd/governance (operations.go, menu.go)
+# Consumers: Terraform foundation-vault-bastion (access-operator-proxy.tf rotation policy), and Go tools/governance
+# pkg/credentials, pkg/httprotate, and cmd/governance (credentials.go, httprotate.go, operations.go, menu.go).
 service_admin_passwords:
   - key: sonarqube-admin-password
     vault_kv_mount: secret

@@ -1,6 +1,6 @@
 ---
 # The client certificate authenticates the identity to the Bastion Vault and to its own Proxy listener.
-# The listener certificate serves the Proxy on the loopback address. The local CA of vault/tls signs both.
+# The listener certificate serves the Proxy on the loopback address. The ML-DSA-87 CA of vault/tls signs both.
 - name: "C1. Declare the certificates of {{ _workstation_vault_proxy_identity.key }}"
   ansible.builtin.set_fact:
     _workstation_vault_proxy_certs:
@@ -19,7 +19,7 @@
   community.crypto.openssl_privatekey:
     path: "{{ _workstation_vault_proxy_identity_dir }}/{{ item.name }}-key.pem"
     type: ECC
-    curve: secp256r1
+    curve: secp384r1
     owner: "{{ workstation_vault_proxy_operator_user }}"
     group: "{{ workstation_vault_proxy_operator_user }}"
     mode: "0600"
@@ -34,7 +34,7 @@
       - openssl
       - verify
       - -CAfile
-      - "{{ workstation_vault_proxy_ca_dir }}/ca.pem"
+      - "{{ workstation_vault_proxy_ca_dir }}/ca-ml-dsa-87.pem"
       - "{{ _workstation_vault_proxy_identity_dir }}/{{ item.name }}.pem"
   register: _workstation_vault_proxy_verify
   changed_when: false
@@ -72,8 +72,8 @@
     path: "{{ _workstation_vault_proxy_identity_dir }}/{{ item.0.name }}.pem"
     csr_content: "{{ item.3.csr }}"
     provider: ownca
-    ownca_path: "{{ workstation_vault_proxy_ca_dir }}/ca.pem"
-    ownca_privatekey_path: "{{ workstation_vault_proxy_ca_dir }}/ca-key.pem"
+    ownca_path: "{{ workstation_vault_proxy_ca_dir }}/ca-ml-dsa-87.pem"
+    ownca_privatekey_path: "{{ workstation_vault_proxy_ca_dir }}/ca-ml-dsa-87-key.pem"
     ownca_not_after: "+{{ workstation_vault_proxy_cert.valid_days }}d"
     force: >-
       {{

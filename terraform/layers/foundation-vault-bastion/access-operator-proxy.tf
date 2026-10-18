@@ -1,6 +1,6 @@
 
 # Each operator identity of workstation-topology.yaml logs in through its Vault Proxy with a client certificate,
-# which the local CA of vault/tls signs. A role admits the CN of its own identity alone.
+# which the ML-DSA-87 CA of vault/tls signs. A role admits the CN of its own identity alone.
 locals {
   operator_proxy = local.workstation.operator_vault_proxy
 
@@ -63,7 +63,8 @@ resource "vault_auth_backend" "operator_cert" {
   description = "Client certificates of the operator Vault Proxies on the workstation, signed by the local CA."
 }
 
-# A governance identity reads the state backend token and the group keys of workstation-topology.yaml, and writes nothing.
+# A governance identity reads the state backend token and the read paths of workstation-topology.yaml, and writes the
+# secrets below its write prefixes alone.
 resource "vault_policy" "operator_governance" {
   for_each = local.operator_governance_identities
 
@@ -76,6 +77,12 @@ resource "vault_policy" "operator_governance" {
         for p in concat([local.operator_proxy.state_backend.vault_kv_path], each.value.allowed_read_secret_paths) :
         "${local.operator_proxy.state_backend.vault_kv_mount}/data/${p}" => { capabilities = local.acl_capability.read }
       },
+      merge([for p in each.value.allowed_write_secret_paths : {
+        "${local.operator_proxy.state_backend.vault_kv_mount}/data/${p}/*"     = { capabilities = local.acl_capability.kv_data }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/metadata/${p}/*" = { capabilities = local.acl_capability.kv_metadata }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/delete/${p}/*"   = { capabilities = local.acl_capability.kv_version }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/destroy/${p}/*"  = { capabilities = local.acl_capability.kv_version }
+      }]...),
     )
   })
 }
@@ -140,7 +147,7 @@ resource "vault_cert_auth_backend_role" "operator" {
   provider             = vault.bastion
   backend              = vault_auth_backend.operator_cert.path
   name                 = "operator-${each.key}"
-  certificate          = data.local_file.bastion_vault_ca.content
+  certificate          = data.local_file.bastion_vault_operator_ca.content
   allowed_common_names = ["operator-${each.key}"]
   token_policies       = local.operator_policy_names[each.key]
   token_ttl            = 60 * 60

@@ -7,12 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 )
-
-// testBastion carries a publish address apart from the workstation value, hence a hard-coded address fails the tests.
-var testBastion = topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8201}
 
 func TestGenerateCertificateSerialProducesDistinctInRangeValues(t *testing.T) {
 	a, err := generateCertificateSerial()
@@ -38,20 +33,19 @@ func TestGenerateCertificateSerialProducesDistinctInRangeValues(t *testing.T) {
 	}
 }
 
-func TestNewPathsTakesTheBastionVaultOfTheTopology(t *testing.T) {
-	p := NewPaths("/root", "/ansible", "/home/u", testBastion)
-	if got := p.resolveBastionAddr(); got != "https://127.0.0.1:8201" {
-		t.Errorf("resolveBastionAddr() = %q, want https://127.0.0.1:8201", got)
+func TestNewPaths(t *testing.T) {
+	p := NewPaths("/root", "/home/u")
+	if p.ProjectRoot != "/root" {
+		t.Errorf("ProjectRoot = %q, want /root", p.ProjectRoot)
 	}
-	if got := len(p.listenerIPs); got != 2 {
-		t.Errorf("len(listenerIPs) = %d, want the loopback and the publish address", got)
+	if p.Home != "/home/u" {
+		t.Errorf("Home = %q, want /home/u", p.Home)
 	}
 }
 
 func TestPathsHelpers(t *testing.T) {
 	p := Paths{
 		ProjectRoot: "/root",
-		AnsibleDir:  "/ansible",
 		Home:        "/home/u",
 	}
 
@@ -60,12 +54,12 @@ func TestPathsHelpers(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"ResolveTLSDir", p.ResolveTLSDir(), "/root/vault/tls"},
-		{"resolveKeysDir", p.resolveKeysDir(), "/root/vault/keys"},
-		{"resolveInitFile", p.resolveInitFile(), "/root/vault/keys/init-output.json"},
-		{"resolveUnsealKeyFile", p.resolveUnsealKeyFile(), "/root/vault/keys/unseal.key"},
-		{"resolveRootTokenFile", p.resolveRootTokenFile(), "/home/u/.vault-token"},
-		{"resolveCACertFile", p.resolveCACertFile(), "/root/vault/tls/ca.pem"},
+		{"TLSDir", p.TLSDir(), "/root/vault/tls"},
+		{"KeysDir", p.KeysDir(), "/root/vault/keys"},
+		{"InitFile", p.InitFile(), "/root/vault/keys/init-output.json"},
+		{"UnsealKeyFile", p.UnsealKeyFile(), "/root/vault/keys/unseal.key"},
+		{"RootTokenFile", p.RootTokenFile(), "/home/u/.vault-token"},
+		{"TransportRootMLDSA87CACertFile", p.TransportRootMLDSA87CACertFile(), "/root/vault/tls/ca-ml-dsa-87.pem"},
 	}
 	for _, c := range cases {
 		want := filepath.FromSlash(c.want)
@@ -82,8 +76,8 @@ func TestWritePEMErrorsWhenDirectoryMissing(t *testing.T) {
 	if err == nil {
 		t.Fatal("writePEMFile: want error, got nil")
 	}
-	if !strings.Contains(err.Error(), "open") || !strings.Contains(err.Error(), path) {
-		t.Errorf("error = %q, want it to contain %q and %q", err.Error(), "open", path)
+	if !strings.Contains(err.Error(), "create") && !strings.Contains(err.Error(), "open") || !strings.Contains(err.Error(), path) {
+		t.Errorf("error = %q, want it to contain directory error and %q", err.Error(), path)
 	}
 }
 
@@ -101,7 +95,7 @@ func TestWritePEMWritesDecodableFileWithGivenMode(t *testing.T) {
 	}
 	block, _ := pem.Decode(data)
 	if block == nil {
-		t.Fatalf("no PEM block in %s", path)
+		t.Fatalf("%s does not contain a PEM block", path)
 		return
 	}
 	if block.Type != "TEST BLOCK" {

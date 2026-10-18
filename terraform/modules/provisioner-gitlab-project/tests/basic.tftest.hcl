@@ -1,7 +1,7 @@
 
 mock_provider "gitlab" {}
 
-# Mirrors the module.provisioner_gitlab_project call of a governance-gitlab-project layer.
+# Mirrors the module.provisioner_gitlab_project call of a administration-gitlab-project layer.
 run "example_platform_project" {
   command = plan
 

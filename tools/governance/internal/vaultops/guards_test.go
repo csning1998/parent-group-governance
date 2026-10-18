@@ -13,14 +13,15 @@ func TestInitRefusesReinitWhenInitFileExists(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
 	p := Paths{ProjectRoot: root, Home: home}
-	if err := os.MkdirAll(p.resolveKeysDir(), 0o755); err != nil {
+	if err := os.MkdirAll(p.KeysDir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p.resolveInitFile(), []byte("{}"), 0o644); err != nil {
+	if err := os.WriteFile(p.InitFile(), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	err := Init(context.Background(), p, discardOut())
+	op := newTestOperator(t, p, "http://127.0.0.1:8200")
+	err := op.Init(context.Background())
 	if err == nil {
 		t.Fatal("Init: want error, got nil")
 	}
@@ -33,10 +34,11 @@ func TestPersistInitOutputRejectsEmptyUnsealKeys(t *testing.T) {
 	root := t.TempDir()
 	p := Paths{ProjectRoot: root, Home: t.TempDir()}
 	resp := &vaultapi.InitResponse{RootToken: "s.root"}
+	op := &Operator{paths: p}
 
-	err := persistInitOutput(p, resp)
-	if err == nil || !strings.Contains(err.Error(), "no unseal keys in init response") {
-		t.Fatalf("persistInitOutput with no keys = %v, want error containing %q", err, "no unseal keys in init response")
+	err := op.persistInitOutput(resp)
+	if err == nil || !strings.Contains(err.Error(), "the init response does not contain unseal keys") {
+		t.Fatalf("persistInitOutput without unseal keys = %v, want error containing %q", err, "the init response does not contain unseal keys")
 	}
 }
 
@@ -44,14 +46,15 @@ func TestPersistInitOutputRestrictsPermissions(t *testing.T) {
 	root := t.TempDir()
 	p := Paths{ProjectRoot: root, Home: t.TempDir()}
 	resp := &vaultapi.InitResponse{RootToken: "s.root", KeysB64: []string{"key1", "key2"}}
+	op := &Operator{paths: p}
 
-	if err := persistInitOutput(p, resp); err != nil {
+	if err := op.persistInitOutput(resp); err != nil {
 		t.Fatalf("persistInitOutput: %v", err)
 	}
 
-	assertMode(t, p.resolveKeysDir(), 0o700)
-	assertMode(t, p.resolveInitFile(), 0o600)
-	assertMode(t, p.resolveUnsealKeyFile(), 0o600)
+	assertMode(t, p.KeysDir(), 0o700)
+	assertMode(t, p.InitFile(), 0o600)
+	assertMode(t, p.UnsealKeyFile(), 0o600)
 }
 
 func TestUnsealFailsWhenUnsealKeyFileMissing(t *testing.T) {
@@ -59,14 +62,15 @@ func TestUnsealFailsWhenUnsealKeyFileMissing(t *testing.T) {
 	home := t.TempDir()
 	p := Paths{ProjectRoot: root, Home: home}
 
-	err := Unseal(context.Background(), p, discardOut())
+	op := newTestOperator(t, p, "http://127.0.0.1:8200")
+	err := op.Unseal(context.Background())
 	if err == nil {
 		t.Fatal("Unseal: want error, got nil")
 	}
 	if !strings.Contains(err.Error(), "unseal keys not found at") ||
-		!strings.Contains(err.Error(), p.resolveUnsealKeyFile()) ||
+		!strings.Contains(err.Error(), p.UnsealKeyFile()) ||
 		!strings.Contains(err.Error(), "run Init first") {
-		t.Errorf("error = %q, want it to contain resolveUnsealKeyFile path, %q and %q",
+		t.Errorf("error = %q, want it to contain UnsealKeyFile path, %q and %q",
 			err.Error(), "unseal keys not found at", "run Init first")
 	}
 }

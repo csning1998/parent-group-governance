@@ -60,14 +60,14 @@ func TestHostMenuOptions_RunTheirPlaybookAlone(t *testing.T) {
 
 func TestRunHostAll_KeepsAnExistingLocalCA(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
-	caFile := filepath.Join(f.a.root, "vault", "tls", "ca.pem")
+	caFile := filepath.Join(f.a.root, "vault", "tls", "ca-ml-dsa-87.pem")
 	err := os.MkdirAll(filepath.Dir(caFile), 0o755)
 	if err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	err = os.WriteFile(caFile, []byte("example existing CA"), 0o644)
 	if err != nil {
-		t.Fatalf("write ca.pem: %v", err)
+		t.Fatalf("write the CA certificate: %v", err)
 	}
 
 	err = f.a.runHostAll(context.Background())
@@ -75,7 +75,7 @@ func TestRunHostAll_KeepsAnExistingLocalCA(t *testing.T) {
 		t.Fatalf("runHostAll: %v", err)
 	}
 	if data, _ := os.ReadFile(caFile); string(data) != "example existing CA" {
-		t.Errorf("ca.pem = %q, want the existing CA untouched", data)
+		t.Errorf("CA certificate = %q, want the existing CA untouched", data)
 	}
 }
 
@@ -97,8 +97,8 @@ func TestRunHostAll_RunsEveryStepInBootstrapOrder(t *testing.T) {
 		}
 	}
 	caDir := filepath.Join(f.a.root, "vault", "tls")
-	if _, err := os.Stat(filepath.Join(caDir, "ca.pem")); err != nil {
-		t.Errorf("stat ca.pem: %v, want the local CA before the Vault Proxies", err)
+	if _, err := os.Stat(filepath.Join(caDir, "ca-ml-dsa-87.pem")); err != nil {
+		t.Errorf("stat the CA certificate: %v, want the local CA before the Vault Proxies", err)
 	}
 	if calls := f.calls(t); !strings.Contains(calls[len(calls)-1], caDir) {
 		t.Errorf("Vault Proxy call %q, want the CA directory %s", calls[len(calls)-1], caDir)

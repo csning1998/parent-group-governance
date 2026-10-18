@@ -23,7 +23,7 @@ services:
       - /run/user/${HOST_UID}/podman/podman.sock:/run/podman/podman.sock
 
   vault-server:
-    image: docker.io/hashicorp/vault:2.0
+    image: docker.io/hashicorp/vault:2.2.0
     container_name: parent-group-governance-vault-bastion
     # vault.hcl binds listener address 172.16.0.1, which host-mode netns can delay until after PID 1 starts.
     # Vault exits when any tcp listener bind fails.

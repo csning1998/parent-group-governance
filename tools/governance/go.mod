@@ -1,6 +1,8 @@
 module gitlab.com/csning1998-lab/parent-group-governance/tools/governance
 
-go 1.26.0
+go 1.27.0
+
+toolchain go1.27.2
 
 require (
 	github.com/apenella/go-ansible/v2 v2.4.1

@@ -11,43 +11,47 @@ import (
 	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
-
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
 
 func TestEnableKVEngine(t *testing.T) {
 	t.Run("missing token", func(t *testing.T) {
 		p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
-		err := EnableKVEngine(context.Background(), p, discardOut())
+		op := newTestOperator(t, p, "https://127.0.0.1:8200")
+		err := op.EnableKVEngine(context.Background())
 		if err == nil || !strings.Contains(err.Error(), "root token not found") {
 			t.Fatalf("EnableKVEngine = %v, want the missing-token error", err)
 		}
 	})
 	t.Run("client failure", func(t *testing.T) {
-		p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir(), bastionVaultAddr: "https://127.0.0.1:8200"}
+		p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
 		if err := vaultclient.PersistTokenFile(p.Home, "s.root"); err != nil {
 			t.Fatal(err)
 		}
-		err := EnableKVEngine(context.Background(), p, discardOut())
+		op := newTestOperator(t, p, "http://127.0.0.1:1")
+		err := op.EnableKVEngine(context.Background())
 		if err == nil || strings.Contains(err.Error(), "root token not found") {
 			t.Fatalf("EnableKVEngine = %v, want the client failure", err)
 		}
 	})
 	t.Run("already enabled", func(t *testing.T) {
-		p := newKVPaths(t, kvMountServer(t, true, true))
-		if err := EnableKVEngine(context.Background(), p, discardOut()); err != nil {
+		p := newKVPaths(t)
+		op := newTestOperator(t, p, kvMountServer(t, true, true))
+		if err := op.EnableKVEngine(context.Background()); err != nil {
 			t.Fatalf("EnableKVEngine: %v", err)
 		}
 	})
 	t.Run("enables a missing mount", func(t *testing.T) {
-		p := newKVPaths(t, kvMountServer(t, false, false))
-		if err := EnableKVEngine(context.Background(), p, discardOut()); err != nil {
+		p := newKVPaths(t)
+		op := newTestOperator(t, p, kvMountServer(t, false, false))
+		if err := op.EnableKVEngine(context.Background()); err != nil {
 			t.Fatalf("EnableKVEngine: %v", err)
 		}
 	})
 	t.Run("mount failure", func(t *testing.T) {
-		p := newKVPaths(t, kvMountServer(t, false, true))
-		err := EnableKVEngine(context.Background(), p, discardOut())
+		p := newKVPaths(t)
+		op := newTestOperator(t, p, kvMountServer(t, false, true))
+		err := op.EnableKVEngine(context.Background())
 		if err == nil || !strings.Contains(err.Error(), "enable kv-v2") {
 			t.Fatalf("EnableKVEngine = %v, want the mount failure", err)
 		}
@@ -55,8 +59,9 @@ func TestEnableKVEngine(t *testing.T) {
 }
 
 func TestInitReportsAClientFailure(t *testing.T) {
-	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir(), bastionVaultAddr: "https://127.0.0.1:8200"}
-	err := Init(context.Background(), p, discardOut())
+	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
+	op := newTestOperator(t, p, "http://127.0.0.1:1")
+	err := op.Init(context.Background())
 	if err == nil || strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("Init = %v, want the client failure", err)
 	}
@@ -67,14 +72,15 @@ func TestInitReportsAnEmptyRootToken(t *testing.T) {
 	mux.HandleFunc("/v1/sys/init", fakeInitHandler("", []string{"a2V5MQ=="}))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	p := newLiveTestPaths(t, srv.URL)
+	p := prepareTestPaths(t)
+	op := newTestOperator(t, p, srv.URL)
 
-	err := Init(context.Background(), p, discardOut())
+	err := op.Init(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "empty root_token") {
 		t.Fatalf("Init = %v, want the empty root token error", err)
 	}
-	if _, statErr := os.Stat(p.resolveRootTokenFile()); statErr == nil {
-		t.Error("token file exists, want none")
+	if _, statErr := os.Stat(p.RootTokenFile()); statErr == nil {
+		t.Error("token file exists, want an absent token file")
 	}
 }
 
@@ -85,19 +91,12 @@ func TestInitReportsAnUnsealFailure(t *testing.T) {
 	mux.HandleFunc("/v1/sys/unseal", fakeVaultErrorHandler(http.StatusInternalServerError))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	p := newLiveTestPaths(t, srv.URL)
+	p := prepareTestPaths(t)
+	op := newTestOperator(t, p, srv.URL)
 
-	err := Init(context.Background(), p, discardOut())
+	err := op.Init(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "auto-unseal after init") {
 		t.Fatalf("Init = %v, want the unseal failure", err)
-	}
-}
-
-func TestPersistBootstrapRootTokenReportsAMissingInitFile(t *testing.T) {
-	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
-	err := persistBootstrapRootToken(p)
-	if err == nil || !strings.Contains(err.Error(), "vaultops: read") {
-		t.Fatalf("persistBootstrapRootToken = %v, want a read error", err)
 	}
 }
 
@@ -107,50 +106,46 @@ func TestPersistInitOutputReportsFilesystemFailures(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "vault"), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		err := persistInitOutput(Paths{ProjectRoot: root}, &vaultapi.InitResponse{KeysB64: []string{"key"}})
+		op := &Operator{paths: Paths{ProjectRoot: root}}
+		err := op.persistInitOutput(&vaultapi.InitResponse{KeysB64: []string{"key"}})
 		if err == nil || !strings.Contains(err.Error(), "vaultops: mkdir") {
 			t.Fatalf("persistInitOutput = %v, want a mkdir error", err)
 		}
 	})
 	t.Run("init path is a directory", func(t *testing.T) {
 		p := Paths{ProjectRoot: t.TempDir()}
-		if err := os.MkdirAll(p.resolveInitFile(), 0o700); err != nil {
+		if err := os.MkdirAll(p.InitFile(), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		err := persistInitOutput(p, &vaultapi.InitResponse{KeysB64: []string{"key"}})
-		if err == nil || !strings.Contains(err.Error(), "vaultops: write "+p.resolveInitFile()) {
+		op := &Operator{paths: p}
+		err := op.persistInitOutput(&vaultapi.InitResponse{KeysB64: []string{"key"}})
+		if err == nil || !strings.Contains(err.Error(), "vaultops: write "+p.InitFile()) {
 			t.Fatalf("persistInitOutput = %v, want an init-file write error", err)
 		}
 	})
 	t.Run("unseal path is a directory", func(t *testing.T) {
 		p := Paths{ProjectRoot: t.TempDir()}
-		if err := os.MkdirAll(p.resolveUnsealKeyFile(), 0o700); err != nil {
+		if err := os.MkdirAll(p.UnsealKeyFile(), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		err := persistInitOutput(p, &vaultapi.InitResponse{KeysB64: []string{"key"}})
-		if err == nil || !strings.Contains(err.Error(), "vaultops: write "+p.resolveUnsealKeyFile()) {
+		op := &Operator{paths: p}
+		err := op.persistInitOutput(&vaultapi.InitResponse{KeysB64: []string{"key"}})
+		if err == nil || !strings.Contains(err.Error(), "vaultops: write "+p.UnsealKeyFile()) {
 			t.Fatalf("persistInitOutput = %v, want an unseal-file write error", err)
 		}
 	})
 }
 
-func TestProbeBastionSealStateReportsAClientFailure(t *testing.T) {
-	p := Paths{ProjectRoot: t.TempDir(), bastionVaultAddr: "https://127.0.0.1:8200"}
-	_, _, err := ProbeBastionSealState(context.Background(), p)
-	if err == nil {
-		t.Fatal("ProbeBastionSealState error = nil, want the client failure")
-	}
-}
-
 func TestUnsealReportsAClientFailure(t *testing.T) {
-	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir(), bastionVaultAddr: "https://127.0.0.1:8200"}
-	if err := os.MkdirAll(p.resolveKeysDir(), 0o700); err != nil {
+	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
+	if err := os.MkdirAll(p.KeysDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p.resolveUnsealKeyFile(), []byte("key1\n"), 0o600); err != nil {
+	if err := os.WriteFile(p.UnsealKeyFile(), []byte("key1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err := Unseal(context.Background(), p, discardOut())
+	op := newTestOperator(t, p, "http://127.0.0.1:1")
+	err := op.Unseal(context.Background())
 	if err == nil || strings.Contains(err.Error(), "unseal keys not found") {
 		t.Fatalf("Unseal = %v, want the client failure", err)
 	}
@@ -162,15 +157,16 @@ func TestUnsealReportsADeadline(t *testing.T) {
 	mux.HandleFunc("/v1/sys/unseal", fakeUnsealHandler())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	p := newLiveTestPaths(t, srv.URL)
-	if err := os.MkdirAll(p.resolveKeysDir(), 0o700); err != nil {
+	p := prepareTestPaths(t)
+	if err := os.MkdirAll(p.KeysDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p.resolveUnsealKeyFile(), []byte("key1\n"), 0o600); err != nil {
+	if err := os.WriteFile(p.UnsealKeyFile(), []byte("key1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	err := Unseal(context.Background(), p, discardOut())
+	op := newTestOperator(t, p, srv.URL)
+	err := op.Unseal(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "still reporting sealed") {
 		t.Fatalf("Unseal = %v, want the deadline error", err)
 	}
@@ -181,9 +177,10 @@ func TestWaitUntilUnsealedReportsTheDeadline(t *testing.T) {
 	mux.HandleFunc("/v1/sys/seal-status", fakeSealStatusHandler(true))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	p := newLiveTestPaths(t, srv.URL)
+	p := prepareTestPaths(t)
+	op := newTestOperator(t, p, srv.URL)
 
-	err := waitUntilUnsealed(context.Background(), p, time.Millisecond)
+	err := op.waitUntilUnsealed(context.Background(), time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "still reporting sealed") {
 		t.Fatalf("waitUntilUnsealed = %v, want the deadline error", err)
 	}
@@ -214,9 +211,9 @@ func kvMountServer(t *testing.T, alreadyEnabled, failMount bool) string {
 	return srv.URL
 }
 
-func newKVPaths(t *testing.T, addr string) Paths {
+func newKVPaths(t *testing.T) Paths {
 	t.Helper()
-	p := newLiveTestPaths(t, addr)
+	p := prepareTestPaths(t)
 	if err := vaultclient.PersistTokenFile(p.Home, "s.root"); err != nil {
 		t.Fatal(err)
 	}

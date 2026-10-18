@@ -85,23 +85,34 @@ func (a *app) buildVaultProxyPlaybook() (hostPlaybook, error) {
 		file: "playbooks/workstation_vault_proxy.yaml",
 		extraVars: map[string]any{
 			"workstation_vault_proxy_operator_user": facts.CurrentUname,
-			"workstation_vault_proxy_ca_dir":        a.newVaultPaths().ResolveTLSDir(),
+			"workstation_vault_proxy_ca_dir":        a.newVaultPaths().TLSDir(),
 		},
 		doneMsg: "Workstation Vault Proxies applied.",
 	}, nil
 }
 
 func (a *app) enableVaultKV(ctx context.Context) error {
-	return vaultops.EnableKVEngine(ctx, a.newVaultPaths(), a.out)
+	op, err := a.newVaultOperator()
+	if err != nil {
+		return err
+	}
+	return op.EnableKVEngine(ctx)
 }
 
 // ensureLocalCA generates the local CA when vault/tls holds none, since a new CA invalidates every issued certificate.
-func (a *app) ensureLocalCA(ctx context.Context) error {
-	p := a.newVaultPaths()
-	if _, err := os.Stat(filepath.Join(p.ResolveTLSDir(), "ca.pem")); err == nil {
+func (a *app) ensureLocalCA(_ context.Context) error {
+	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err == nil {
 		return nil
 	}
-	return vaultops.GenerateTLS(ctx, p, a.out)
+	return a.issueVaultTLS()
+}
+
+func (a *app) issueVaultTLS() error {
+	if err := vaultops.GenerateTLS(a.newVaultPaths().TLSDir(), a.newBastionVaultListeners()); err != nil {
+		return err
+	}
+	a.out.Print(ui.OK, "Vault TLS certificates generated.")
+	return nil
 }
 
 // executePlaybook runs one workstation playbook with injected become password.
@@ -120,15 +131,23 @@ func (a *app) generateRootToken(ctx context.Context) error {
 		a.out.Print(ui.Info, msgCancelled)
 		return nil
 	}
-	return vaultops.GenerateRoot(ctx, a.newVaultPaths(), a.out)
+	op, err := a.newVaultOperator()
+	if err != nil {
+		return err
+	}
+	if err := op.GenerateRoot(ctx); err != nil {
+		return err
+	}
+	a.out.Print(ui.Warn, "Run ./governance vault revoke-root after the break-glass work.")
+	return nil
 }
 
-func (a *app) generateVaultTLS(ctx context.Context) error {
+func (a *app) generateVaultTLS(_ context.Context) error {
 	if !a.out.PromptConfirm(a.in, "Type 'Y' or 'y' to confirm execution: ") {
 		a.out.Print(ui.Info, msgCancelled)
 		return nil
 	}
-	return vaultops.GenerateTLS(ctx, a.newVaultPaths(), a.out)
+	return a.issueVaultTLS()
 }
 
 // initVault refuses a fresh Bastion Vault while a declared service rejects its factory default password, since no
@@ -154,7 +173,11 @@ func (a *app) initVault(ctx context.Context) error {
 		return fmt.Errorf("%w: rebuild the service of %s, as README Section 4 Item D describes, before vault init",
 			errRetainedServiceState, strings.Join(retained, ", "))
 	}
-	return vaultops.Init(ctx, a.newVaultPaths(), a.out)
+	op, err := a.newVaultOperator()
+	if err != nil {
+		return err
+	}
+	return op.Init(ctx)
 }
 
 func (a *app) newRotationClient() (*vaultapi.Client, error) {
@@ -201,7 +224,15 @@ func (a *app) revokeRootToken(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return vaultops.RevokeRoot(ctx, a.newVaultPaths(), cfg, "operator-"+ep.Identity, a.out)
+	op, err := a.newVaultOperator()
+	if err != nil {
+		return err
+	}
+	if err := op.RevokeRoot(ctx, cfg, "operator-"+ep.Identity); err != nil {
+		return err
+	}
+	a.out.Print(ui.Info, "./governance vault generate-root restores a root token for break-glass.")
+	return nil
 }
 
 // rotateCredential runs the a.credentials entry identified by key against Bastion Vault.
@@ -293,7 +324,11 @@ func (a *app) runHostVaultProxyPlaybook(ctx context.Context) error {
 }
 
 func (a *app) unsealVault(ctx context.Context) error {
-	return vaultops.Unseal(ctx, a.newVaultPaths(), a.out)
+	op, err := a.newVaultOperator()
+	if err != nil {
+		return err
+	}
+	return op.Unseal(ctx)
 }
 
 func (a *app) verifyEnvironment() error {

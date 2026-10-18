@@ -39,11 +39,6 @@ func (b BastionVault) APIEndpoint() string {
 	return "https://" + net.JoinHostPort(b.LoopbackAddress, strconv.Itoa(b.APIPort))
 }
 
-// ListenerIPs returns the addresses which the listener certificate MUST carry as subject alternative names.
-func (b BastionVault) ListenerIPs() []net.IP {
-	return []net.IP{net.ParseIP(b.LoopbackAddress), net.ParseIP(b.PublishAddress)}
-}
-
 // ProxyIdentity defines one operator proxy instance listening on loopback and mapping to a Vault cert role.
 type ProxyIdentity struct {
 	ListenPort int    `yaml:"listen_port"` // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)

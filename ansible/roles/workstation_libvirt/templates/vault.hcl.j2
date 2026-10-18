@@ -13,27 +13,29 @@ storage "raft" {
 }
 
 # Loopback listener serves host-local administrative operations, bootstrap routines, and local CLI tooling.
+# Every client of the listener MUST verify ML-DSA-87, which requires Go 1.27 or OpenSSL 3.5.
 listener "tcp" {
   address       = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.api_port }}"
   tls_disable   = false
-  tls_cert_file = "/opt/vault/tls/vault.pem"
-  tls_key_file  = "/opt/vault/tls/vault-key.pem"
+  tls_cert_file = "/opt/vault/tls/loopback.pem"
+  tls_key_file  = "/opt/vault/tls/loopback-key.pem"
 }
 
 # Publish network listener serves guest virtual machines routed across the hypervisor bridge.
+# The listener MUST keep the EC P-384 chain while a guest verifier lacks ML-DSA support.
 listener "tcp" {
   address       = "{{ bastion_vault.publish_address }}:{{ bastion_vault.api_port }}"
   tls_disable   = false
-  tls_cert_file = "/opt/vault/tls/vault.pem"
-  tls_key_file  = "/opt/vault/tls/vault-key.pem"
+  tls_cert_file = "/opt/vault/tls/publish.pem"
+  tls_key_file  = "/opt/vault/tls/publish-key.pem"
 }
 
 # Metrics listener permits tokenless Prometheus scraping, restricted by firewalld to authorized scraper CIDRs.
 listener "tcp" {
   address       = "{{ bastion_vault.publish_address }}:{{ bastion_vault.metrics_port }}"
   tls_disable   = false
-  tls_cert_file = "/opt/vault/tls/vault.pem"
-  tls_key_file  = "/opt/vault/tls/vault-key.pem"
+  tls_cert_file = "/opt/vault/tls/publish.pem"
+  tls_key_file  = "/opt/vault/tls/publish-key.pem"
 
   telemetry {
     unauthenticated_metrics_access = true

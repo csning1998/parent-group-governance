@@ -1,5 +1,5 @@
 
-# The Anthropic provider reads an org:admin OAuth token from ANTHROPIC_AUTH_TOKEN. The token expires within minutes.
+# The federation issuer endpoints accept an org:admin OAuth token alone, which expires within minutes.
 resource "anthropic_federation_issuer" "gitlab_saas" {
   name                     = "issuer-gitlab-saas"
   issuer_url               = "https://gitlab.com"
