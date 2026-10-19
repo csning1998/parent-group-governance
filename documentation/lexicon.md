@@ -43,7 +43,7 @@ The following rules of the organization naming standard apply directly in this r
 1. The private infrastructure secrets engine MUST reside at the KV-v2 mount `secret/`.
 2. The public platform facts registry MUST reside at the KV-v2 mount `registry/`.
 3. The Platform PKI Root CA MUST reside at the PKI mount `pki-root/`.
-4. Intermediate certificate authorities MUST reside under the PKI mount `pki-intermediate/`.
+4. Intermediate certificate authorities MUST reside under PKI mounts named after their domain or trust boundary. Mount paths MUST NOT declare cryptographic algorithm names. Cryptographic algorithm names MUST reside in issuer names and key names.
 5. The Downstream Vault transit auto-unseal engine MUST reside at the Transit mount `transit-unseal/`.
 6. The workstation operator proxy authentication engine MUST reside at the cert mount `operator-cert/`.
 7. The GitLab CI job authentication engine MUST reside at the JWT mount `gitlab-saas-ci-job-jwt-provider/`.
