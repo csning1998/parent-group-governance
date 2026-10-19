@@ -35,7 +35,7 @@ resource "vault_kv_secret_v2" "registry_tenant_bastion" {
       approle_mount_path   = vault_auth_backend.approle.path
     })
     pki = jsonencode({
-      root_cert_pem = vault_pki_secret_backend_root_cert.root.certificate
+      root_cert_pem = vault_pki_secret_backend_root_cert.root["ec-p384"].certificate
       constrained_intermediates = {
         for name, mount in vault_mount.pki_constrained : name => {
           mount_path        = mount.path

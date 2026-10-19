@@ -133,7 +133,7 @@ resource "vault_pki_secret_backend_root_sign_intermediate" "pki_constrained_sign
   excluded_uri_domains  = each.value.excluded_uri_domains
   excluded_ip_ranges    = each.value.excluded_ip_ranges
 
-  issuer_ref = vault_pki_secret_backend_root_cert.root.issuer_id
+  issuer_ref = vault_pki_secret_backend_root_cert.root["ec-p384"].issuer_id
 }
 
 resource "vault_pki_secret_backend_intermediate_set_signed" "pki_constrained_set" {
