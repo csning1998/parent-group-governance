@@ -525,7 +525,10 @@ For risks associated with rejecting this choice, refer to T11.
 1. Constraint: A mount generates the key of an intermediate CA once per rotation. The key signs only the certificates which the mount issues. The Bastion Vault signs at the rotation rate of the SPIRE Parent CA, the Downstream Vault CA, and a few listener certificates. The Downstream Vault and SPIRE sign at the request rate of tenants.
 2. Decision: Every intermediate mount of the Bastion Vault holds dual issuers: an ECDSA P-384 issuer and an ML-DSA-87 issuer. `pki-root` also holds dual root CAs: an ECDSA P-384 root CA and an ML-DSA-87 root CA. Intermediate CAs are symmetrically signed by their corresponding Root issuer (`ec-p384` signed by EC Root, `ml-dsa-87` signed by ML-DSA-87 Root). The default issuer across all intermediate mounts is `ec-p384` (`default_follows_latest_issuer = false`). The key name carries the algorithm and mount accessor, preventing collisions on rotation. The Transport Root CA which `./governance vault tls-generate` generates comprises an ECDSA P-384 CA and an ML-DSA-87 CA, and the ML-DSA-87 private key is stored as seed-only PKCS #8.
 3. Cost: Dual issuers double the number of issuers per mount (6 intermediate issuers across 3 mounts). Root signing requires matching algorithms between issuer and CSR.
-4. Rejected alternative: A single ECDSA hierarchy holds no quantum resistant chain. Major browsers do not accept an Ed25519 signature in a TLS certificate chain, and the ecosystem support of Ed25519 is narrower than the support of P-256.
+4. Rejected alternative:
+    - A single ECDSA hierarchy does not hold a quantum resistant chain.
+    - Ed25519 does not provide quantum resistance either. Section 6.1.5 of the [CA/Browser Forum Baseline Requirements](https://github.com/cabforum/servercert/blob/main/docs/BR.md) version 2.3.1 permits only RSA keys and ECDSA keys on P-256, P-384, and P-521 for publicly trusted TLS certificates.
+    - The [certificate verifier of Chrome](https://boringssl.googlesource.com/boringssl/+/refs/heads/main/pki/signature_algorithm.h) does not define an Ed25519 signature algorithm.
 
 The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 on one core of the operator workstation on 2026-10-04.
 
