@@ -11,14 +11,12 @@ output "bastion_vault" {
 output "bastion_vault_pki" {
   description = "Certificate chain and mount path of the Bastion Vault PKI hierarchy."
   value = {
-    root_cert_pem           = vault_pki_secret_backend_root_cert.root.certificate
-    intermediate_cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_intermediate_signed.certificate
-    intermediate_mount_path = vault_mount.pki_intermediate.path
+    root_cert_pem = vault_pki_secret_backend_root_cert.root["ec-p384"].certificate
     constrained_intermediates = {
       for name, mount in vault_mount.pki_constrained : name => {
         owner      = local.constrained_intermediates[name].owner
         mount_path = mount.path
-        cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed[name].certificate
+        cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed["${name}/ec-p384"].certificate
       }
     }
   }

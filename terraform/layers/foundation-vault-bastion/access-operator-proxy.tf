@@ -19,7 +19,7 @@ locals {
 
   # The foundation identity manages every mount, auth method, and audit device which this layer declares.
   foundation_mount_paths = concat(
-    [vault_mount.pki_root.path, vault_mount.pki_intermediate.path, vault_mount.transit_unseal.path, vault_mount.registry.path],
+    [vault_mount.pki_root.path, vault_mount.transit_unseal.path, vault_mount.registry.path],
     [for mount in vault_mount.pki_constrained : mount.path],
   )
   foundation_auth_paths  = [vault_auth_backend.approle.path, vault_auth_backend.operator_cert.path, vault_jwt_auth_backend.gitlab_saas.path]

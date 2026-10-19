@@ -415,7 +415,7 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 | `group-federation-gcp`          | The Google Cloud Workload Identity Federation pool and provider                          | `parent-group-governance`                             | None                                             |
 | `group-federation-azure`        | The Azure Entra ID application and federated identity credentials                        | `parent-group-governance`                             | None                                             |
 
-The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing the Bootstrap Issuing Intermediate alone, and the intermediate issues every leaf certificate. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
+The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing constrained intermediates. Each constrained intermediate issues subordinate certificates. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
 The layer `group-governance` publishes the masked group variable `SONAR_TOKEN` read out of Vault. Reviewer bot credentials have migrated to the project layer (`administration-gitlab-project`) via `provisioner-code-reviewer`.
 
