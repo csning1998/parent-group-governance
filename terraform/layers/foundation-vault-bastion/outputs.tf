@@ -16,7 +16,7 @@ output "bastion_vault_pki" {
       for name, mount in vault_mount.pki_constrained : name => {
         owner      = local.constrained_intermediates[name].owner
         mount_path = mount.path
-        cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed[name].certificate
+        cert_pem   = vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed["${name}/ec-p384"].certificate
       }
     }
   }

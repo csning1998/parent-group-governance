@@ -6,6 +6,7 @@ locals {
     # The mount signs the SPIRE Parent CA, which signs the SPIRE Child CA.
     "pki-intermediate-spire" = {
       owner                 = local.platform_tenant
+      root_ca_id            = "ec-p384"
       common_name           = "On-prem SPIRE Upstream Intermediate CA"
       max_path_length       = 2
       permitted_dns_domains = local.spire_trust_domains
@@ -23,6 +24,7 @@ locals {
     # The subtree of the Downstream Vault CA excludes the Bastion listener names and the SPIFFE trust domain.
     "pki-intermediate-vault-downstream" = {
       owner                 = local.platform_tenant
+      root_ca_id            = "ec-p384"
       common_name           = "On-prem Downstream Vault Intermediate CA"
       max_path_length       = 2
       permitted_dns_domains = concat([local.platform_trust.domain_suffix], local.platform_trust.downstream_extra_dns_domains)
@@ -36,6 +38,7 @@ locals {
     # The mount issues leaf certificates alone, since the zero path length forbids a subordinate CA.
     "pki-leaf-platform" = {
       owner                 = local.platform_tenant
+      root_ca_id            = "ec-p384"
       common_name           = "On-prem Platform Leaf Intermediate CA"
       max_path_length       = 0
       permitted_dns_domains = [local.platform_trust.domain_suffix, local.platform_trust.kubernetes_cluster_domain]
@@ -54,6 +57,39 @@ locals {
       }
     }
   }
+
+  constrained_intermediate_algorithms = {
+    "ec-p384" = {
+      key_type      = "ec"
+      key_bits      = 384
+      parameter_set = null
+    }
+    "ml-dsa-87" = {
+      key_type      = "ml-dsa"
+      key_bits      = null
+      parameter_set = "ml-dsa-87"
+    }
+  }
+
+  constrained_intermediate_issuers = merge([
+    for mount_key, mount_spec in local.constrained_intermediates : {
+      for algo_key, algo_spec in local.constrained_intermediate_algorithms : "${mount_key}/${algo_key}" => {
+        mount                 = mount_key
+        algorithm             = algo_key
+        common_name           = mount_spec.common_name
+        max_path_length       = mount_spec.max_path_length
+        permitted_dns_domains = mount_spec.permitted_dns_domains
+        excluded_dns_domains  = mount_spec.excluded_dns_domains
+        permitted_uri_domains = mount_spec.permitted_uri_domains
+        excluded_uri_domains  = mount_spec.excluded_uri_domains
+        permitted_ip_ranges   = mount_spec.permitted_ip_ranges
+        excluded_ip_ranges    = mount_spec.excluded_ip_ranges
+        key_type              = algo_spec.key_type
+        key_bits              = algo_spec.key_bits
+        parameter_set         = algo_spec.parameter_set
+      }
+    }
+  ]...)
 
   constrained_assignable = {
     for mount, spec in local.constrained_intermediates : "${mount}-${spec.assignable.suffix}-${spec.owner}" => {
@@ -98,23 +134,24 @@ resource "vault_mount" "pki_constrained" {
 }
 
 resource "vault_pki_secret_backend_intermediate_cert_request" "pki_constrained_csr" {
-  for_each = local.constrained_intermediates
+  for_each = local.constrained_intermediate_issuers
 
   provider = vault.bastion
-  backend  = vault_mount.pki_constrained[each.key].path
+  backend  = vault_mount.pki_constrained[each.value.mount].path
 
-  type        = "internal"
-  common_name = each.value.common_name
-  key_type    = "ec"
-  key_bits    = 256
+  type          = "internal"
+  common_name   = each.value.common_name
+  key_type      = each.value.key_type
+  key_bits      = each.value.key_bits
+  parameter_set = each.value.parameter_set
 
-  # The key type and the mount accessor name the key, since Vault rejects a new key under an existing key name.
-  key_name = "inter-ec256-${vault_mount.pki_constrained[each.key].accessor}"
+  # The algorithm and the mount accessor name the key, since Vault rejects a new key under an existing key name.
+  key_name = "${each.value.algorithm}-${vault_mount.pki_constrained[each.value.mount].accessor}"
 }
 
 # The intermediate outlives the one-year CA certificates which the mount signs, since Vault rejects a TTL past the issuer expiry.
 resource "vault_pki_secret_backend_root_sign_intermediate" "pki_constrained_signed" {
-  for_each = local.constrained_intermediates
+  for_each = local.constrained_intermediate_issuers
 
   provider = vault.bastion
   backend  = vault_mount.pki_root.path
@@ -133,25 +170,27 @@ resource "vault_pki_secret_backend_root_sign_intermediate" "pki_constrained_sign
   excluded_uri_domains  = each.value.excluded_uri_domains
   excluded_ip_ranges    = each.value.excluded_ip_ranges
 
-  issuer_ref = vault_pki_secret_backend_root_cert.root["ec-p384"].issuer_id
+  issuer_ref = vault_pki_secret_backend_issuer.root[each.value.algorithm].issuer_id
 }
 
 resource "vault_pki_secret_backend_intermediate_set_signed" "pki_constrained_set" {
-  for_each = local.constrained_intermediates
+  for_each = local.constrained_intermediate_issuers
 
   provider    = vault.bastion
-  backend     = vault_mount.pki_constrained[each.key].path
+  backend     = vault_mount.pki_constrained[each.value.mount].path
   certificate = vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed[each.key].certificate
 }
 
-resource "vault_pki_secret_backend_config_urls" "pki_constrained_urls" {
-  for_each = local.constrained_intermediates
+resource "vault_pki_secret_backend_issuer" "pki_constrained" {
+  for_each = local.constrained_intermediate_issuers
 
-  provider = vault.bastion
-  backend  = vault_mount.pki_constrained[each.key].path
+  provider    = vault.bastion
+  backend     = vault_mount.pki_constrained[each.value.mount].path
+  issuer_ref  = vault_pki_secret_backend_intermediate_set_signed.pki_constrained_set[each.key].imported_issuers[0]
+  issuer_name = each.value.algorithm
 
-  issuing_certificates    = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_constrained[each.key].path}/ca"]
-  crl_distribution_points = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_constrained[each.key].path}/crl"]
+  issuing_certificates    = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_constrained[each.value.mount].path}/issuer/${each.value.algorithm}/der"]
+  crl_distribution_points = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_constrained[each.value.mount].path}/issuer/${each.value.algorithm}/crl/der"]
 }
 
 resource "vault_pki_secret_backend_config_issuers" "pki_constrained_default" {
@@ -159,6 +198,6 @@ resource "vault_pki_secret_backend_config_issuers" "pki_constrained_default" {
 
   provider                      = vault.bastion
   backend                       = vault_mount.pki_constrained[each.key].path
-  default                       = vault_pki_secret_backend_intermediate_set_signed.pki_constrained_set[each.key].imported_issuers[0]
+  default                       = vault_pki_secret_backend_issuer.pki_constrained["${each.key}/${each.value.root_ca_id}"].issuer_id
   default_follows_latest_issuer = false
 }
