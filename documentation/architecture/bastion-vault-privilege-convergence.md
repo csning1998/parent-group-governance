@@ -64,7 +64,7 @@ Each row in the table below represents a threat scenario. The unmitigated conseq
 | T13 | An operator login credential is intercepted in transit                   | The interceptor replays the credential and logs in as the operator identity, and the legitimate workflow does not notice the second login                                                                                                                                                                                                            | Section 3 Item D.3                   |
 | T14 | The root token or ambient `VAULT_TOKEN` is sent with requests            | The root token reaches a Proxy or an operator shell, effectively elevating the operator identity to root                                                                                                                                                                                                                                             | Section 3 Item D.3, Section 6 Item C |
 | T15 | Operator tokens reside in shell environments                             | Every process of the shell inherits the token, and a token printed or captured from the environment stays valid within its TTL for other processes on the same host                                                                                                                                                                                  | Section 3 Item D.3                   |
-| T16 | A tenant manages leaf roles on an issuing mount without Name Constraints | The tenant creates a role without name restrictions on `pki-intermediate` and issues a certificate for `127.0.0.1` or `10.20.0.1` which chains to `pki-root`, without compromising any CA                                                                                                                                                            | Section 4 Item B.2                   |
+| T16 | A tenant manages leaf roles on an issuing mount without Name Constraints | The tenant creates a role without name restrictions on an issuing mount without Name Constraints and issues a certificate for `127.0.0.1` or `10.20.0.1` which chains to `pki-root`, without compromising any CA                                                                                                                                     | Section 4 Item B.2                   |
 | T17 | A CA signer policy is assignable on the GitLab CI JWT mount              | A CI job assigned `pki-intermediate-spire-signer-<code>` signs a SPIRE CA under `pki-intermediate-spire` and mints any SVID of the trust domain                                                                                                                                                                                                      | Section 3 Item E.3                   |
 
 ### Item D. Existing Constraints
@@ -175,7 +175,7 @@ The tenant registry lists platforms alone, and a repository of the group registe
 The foundation identity replaces the root token after the bootstrap for everyday `parent-group-governance` post-bootstrap operations.
 
 1. The policy `operator-parent-group-governance` manages every mount, auth method, audit device, and policy declared in `foundation-vault-bastion`.
-2. The policy grants `manage_mount` and `administer` capabilities across `foundation_mount_paths` (`pki-root`, `pki-intermediate`, `transit-unseal`, `registry`, and constrained intermediate mounts).
+2. The policy grants `manage_mount` and `administer` capabilities across `foundation_mount_paths` (`pki-root`, `transit-unseal`, `registry`, and constrained intermediate mounts).
 3. The policy grants `manage_mount` and `administer` capabilities across `foundation_auth_paths` (`approle`, `operator-cert`, `gitlab-saas-ci-job-jwt-provider`).
 4. The policy grants `manage_mount` across `foundation_audit_paths` (`file`, `stdout`) and permits Raft snapshot reads on `sys/storage/raft/snapshot`.
 5. The policy grants CRUD on KV paths under `parent-group-governance/` on the state backend mount.
@@ -291,17 +291,16 @@ This section addresses T7, T8, and T16 from Section 2 Item C. The trust bundles 
 
 #### Item B.1 PKI Hierarchy
 
-| Mount                               | Issuer      | Purpose                                                                                                                  | `max_path_length` |
-| ----------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------- |
-| `pki-root`                          | Self-signed | Infrastructure Root CA, `prevent_destroy`                                                                                | Unlimited         |
-| `pki-intermediate`                  | `pki-root`  | Bootstrap Issuing Intermediate without Name Constraints, on which tenants do not hold any grant                          | 0                 |
-| `pki-intermediate-spire`            | `pki-root`  | Target issuer of the SPIRE Parent CA, which in turn signs the SPIRE Child CA, with the migration in Section 10 Item B    | 2                 |
-| `pki-intermediate-vault-downstream` | `pki-root`  | Target issuer of the Downstream Vault CA, which in turn signs one mesh CA layer, with the migration in Section 10 Item B | 2                 |
-| `pki-leaf-platform`                 | `pki-root`  | Leaf issuer for tenant roles, such as the listener certificates of the SPIRE Parent and the Downstream Vault             | 0                 |
+| Mount                               | Issuer      | Purpose                                                                                                                                                     | `max_path_length` |
+| ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `pki-root`                          | Self-signed | Infrastructure Root CA, dual issuers (`ec-p384`, `ml-dsa-87`), `prevent_destroy`                                                                            | Unlimited         |
+| `pki-intermediate-spire`            | `pki-root`  | Target issuer of the SPIRE Parent CA, dual issuers (`ec-p384`, `ml-dsa-87`), which in turn signs the SPIRE Child CA, with migration in Section 10 Item B    | 2                 |
+| `pki-intermediate-vault-downstream` | `pki-root`  | Target issuer of the Downstream Vault CA, dual issuers (`ec-p384`, `ml-dsa-87`), which in turn signs one mesh CA layer, with migration in Section 10 Item B | 2                 |
+| `pki-leaf-platform`                 | `pki-root`  | Leaf issuer for tenant roles, dual issuers (`ec-p384`, `ml-dsa-87`), such as the listener certificates of the SPIRE Parent and the Downstream Vault         | 0                 |
 
 pgg embeds the Name Constraints of `pki-intermediate-spire`, `pki-intermediate-vault-downstream`, and `pki-leaf-platform` into the intermediate CA certificates through `root/sign-intermediate` on `pki-root`. Subordinate callers cannot omit or loosen these restrictions.
 
-Every intermediate mount holds an ECDSA P-256 key. `pki-root` holds an ECDSA P-384 key and expires on 2035-12-31. Section 7 Item H records the measurements and the trade-offs of the key algorithms.
+Every intermediate mount holds dual issuers: an ECDSA P-384 issuer and an ML-DSA-87 issuer. `pki-root` holds dual root CAs: an ECDSA P-384 root CA expiring on 2035-12-31 and an ML-DSA-87 root CA. Section 7 Item H records the measurements and the trade-offs of the key algorithms.
 
 #### Item B.2 Constraint Details
 
@@ -317,7 +316,7 @@ Every intermediate mount holds an ECDSA P-256 key. `pki-root` holds an ECDSA P-3
 4. `pki-leaf-platform` permits neither a loopback address nor the Bastion publish CIDR, and a tenant leaf role therefore cannot issue a Bastion listener certificate.
 5. The Downstream Vault listener certificate MUST NOT carry `localhost` or `127.0.0.1`.
 6. The raft peers of the Downstream Vault MUST join through names under `kubernetes_cluster_domain`.
-7. `pki-intermediate` carries a zero path length, which keeps the mount from signing a CA.
+7. Every intermediate mount below `pki-root` carries Name Constraints.
 
 #### Item B.3 SAN Requirements for Subordinate CAs
 
@@ -524,9 +523,9 @@ For risks associated with rejecting this choice, refer to T11.
 ### Item H. Key Algorithm of Intermediate CAs
 
 1. Constraint: A mount generates the key of an intermediate CA once per rotation. The key signs only the certificates which the mount issues. The Bastion Vault signs at the rotation rate of the SPIRE Parent CA, the Downstream Vault CA, and a few listener certificates. The Downstream Vault and SPIRE sign at the request rate of tenants.
-2. Decision: Every intermediate CA of the Bastion Vault holds an ECDSA P-256 key. The key name carries the key type, because Vault rejects a new key under an existing key name. The listener CA and the listener certificate which `./governance vault tls-generate` generates also hold ECDSA P-256 keys, stored as PKCS #8.
-3. Cost: A change of the key type replaces each intermediate CA and every certificate below the intermediate CA.
-4. Rejected alternative: Ed25519 provides the same security strength as P-256. Major browsers do not accept an Ed25519 signature in a TLS certificate chain, and the ecosystem support of Ed25519 is narrower than the support of P-256.
+2. Decision: Every intermediate mount of the Bastion Vault holds dual issuers: an ECDSA P-384 issuer and an ML-DSA-87 issuer. `pki-root` also holds dual root CAs: an ECDSA P-384 root CA and an ML-DSA-87 root CA. Intermediate CAs are symmetrically signed by their corresponding Root issuer (`ec-p384` signed by EC Root, `ml-dsa-87` signed by ML-DSA-87 Root). The default issuer across all intermediate mounts is `ec-p384` (`default_follows_latest_issuer = false`). The key name carries the algorithm and mount accessor, preventing collisions on rotation. The Transport Root CA which `./governance vault tls-generate` generates comprises an ECDSA P-384 CA and an ML-DSA-87 CA, and the ML-DSA-87 private key is stored as seed-only PKCS #8.
+3. Cost: Dual issuers double the number of issuers per mount (6 intermediate issuers across 3 mounts). Root signing requires matching algorithms between issuer and CSR.
+4. Rejected alternative: A single ECDSA hierarchy holds no quantum resistant chain. Major browsers do not accept an Ed25519 signature in a TLS certificate chain, and the ecosystem support of Ed25519 is narrower than the support of P-256.
 
 The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 on one core of the operator workstation on 2026-10-04.
 
@@ -539,10 +538,10 @@ The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 
 
 1. The intermediate key algorithm does not limit the tenant count of the Bastion Vault. The Bastion Vault signs a few certificates per rotation, and one core signs 403 RSA 4096 signatures per second.
 2. A TLS handshake verifies the chain. RSA verifies faster than ECDSA, and an RSA key in the chain therefore does not slow a handshake.
-3. A Vault role which generates the leaf key through `issue` spends the key generation cost on every request. RSA 4096 limits one core to about three leaf keys per second. The roles of the Downstream Vault MUST therefore use ECDSA P-256. A `sign` request carries a key from the client, and the request does not spend the key generation cost in Vault.
-4. NIST SP 800-57 Part 1 assigns 128 bits of security strength to both P-256 and RSA 3072. RSA 2048 provides 112 bits.
-5. NIST IR 8547 initial public draft Table 2 deprecates digital signatures of 112 bits after 2030. Table 2 disallows every quantum vulnerable digital signature, ECDSA and EdDSA included, after 2035.
-6. `pki-root` holds an ECDSA P-384 key at 192 bits of security strength, and `not_after` ends the root on 2035-12-31. The root therefore stays above the 112 bit level which item 5 deprecates, and the root expires before the disallowance date. The root replaced an RSA 2048 root with a TTL of 10 years, which would have served past both dates.
+3. A Vault role which generates the leaf key through `issue` spends the key generation cost on every request. RSA 4096 limits one core to about three leaf keys per second. Roles generating ECDSA or ML-DSA leaf certificates spend significantly lower overhead. A `sign` request carries a key from the client, and the request does not spend the key generation cost in Vault.
+4. NIST SP 800-57 Part 1 assigns 128 bits of security strength to P-256 and 192 bits to P-384. CNSA 1.0 requires P-384 for top-secret classification.
+5. NIST IR 8547 initial public draft Table 2 deprecates digital signatures of 112 bits after 2030 and disallows every quantum-vulnerable digital signature, ECDSA and EdDSA included, after 2035.
+6. `ec-p384` provides 192 bits of security strength and expires on 2035-12-31 before the disallowance date. `ml-dsa-87` is the FIPS 204 parameter set of Security Category 5, and an intermediate issues ML-DSA-87 chains once its `root_ca_id` switches to `ml-dsa-87`.
 7. The root drops `prevent_destroy` for the one apply which replaces the root, and the layer restores `prevent_destroy` after the apply.
 
 ## Section 8. Deployment Order
@@ -612,7 +611,7 @@ vault kv get -field=spire_trust_domains registry/platform/trust
 vault kv put registry/platform-foundation/bastion x=y
 vault write auth/approle/role/platform-foundation-scope-test token_policies=transit-unseal-platform-foundation-vault-downstream
 vault write auth/gitlab-saas-ci-job-jwt-provider/role/platform-foundation-scope-test token_policies=pki-intermediate-spire-signer-platform-foundation
-vault write pki-intermediate/roles/platform-foundation-scope-test allow_any_name=true
+vault write pki-intermediate-vault-downstream/roles/platform-foundation-scope-test allow_any_name=true
 vault kv metadata get secret/platform-foundation/terraform/approle
 ```
 
@@ -623,7 +622,7 @@ vault kv metadata get secret/platform-foundation/terraform/approle
 | Write to registry                                                        | 403 permission denied                                                     |
 | Assign transit unseal policy on shared AppRole mount                     | 403 permission denied, and triggers a `denied policy or role write` alert |
 | Assign `pki-intermediate-spire-signer-<code>` on the GitLab CI JWT mount | 403 permission denied, and triggers a `denied policy or role write` alert |
-| Create a tenant role on `pki-intermediate`                               | 403 permission denied                                                     |
+| Create a tenant role on `pki-intermediate-vault-downstream`              | 403 permission denied                                                     |
 | Legacy approle KV                                                        | `No value found`                                                          |
 
 ### Step D. Name Constraints Verification
@@ -707,12 +706,11 @@ Root token usage and rejected role writes MUST appear in the systemd journal.
 2. Audit logs lack a remote sink. A compromise of the host allows tampering with the audit logs.
 3. Alerts are written only to journald without push notification channels, and the user timer requires systemd linger when the operator is not logged in.
 4. The owned scope of `auth/<code>-*` covers JWT auth mounts created by the tenant.
-5. `pki-intermediate` lacks Name Constraints. The zero path length keeps the mount from signing a CA, and tenants do not hold any grant on the mount.
-6. `meta-gitlab-project` in mp still reads state from other pgg layers. mp therefore still requires a GitLab token with read privileges on the pgg project.
-7. `workstation-topology.yaml` declares the Bastion publish address, while `bastion_publish_cidr` of the platform trust facts declares the publish network. A precondition ties both, and the two values remain two declaration sources.
-8. The client private key of each operator identity resides below `~/.config/vault-proxy` with mode `0600`. A process of the operator account reads the key and logs in as the identity until the certificate expires.
-9. `vault/tls/ca-ml-dsa-87-key.pem` signs a client certificate for any operator identity, hence the key is equivalent to every operator identity. The file carries mode `0600`.
-10. Every classical signature of the hierarchy, ECDSA P-384 included, is quantum vulnerable. NIST IR 8547 initial public draft disallows quantum vulnerable signatures after 2035, and the root therefore MUST be replaced by a root of a quantum resistant algorithm before 2035-12-31.
+5. `meta-gitlab-project` in mp still reads state from other pgg layers. mp therefore still requires a GitLab token with read privileges on the pgg project.
+6. `workstation-topology.yaml` declares the Bastion publish address, while `bastion_publish_cidr` of the platform trust facts declares the publish network. A precondition ties both, and the two values remain two declaration sources.
+7. The client private key of each operator identity resides below `~/.config/vault-proxy` with mode `0600`. A process of the operator account reads the key and logs in as the identity until the certificate expires.
+8. `vault/tls/ca-ml-dsa-87-key.pem` signs a client certificate for any operator identity, hence the key is equivalent to every operator identity. The file carries mode `0600`.
+9. Classical digital signatures, ECDSA P-384 included, are quantum vulnerable. NIST IR 8547 initial public draft disallows quantum vulnerable signatures after 2035. `pki-root` and every constrained intermediate mount hold an ML-DSA-87 issuer, while the `root_ca_id` of every constrained intermediate remains `ec-p384`, hence every issued chain stays ECDSA until the switch.
 
 ### Item B. Next Steps
 
