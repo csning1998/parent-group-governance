@@ -160,5 +160,5 @@ resource "vault_pki_secret_backend_config_issuers" "pki_constrained_default" {
   provider                      = vault.bastion
   backend                       = vault_mount.pki_constrained[each.key].path
   default                       = vault_pki_secret_backend_intermediate_set_signed.pki_constrained_set[each.key].imported_issuers[0]
-  default_follows_latest_issuer = true
+  default_follows_latest_issuer = false
 }
