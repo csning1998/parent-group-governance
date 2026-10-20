@@ -35,11 +35,16 @@ resource "vault_kv_secret_v2" "registry_tenant_bastion" {
       approle_mount_path   = vault_auth_backend.approle.path
     })
     pki = jsonencode({
-      root_cert_pem = vault_pki_secret_backend_root_cert.root["ec-p384"].certificate
+      trust_anchors = {
+        for algo, cert in vault_pki_secret_backend_root_cert.root : algo => cert.certificate
+      }
       constrained_intermediates = {
         for name, mount in vault_mount.pki_constrained : name => {
-          mount_path        = mount.path
-          cert_pem          = vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed["${name}/ec-p384"].certificate
+          mount_path = mount.path
+          root_ca_id = local.constrained_intermediates[name].root_ca_id
+          issuer_certs = {
+            for algo_key, _ in local.constrained_intermediate_algorithms : algo_key => vault_pki_secret_backend_root_sign_intermediate.pki_constrained_signed["${name}/${algo_key}"].certificate
+          }
           assignable_policy = lookup(local.constrained_assignable_by_mount, name, null)
         } if local.constrained_intermediates[name].owner == each.key
       }
