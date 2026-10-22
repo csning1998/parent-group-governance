@@ -2,17 +2,17 @@
 # A tenant writes no policy, since Vault OSS bounds neither the content of a policy nor the policies of an auth role.
 locals {
   acl_capability = {
-    read         = ["read"]
-    issue        = ["create", "update"]
-    configure    = ["create", "read", "update"]
-    manage       = ["create", "read", "update", "delete", "list"]
-    manage_mount = ["create", "read", "update", "delete", "sudo"]
-    kv_data      = ["create", "read", "update", "delete"]
-    kv_metadata  = ["create", "read", "update", "list", "delete"]
-    kv_version   = ["update"]
-    kv_rotate    = ["create", "read", "update", "patch"]
-    administer   = ["create", "read", "update", "delete", "list", "sudo"]
-    list_sudo    = ["read", "sudo"]
+    read            = ["read"]
+    issue           = ["create", "update"]
+    configure_mount = ["create", "read", "update", "sudo"]
+    manage          = ["create", "read", "update", "delete", "list"]
+    manage_mount    = ["create", "read", "update", "delete", "sudo"]
+    kv_data         = ["create", "read", "update", "delete"]
+    kv_metadata     = ["create", "read", "update", "list", "delete"]
+    kv_version      = ["update"]
+    kv_rotate       = ["create", "read", "update", "patch"]
+    administer      = ["create", "read", "update", "delete", "list", "sudo"]
+    list_sudo       = ["read", "sudo"]
   }
 
   # Every grant outside the tenant prefix names its path and its reason.
@@ -44,10 +44,11 @@ locals {
         { path = "secret/delete/${code}/*", capability = "kv_version" },
         { path = "secret/destroy/${code}/*", capability = "kv_version" },
       ]
+      # Vault 2.2.0 requires sudo on sys/mounts/auth/<path>/tune, which the Vault provider reads and writes.
       auth_mount = [
         { path = "sys/auth", capability = "read" },
         { path = "sys/auth/${code}-*", capability = "manage_mount" },
-        { path = "sys/mounts/auth/${code}-*", capability = "configure" },
+        { path = "sys/mounts/auth/${code}-*", capability = "configure_mount" },
         { path = "auth/${code}-*", capability = "manage", assign_scope = "owned" },
       ]
       auth_role = [
