@@ -4,20 +4,20 @@
 locals {
   operator_proxy = local.workstation.operator_vault_proxy
 
-  operator_governance_identities = {
-    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "governance"
+  operator_credential_distributor_identities = {
+    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "credential-distributor"
   }
   operator_tenant_identities = {
     for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "tenant"
   }
-  operator_foundation_identities = {
-    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "foundation"
+  operator_administrator_identities = {
+    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "administrator"
   }
-  operator_rotation_identities = {
-    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "rotation"
+  operator_credential_rotator_identities = {
+    for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "credential-rotator"
   }
 
-  # The foundation identity manages every mount, auth method, and audit device which this layer declares.
+  # The administrator identity manages every mount, auth method, and audit device which this layer declares.
   foundation_mount_paths = concat(
     [vault_mount.pki_root.path, vault_mount.transit_unseal.path, vault_mount.registry.path],
     [for mount in vault_mount.pki_constrained : mount.path],
@@ -26,9 +26,9 @@ locals {
   foundation_audit_paths = [vault_audit.file.path, vault_audit.stdout.path]
 
   operator_policy_names = merge(
-    { for name, policy in vault_policy.operator_governance : name => [policy.name] },
-    { for name, policy in vault_policy.operator_foundation : name => [policy.name] },
-    { for name, policy in vault_policy.operator_rotation : name => [policy.name] },
+    { for name, policy in vault_policy.operator_credential_distributor : name => [policy.name] },
+    { for name, policy in vault_policy.operator_administrator : name => [policy.name] },
+    { for name, policy in vault_policy.operator_credential_rotator : name => [policy.name] },
     { for name in keys(local.operator_tenant_identities) : name => [vault_policy.tenant_terraform_operator[name].name, vault_policy.registry_reader[name].name] },
   )
 }
@@ -38,16 +38,16 @@ resource "terraform_data" "operator_identities_validation" {
 
   lifecycle {
     precondition {
-      condition     = alltrue([for identity in values(local.operator_proxy.identities) : contains(["governance", "tenant", "foundation", "rotation"], identity.access_tier)])
-      error_message = "Every identity of workstation-topology.yaml MUST declare access_tier governance, tenant, foundation, or rotation."
+      condition     = alltrue([for identity in values(local.operator_proxy.identities) : contains(["credential-distributor", "tenant", "administrator", "credential-rotator"], identity.access_tier)])
+      error_message = "Every identity of workstation-topology.yaml MUST declare access_tier credential-distributor, tenant, administrator, or credential-rotator."
     }
     precondition {
-      condition     = length(local.operator_foundation_identities) == 1 && length(local.operator_rotation_identities) == 1
-      error_message = "workstation-topology.yaml MUST declare exactly one foundation identity and exactly one rotation identity."
+      condition     = length(local.operator_administrator_identities) == 1 && length(local.operator_credential_rotator_identities) == 1
+      error_message = "workstation-topology.yaml MUST declare exactly one administrator identity and exactly one credential-rotator identity."
     }
     precondition {
-      condition     = length(local.operator_governance_identities) == 1
-      error_message = "workstation-topology.yaml MUST declare exactly one governance identity, since vault-proxy-env assumes a single governance Proxy mediates the state-backend token."
+      condition     = length(local.operator_credential_distributor_identities) == 1
+      error_message = "workstation-topology.yaml MUST declare exactly one credential-distributor identity, since vault-proxy-env assumes a single credential-distributor Proxy mediates the state-backend token."
     }
     precondition {
       condition     = alltrue([for name in keys(local.operator_tenant_identities) : contains(keys(local.tenants), name)])
@@ -63,10 +63,10 @@ resource "vault_auth_backend" "operator_cert" {
   description = "Client certificates of the operator Vault Proxies on the workstation, signed by the local CA."
 }
 
-# A governance identity reads the state backend token and the read paths of workstation-topology.yaml, and writes the
-# secrets below its write prefixes alone.
-resource "vault_policy" "operator_governance" {
-  for_each = local.operator_governance_identities
+# A credential-distributor identity reads the state backend token and the read paths of workstation-topology.yaml,
+# and writes the secrets below its write prefixes alone.
+resource "vault_policy" "operator_credential_distributor" {
+  for_each = local.operator_credential_distributor_identities
 
   provider = vault.bastion
   name     = "operator-${each.key}"
@@ -87,26 +87,27 @@ resource "vault_policy" "operator_governance" {
   })
 }
 
-# The foundation identity replaces the root token after the bootstrap. The identity writes policies and auth roles,
+# The administrator identity replaces the root token after the bootstrap. The identity writes policies and auth roles,
 # hence the identity equals root in capability, while the token expires, binds the loopback, and names the identity.
-resource "vault_policy" "operator_foundation" {
-  for_each = local.operator_foundation_identities
+resource "vault_policy" "operator_administrator" {
+  for_each = local.operator_administrator_identities
 
   provider = vault.bastion
   name     = "operator-${each.key}"
   policy = jsonencode({
     path = merge(
       {
-        "sys/mounts"                                                                  = { capabilities = local.acl_capability.read }
-        "sys/auth"                                                                    = { capabilities = local.acl_capability.read }
-        "sys/audit"                                                                   = { capabilities = local.acl_capability.list_sudo }
-        "sys/policies/acl"                                                            = { capabilities = local.acl_capability.manage }
-        "sys/policies/acl/*"                                                          = { capabilities = local.acl_capability.manage }
-        "sys/internal/ui/mounts/*"                                                    = { capabilities = local.acl_capability.read }
-        "${local.operator_proxy.state_backend.vault_kv_mount}/data/${each.key}/*"     = { capabilities = local.acl_capability.kv_data }
-        "${local.operator_proxy.state_backend.vault_kv_mount}/metadata/${each.key}/*" = { capabilities = local.acl_capability.kv_metadata }
-        "${local.operator_proxy.state_backend.vault_kv_mount}/delete/${each.key}/*"   = { capabilities = local.acl_capability.kv_version }
-        "${local.operator_proxy.state_backend.vault_kv_mount}/destroy/${each.key}/*"  = { capabilities = local.acl_capability.kv_version }
+        "sys/mounts"               = { capabilities = local.acl_capability.read }
+        "sys/auth"                 = { capabilities = local.acl_capability.read }
+        "sys/audit"                = { capabilities = local.acl_capability.list_sudo }
+        "sys/policies/acl"         = { capabilities = local.acl_capability.manage }
+        "sys/policies/acl/*"       = { capabilities = local.acl_capability.manage }
+        "sys/internal/ui/mounts/*" = { capabilities = local.acl_capability.read }
+
+        "${local.operator_proxy.state_backend.vault_kv_mount}/data/${local.governance_owner}/*"     = { capabilities = local.acl_capability.kv_data }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/metadata/${local.governance_owner}/*" = { capabilities = local.acl_capability.kv_metadata }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/delete/${local.governance_owner}/*"   = { capabilities = local.acl_capability.kv_version }
+        "${local.operator_proxy.state_backend.vault_kv_mount}/destroy/${local.governance_owner}/*"  = { capabilities = local.acl_capability.kv_version }
       },
       merge([for mount in local.foundation_mount_paths : {
         "sys/mounts/${mount}"      = { capabilities = local.acl_capability.manage_mount }
@@ -126,9 +127,9 @@ resource "vault_policy" "operator_foundation" {
   })
 }
 
-# The rotation identity reads and writes the Vault document of each service admin password alone.
-resource "vault_policy" "operator_rotation" {
-  for_each = local.operator_rotation_identities
+# The credential-rotator identity reads and writes the Vault document of each service admin password alone.
+resource "vault_policy" "operator_credential_rotator" {
+  for_each = local.operator_credential_rotator_identities
 
   provider = vault.bastion
   name     = "operator-${each.key}"

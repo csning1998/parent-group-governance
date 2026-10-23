@@ -2,7 +2,8 @@
 # Each key is an owner code, and executing_repository names the repository running the Terraform of that tenant.
 # The platform tenant code appears once, and every other declaration of this layer references it.
 locals {
-  platform_tenant = "platform-foundation"
+  governance_owner = "parent-group-governance"
+  platform_tenant  = "platform-foundation"
 
   tenants = {
     (local.platform_tenant) = { executing_repository = local.platform_tenant }
