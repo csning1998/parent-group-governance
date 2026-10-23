@@ -115,7 +115,7 @@ func (a *app) newVaultCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:     "revoke-root",
 		Aliases: []string{"revoke-root-token"},
-		Short:   "[Vault] Revoke the root token after bootstrap, once the foundation Vault Proxy logs in",
+		Short:   "[Vault] Revoke the root token after bootstrap, once the administrator Vault Proxy logs in",
 		RunE:    func(cmd *cobra.Command, args []string) error { return a.revokeRootToken(cmd.Context()) },
 	})
 	cmd.AddCommand(&cobra.Command{

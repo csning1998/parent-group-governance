@@ -703,12 +703,12 @@ func (a *app) newBastionVaultListeners() vaultops.Listeners {
 
 `GenerateTLS` 產生兩個自簽的憑證授權單位（CA）與兩張 listener 憑證，全部放在 `vault/tls/` 底下：
 
-| 檔案                                        | 金鑰      | 簽發者         | 用途                                                              |
-| ------------------------------------------- | --------- | -------------- | ----------------------------------------------------------------- |
-| `ca-ml-dsa-87.pem`、`ca-ml-dsa-87-key.pem`  | ML-DSA-87 | 自簽           | loopback listener、每個 Vault Proxy 的 client 與 listener 憑證    |
-| `ca-ec-p384.pem`、`ca-ec-p384-key.pem`      | EC P-384  | 自簽           | publish listener 與 metrics listener                              |
-| `loopback.pem`、`loopback-key.pem`          | ML-DSA-87 | `ca-ml-dsa-87` | loopback listener                                                 |
-| `publish.pem`、`publish-key.pem`            | EC P-384  | `ca-ec-p384`   | publish listener 與 metrics listener                              |
+| 檔案                                       | 金鑰      | 簽發者         | 用途                                                           |
+| ------------------------------------------ | --------- | -------------- | -------------------------------------------------------------- |
+| `ca-ml-dsa-87.pem`、`ca-ml-dsa-87-key.pem` | ML-DSA-87 | 自簽           | loopback listener、每個 Vault Proxy 的 client 與 listener 憑證 |
+| `ca-ec-p384.pem`、`ca-ec-p384-key.pem`     | EC P-384  | 自簽           | publish listener 與 metrics listener                           |
+| `loopback.pem`、`loopback-key.pem`         | ML-DSA-87 | `ca-ml-dsa-87` | loopback listener                                              |
+| `publish.pem`、`publish-key.pem`           | EC P-384  | `ca-ec-p384`   | publish listener 與 metrics listener                           |
 
 publish 這條鏈維持 EC P-384，因為 guest 上的 SPIRE 1.15.4 以 Go 1.26 編譯，無法驗證 ML-DSA 鏈，取捨見 `planning/platform-pki-mechanism.md` Section 3 Item A。第一個動作是把整個目錄清空：
 
@@ -944,7 +944,7 @@ root token 只服務 bootstrap。`Init` 以 `vaultclient.PersistTokenFile` 把�
 
 `GenerateRoot` 是緊急處置。`~/.vault-token` 已有 token 時回傳 `ErrRootTokenPresent`，已有進行中的嘗試時回傳 `ErrGenerateRootInProgress`。之後以 Vault 回傳的一次性密碼啟動嘗試，逐把送出 `unseal.key` 的金鑰直到完成，未達門檻時取消嘗試。Vault 以一次性密碼 XOR token 後做無填充的標準 base64 編碼，`decodeRootToken` 依相同規則還原。Vault 2 預設要求 generate-root 端點認證，`vault.hcl` 因此宣告 `enable_unauthenticated_access = ["generate-root"]`，讓緊急處置只依賴 unseal key 門檻，不依賴任何可能已損壞的身分。
 
-服務管理員密碼的輪替與調諧不使用 root token。`newRotationClient` 由 `topology.ProxyEndpoint` 找出權限類別 `rotation` 的唯一身分，以該身分的 client 憑證連到其 Vault Proxy，token 只送佔位值，由 Proxy 覆寫。該身分的 policy 由 `service_admin_passwords` 推導，只能讀寫宣告的路徑。
+服務管理員密碼的輪替與調諧不使用 root token。`newRotationClient` 由 `topology.ProxyEndpoint` 找出權限類別 `credential-rotator` 的唯一身分，以該身分的 client 憑證連到其 Vault Proxy，token 只送佔位值，由 Proxy 覆寫。該身分的 policy 由 `service_admin_passwords` 推導，只能讀寫宣告的路徑。
 
 ### Item G. 狀態探測與呈現
 
@@ -2064,12 +2064,12 @@ if becomePass == "" {
 
 CLI 透過 `a.topology.ResolveProxyEndpoint` 依角色解析端點設定：
 
-- `accessFoundation`（`topology.AccessRoleFoundation`）
-- `accessRotation`（`topology.AccessRoleRotation`）
+- `accessAdministrator`（`topology.AccessRoleAdministrator`）
+- `accessCredentialRotator`（`topology.AccessRoleCredentialRotator`）
 
 `newRotationClient` 建立的 Vault 客戶端走的是本機 Proxy 代理端點（由 Proxy 自行完成 mTLS 驗證與身分維護）。因此輪替與調諧操作完全不接觸、也不需要 root token。
 
-當 bootstrap 完成且 foundation Proxy 成功登入後，`revokeRootToken` 在操作者確認後，透過 `accessFoundation` 身分向 Vault 撤銷 `~/.vault-token` 的 root token，將特權及時收斂。
+當 bootstrap 完成且 administrator Proxy 成功登入後，`revokeRootToken` 在操作者確認後，透過 `accessAdministrator` 身分向 Vault 撤銷 `~/.vault-token` 的 root token，將特權及時收斂。
 
 #### 4. 憑證查詢與調諧輸入
 

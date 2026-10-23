@@ -1,4 +1,41 @@
 ---
+- name: "D0. Find existing identity directories"
+  ansible.builtin.find:
+    paths: "{{ _workstation_vault_proxy_base_dir }}"
+    file_type: directory
+    recurse: false
+  register: _workstation_vault_proxy_found_dirs
+
+- name: "D0. Identify orphaned identity names"
+  ansible.builtin.set_fact:
+    _workstation_vault_proxy_orphaned_identities: >-
+      {{
+        _workstation_vault_proxy_found_dirs.files
+        | map(attribute='path')
+        | map('basename')
+        | reject('in', operator_vault_proxy.identities.keys() | list)
+        | list
+      }}
+
+- name: "D0. Stop and disable orphaned Proxy services"
+  become: true
+  become_user: "{{ workstation_vault_proxy_operator_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ _workstation_vault_proxy_uid }}"
+  ansible.builtin.systemd_service:
+    name: "vault-proxy@{{ item }}.service"
+    scope: user
+    state: stopped
+    enabled: false
+  loop: "{{ _workstation_vault_proxy_orphaned_identities }}"
+  failed_when: false
+
+- name: "D0. Remove orphaned identity directories"
+  ansible.builtin.file:
+    path: "{{ _workstation_vault_proxy_base_dir }}/{{ item }}"
+    state: absent
+  loop: "{{ _workstation_vault_proxy_orphaned_identities }}"
+
 - name: "D1. Render the Proxy configuration of each identity"
   ansible.builtin.template:
     src: proxy.hcl.j2

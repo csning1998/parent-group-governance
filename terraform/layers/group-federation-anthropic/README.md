@@ -78,12 +78,12 @@ ant auth login --profile "${ANTHROPIC_PROFILE}" --scope "org:admin"
 
 ### Step B. Commit Credential to Bastion Vault and Export Backend Credentials
 
-The operator writes the credentials to Bastion Vault through the `parent-group-governance` identity with the HTTP state backend credentials exported.
+The operator writes the credentials to Bastion Vault through the `administrator` identity with the HTTP state backend credentials exported.
 
 1. The operator creates an Admin API key on the Admin API Keys page of the Console and writes the key once. The command reads the key from stdin, hence the key does not enter the shell history.
 
     ```bash
-    eval "$(vault-proxy-env parent-group-governance)"
+    eval "$(vault-proxy-env administrator)"
     printf 'Admin API key: ' && read -rs anthropic_key && echo
     printf '%s' "$anthropic_key" | vault kv put -mount=secret parent-group-governance/ai-provider-console/anthropic \
         anthropic_admin_api_key=-
@@ -92,7 +92,7 @@ The operator writes the credentials to Bastion Vault through the `parent-group-g
 2. The operator writes a fresh OAuth token immediately before each apply. The read and write method of `vault kv patch` keeps the Admin API key, since the identity policy grants no `patch` capability. The token reaches `vault` through stdin without its trailing newline, since other local users can read an argument through `/proc/<pid>/cmdline`, and `key=-` stores stdin verbatim.
 
     ```bash
-    eval "$(vault-proxy-env parent-group-governance)"
+    eval "$(vault-proxy-env administrator)"
     ant auth print-credentials --profile "${ANTHROPIC_PROFILE}" --access-token | tr -d '\n' | \
         vault kv patch -mount=secret -method=rw parent-group-governance/ai-provider-console/anthropic \
             anthropic_oauth_access_token=-

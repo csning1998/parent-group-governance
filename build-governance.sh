@@ -43,6 +43,9 @@ rm -f "${coverage_rc}.data"
 # The analysis MUST be skipped when SonarQube does not report UP, since the Bastion Vault and the token may not exist yet.
 if ! curl -fsS --max-time 5 "${sonar_host_url}/api/system/status" 2>/dev/null | grep -q '"status":"UP"'; then
     echo "skipped: SonarQube at ${sonar_host_url} is not UP" >&2
+# The analysis MUST be skipped on uncommitted sources, since a file without git blame counts entirely as new code.
+elif [[ -n "$(git status --porcelain -- tools terraform ansible)" ]]; then
+    echo "skipped: tools, terraform, or ansible holds uncommitted changes, commit them before the SonarQube analysis" >&2
 else
     # Token resolution MUST isolate proxy environment evaluation to prevent variable leaks and capture execution failures.
     if ! command -v vault-proxy-env >/dev/null; then

@@ -43,7 +43,7 @@ The bootstrap is one linear sequence. Each step depends on the steps above, and 
 4. Run `./governance vault enable-kv`.
 5. Run `eval "$(vault-proxy-env root)"` in the shell, then write the state backend token and the platform trust facts as described in Section 6 Item C Step 1 to Step 3.
 6. Apply `foundation-vault-bastion` with the root token in the same shell, as described in Section 6 Item C Step 4. The apply creates `operator-cert` and the cert roles, after which each background Vault Proxy logs in.
-7. Run `[Credentials] Rotate Service Admin Passwords` or `./governance credentials rotate sonarqube-admin-password`, which moves each service admin password into the Bastion Vault through the rotation Vault Proxy as described in Section 4 Item D Step 3.
+7. Run `[Credentials] Rotate Service Admin Passwords` or `./governance credentials rotate sonarqube-admin-password`, which moves each service admin password into the Bastion Vault through the credential-rotator Vault Proxy as described in Section 4 Item D Step 3.
 8. Run `direnv allow` once in `terraform/` and once in `terraform/layers/administration-gitlab-project`, as described in Section 6 Item A.
 9. Apply the downstream Terraform layers in the order of Section 6 Item C Step 5 onwards: `group-foundation`, `administration-gitlab-project`, `group-topology`, `group-gitlab-runner`, `group-sonarqube`, and `group-governance`.
 10. Restart the runner with `podman compose restart gitlab-runner` after `group-gitlab-runner` renders the runner configuration.
@@ -85,11 +85,11 @@ Anthropic authentication requires two credentials in Bastion Vault at `parent-gr
 - `anthropic_admin_api_key`: The Admin API key, written once by the operator.
 - `anthropic_oauth_access_token`: A short-lived OAuth token, refreshed immediately before each apply.
 
-The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to applying `group-federation-anthropic` or `administration-gitlab-project`, the operator MUST authenticate via the Anthropic CLI and write the fresh OAuth token with `vault kv patch` through the `parent-group-governance` identity. Provider client credential mappings are documented in `terraform/layers/group-federation-anthropic/README.md` Section 1 Item B.
+The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to applying `group-federation-anthropic` or `administration-gitlab-project`, the operator MUST authenticate via the Anthropic CLI and write the fresh OAuth token with `vault kv patch` through the `administrator` identity. Provider client credential mappings are documented in `terraform/layers/group-federation-anthropic/README.md` Section 1 Item B.
 
 ```bash
 ant auth login --profile <profile> --scope "org:admin"
-eval "$(vault-proxy-env parent-group-governance)"
+eval "$(vault-proxy-env administrator)"
 ant auth print-credentials --profile <profile> --access-token | tr -d '\n' | \
     vault kv patch -mount=secret -method=rw parent-group-governance/ai-provider-console/anthropic \
         anthropic_oauth_access_token=-
@@ -320,7 +320,7 @@ SonarQube holds the analysis token which `group-sonarqube` mints, and the token 
     Interactive operator login to `http://127.0.0.1:9000` requires the rotated administrator password. The password MUST NOT be printed to standard output. The operator MUST pipe the retrieved secret directly to the clipboard with `xclip`:
 
     ```bash
-    eval "$(vault-proxy-env parent-group-governance)"
+    eval "$(vault-proxy-env administrator)"
     vault kv get -mount=secret -field=sonarqube_admin_password parent-group-governance/sonarqube/admin-account | tr -d '\n' | xclip -selection clipboard
     ```
 
@@ -361,7 +361,7 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 | `[Vault] Initialize Bastion Vault`                                         | `vault init`                             | Verifies the factory default of each service, then initializes and unseals |
 | `[Vault] Enable KV-v2 Engine`                                              | `vault enable-kv`                        | Mounts the KV version 2 engine at the path `secret`                        |
 | `[Vault] Unseal Bastion Vault`                                             | `vault unseal`                           | Submits the recorded unseal key                                            |
-| `[Vault] Revoke Root Token After Bootstrap`                                | `vault revoke-root`                      | Revokes the root token once the foundation Vault Proxy logs in             |
+| `[Vault] Revoke Root Token After Bootstrap`                                | `vault revoke-root`                      | Revokes the root token once the administrator Vault Proxy logs in          |
 | `[Vault] Generate Root Token for Break-Glass`                              | `vault generate-root`                    | Produces a root token from the stored unseal keys into `~/.vault-token`    |
 | `[Credentials] Rotate Service Admin Passwords`                             | `credentials rotate <credential-key>`    | Generates a password, deploys the password, and commits the value to Vault |
 | `[Credentials] Reconcile Service Admin Passwords with the Live Service`    | `credentials reconcile <credential-key>` | Pushes the value held by Vault out to a drifted live service               |
@@ -394,26 +394,26 @@ Every rotation and every reconciliation first verifies the live credential throu
 
 Every layer stores state in the GitLab HTTP backend under the project hosting this repository, with one state name per layer. Before planning or applying any layer, the shell environment MUST be initialized with `eval "$(vault-proxy-env <role>)"`. The value of `<role>` MUST match the Vault Proxy Role column of Item B.
 
-- `terraform/.envrc` loads the identity `parent-group-governance` by default.
+- `terraform/.envrc` loads the identity `administrator` by default.
 - The first apply of `foundation-vault-bastion` MUST run with `eval "$(vault-proxy-env root)"` in the shell. The identity `root` routes `VAULT_ADDR` to `https://127.0.0.1:8200` and authenticates through `~/.vault-token`.
 - `terraform/layers/administration-gitlab-project/.envrc` loads `credential-distributor` via `eval "$(vault-proxy-env credential-distributor)"`.
-- All environments export `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD` from `secret/parent-group-governance/terraform/state-backend`. The identity `root` reads the secret with the root token, and every other identity reads the secret through the governance Proxy.
+- All environments export `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD` from `secret/parent-group-governance/terraform/state-backend`. The identity `root` reads the secret with the root token, and every other identity reads the secret through the credential-distributor Proxy.
 - The GitLab provider reads a token from the same secret through an ephemeral read, which keeps the token out of the persisted state of the consuming layer.
 
 ### Item B. Layer Inventory
 
-| Layer                           | Responsibility                                                                           | Vault Proxy Role (`<role>`)                           | Upstream State                                   |
-| ------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------ |
-| `foundation-vault-bastion`      | The PKI hierarchy, operator cert roles, tenant ACLs, the registry, transit unseal, audit | `root` (bootstrap), `parent-group-governance` (day-2) | None                                             |
-| `group-foundation`              | The top level group `Personal Lab` at path `csning1998-lab`                              | `parent-group-governance`                             | None                                             |
-| `administration-gitlab-project` | The GitLab project hosting this repository and every Terraform state                     | `credential-distributor`                              | `group-foundation`, `group-federation-anthropic` |
-| `group-topology`                | Every subgroup and nested subgroup beneath the top level group                           | `parent-group-governance`                             | `group-foundation`                               |
-| `group-governance`              | Group labels and the group CI variables sourced from Vault                               | `parent-group-governance`                             | `group-topology`                                 |
-| `group-gitlab-runner`           | The group runner registration and the rendered `gitlab-runner-configs/config.toml`       | `parent-group-governance`                             | `group-topology`                                 |
-| `group-sonarqube`               | The SonarQube global analysis token, written into Vault                                  | `parent-group-governance`                             | None                                             |
-| `group-federation-anthropic`    | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`          | `parent-group-governance`                             | None                                             |
-| `group-federation-gcp`          | The Google Cloud Workload Identity Federation pool and provider                          | `parent-group-governance`                             | None                                             |
-| `group-federation-azure`        | The Azure Entra ID application and federated identity credentials                        | `parent-group-governance`                             | None                                             |
+| Layer                           | Responsibility                                                                           | Vault Proxy Role (`<role>`)                 | Upstream State                                   |
+| ------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------ |
+| `foundation-vault-bastion`      | The PKI hierarchy, operator cert roles, tenant ACLs, the registry, transit unseal, audit | `root` (bootstrap), `administrator` (day-2) | None                                             |
+| `group-foundation`              | The top level group `Personal Lab` at path `csning1998-lab`                              | `administrator`                             | None                                             |
+| `administration-gitlab-project` | The GitLab project hosting this repository and every Terraform state                     | `credential-distributor`                    | `group-foundation`, `group-federation-anthropic` |
+| `group-topology`                | Every subgroup and nested subgroup beneath the top level group                           | `administrator`                             | `group-foundation`                               |
+| `group-governance`              | Group labels and the group CI variables sourced from Vault                               | `administrator`                             | `group-topology`                                 |
+| `group-gitlab-runner`           | The group runner registration and the rendered `gitlab-runner-configs/config.toml`       | `administrator`                             | `group-topology`                                 |
+| `group-sonarqube`               | The SonarQube global analysis token, written into Vault                                  | `administrator`                             | None                                             |
+| `group-federation-anthropic`    | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`          | `administrator`                             | None                                             |
+| `group-federation-gcp`          | The Google Cloud Workload Identity Federation pool and provider                          | `administrator`                             | None                                             |
+| `group-federation-azure`        | The Azure Entra ID application and federated identity credentials                        | `administrator`                             | None                                             |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing constrained intermediates. Each constrained intermediate issues subordinate certificates. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
@@ -452,7 +452,7 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 
 2. Copy `terraform/layers/foundation-vault-bastion/platform-trust.example.json` to `platform-trust.json` in the same directory, and replace every example value with the value of the deployment. Git ignores `platform-trust.json`.
 3. Write the facts: `vault kv put secret/parent-group-governance/platform-trust @terraform/layers/foundation-vault-bastion/platform-trust.json`.
-4. Apply `foundation-vault-bastion` with the root token. The apply creates the cert auth mount `operator-cert` and one cert role per identity of `workstation-topology.yaml`, after which every Vault Proxy logs in, and every later apply of the layer runs as `parent-group-governance`.
+4. Apply `foundation-vault-bastion` with the root token. The apply creates the cert auth mount `operator-cert` and one cert role per identity of `workstation-topology.yaml`, after which every Vault Proxy logs in, and every later apply of the layer runs as `administrator`.
 5. Apply `group-foundation`.
 6. Apply `group-federation-*` (for example `group-federation-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
 7. Apply `administration-gitlab-project`, whose `.envrc` loads the `credential-distributor` identity, and apply `group-topology` in either order.
@@ -492,23 +492,23 @@ The historical state versions of every layer still hold values which a later cha
 
 ### Item F. Governance Layers of the Group
 
-The governance layer of every repository in the group, such as `administration-gitlab-project`, MUST run through the governance Vault Proxy, which the `.envrc` of the layer loads with `eval "$(vault-proxy-env credential-distributor)"`. The tenant registry of the Bastion Vault lists platforms alone, hence a governance layer does not hold a tenant identity.
+The governance layer of every repository in the group, such as `administration-gitlab-project`, MUST run through the credential-distributor Vault Proxy, which the `.envrc` of the layer loads with `eval "$(vault-proxy-env credential-distributor)"`. The tenant registry of the Bastion Vault lists platforms alone, hence a governance layer does not hold a tenant identity.
 
 1. The role `workstation_vault_proxy` runs one Vault Proxy per identity of `operator_vault_proxy.identities` as a systemd user unit. Each Proxy listens on `127.0.0.1` at the port of the identity, requires a client certificate signed by the ML-DSA-87 CA of `vault/tls`, and overwrites the token of every request with the token of its own login.
 2. Each Proxy logs in through the cert auth mount `operator-cert` with a client certificate of CN `operator-<identity>`, and the cert role of the identity admits that CN alone. The private key of the client certificate is the long lived credential, and the file carries mode `0600` below `~/.config/vault-proxy/<identity>`.
 3. The role issues each certificate for 365 days, and every run of the role reissues a certificate within 30 days of expiry or after a CA change. The Proxy reloads the certificate without a restart. Each Proxy retries a failed login at most every `workstation_vault_proxy_login_retry_seconds` seconds, hence a Proxy which starts before the cert roles exist logs in within that bound after the apply of `foundation-vault-bastion`, and `vault-proxy-env` waits as long before reporting the failure.
-4. Each identity declares one `access_tier`. The tier `governance` reads `parent-group-governance/terraform/state-backend` and the paths of `allowed_read_secret_paths`, and writes nothing, since `allowed_write_secret_paths` lists no prefix. The tier `tenant` holds the tenant ACL of the platform and the registry reader. The tier `foundation` manages every object of `foundation-vault-bastion`. The tier `rotation` reads and writes the paths of `service_admin_passwords` alone, which `./governance` uses for the rotation and the reconciliation.
+4. Each identity declares one `access_tier`. The tier `credential-distributor` reads `parent-group-governance/terraform/state-backend` and the paths of `allowed_read_secret_paths`, and writes nothing, since `allowed_write_secret_paths` lists no prefix. The tier `tenant` holds the tenant ACL of the platform and the registry reader. The tier `administrator` manages every object of `foundation-vault-bastion`. The tier `credential-rotator` reads and writes the paths of `service_admin_passwords` alone, which `./governance` uses for the rotation and the reconciliation.
 5. The token of each login is bound to `127.0.0.1/32`, lives one hour, and renews to four hours at most. A caller holds the placeholder token `proxy-supplied` alone, hence a leaked shell environment exposes no Vault token.
 6. `vault-proxy-env <identity>` prints the environment of the identity, including `VAULT_CLIENT_CERT` and `VAULT_CLIENT_KEY`, which the Vault CLI, the Vault provider, and Ansible present to the mTLS listener. The identity `root` prints the loopback listener of the Bastion Vault and the token helper instead.
 7. The group keys stay group wide, since GitLab.com Free offers neither project nor group access tokens. A Premium subscription replaces the shared tokens with a project access token per repository, without a change of the Proxies or the governance layers.
-8. The Bastion Vault Web UI is served at `https://127.0.0.1:8200/ui`. Operator tokens issued by `operator-cert` declare `token_bound_cidrs = ["127.0.0.1/32"]`. Connections to the publish address `https://172.16.0.1:8200/ui` are rejected with `permission denied`. The foundation operator token is obtained via `vault login -address="https://127.0.0.1:8200" -method=cert -client-cert="$HOME/.config/vault-proxy/parent-group-governance/client.pem" -client-key="$HOME/.config/vault-proxy/parent-group-governance/client-key.pem" -ca-cert=vault/tls/ca-ml-dsa-87.pem -path=operator-cert name=operator-parent-group-governance` and submitted under Method `Token`.
+8. The Bastion Vault Web UI is served at `https://127.0.0.1:8200/ui`. Operator tokens issued by `operator-cert` declare `token_bound_cidrs = ["127.0.0.1/32"]`. Connections to the publish address `https://172.16.0.1:8200/ui` are rejected with `permission denied`. The administrator operator token is obtained via `vault login -address="https://127.0.0.1:8200" -method=cert -client-cert="$HOME/.config/vault-proxy/administrator/client.pem" -client-key="$HOME/.config/vault-proxy/administrator/client-key.pem" -ca-cert=vault/tls/ca-ml-dsa-87.pem -path=operator-cert name=operator-administrator` and submitted under Method `Token`.
 
 ### Item G. Root Token Lifecycle
 
 The root token serves the bootstrap alone: `vault init`, `vault enable-kv`, the first writes of Section 6 Item C Step 1 to Step 3, and the first apply of `foundation-vault-bastion`.
 
 1. `./governance vault init` writes the root token to `vault/keys/init-output.json` and the token helper file `~/.vault-token`. An unseal never restores the token, and `.env` never holds the token.
-2. `./governance vault revoke-root` revokes the token once the foundation identity logs in through its Proxy with its policy. The command refuses while that login is absent, since the revocation would leave the Bastion Vault without an administrator. The command removes `~/.vault-token` and empties `root_token` of `init-output.json`.
+2. `./governance vault revoke-root` revokes the token once the administrator identity logs in through its Proxy with its policy. The command refuses while that login is absent, since the revocation would leave the Bastion Vault without an administrator. The command removes `~/.vault-token` and empties `root_token` of `init-output.json`.
 3. `./governance vault generate-root` produces a root token for break-glass from the unseal keys of `vault/keys/unseal.key`, and writes the token to `~/.vault-token`. The break-glass work ends with `revoke-root` again.
 4. Vault 2 authenticates the generate-root endpoints by default. `vault.hcl` therefore declares `enable_unauthenticated_access = ["generate-root"]`, hence the break-glass needs the unseal key quorum alone and no identity which might be broken. An unauthenticated caller can cancel an attempt, and cannot finish one without the quorum.
 5. The interactive banner warns while `~/.vault-token` holds a token.

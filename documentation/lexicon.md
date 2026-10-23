@@ -32,9 +32,9 @@ The following rules of the organization naming standard apply directly in this r
 
 ## Section 3. Operator Identities and Access Roles
 
-1. An operator identity is a key of `operator_vault_proxy.identities` in `workstation-topology.yaml`: `governance`, `platform-foundation`, `parent-group-governance`, and `service-admin-passwords`.
-2. A certificate authentication role and its client certificate CN MUST carry the prefix `operator-` before the identity, as in `operator-parent-group-governance` and `operator-service-admin-passwords`.
-3. An identity MUST declare its `access_tier` as `governance`, `tenant`, `foundation`, or `rotation`. The Go domain type `AccessRole` MUST carry the tiers which the CLI resolves, `foundation` and `rotation`.
+1. An operator identity is a key of `operator_vault_proxy.identities` in `workstation-topology.yaml`: `credential-distributor`, `platform-foundation`, `administrator`, and `credential-rotator`.
+2. A certificate authentication role and its client certificate CN MUST carry the prefix `operator-` before the identity, as in `operator-administrator` and `operator-credential-rotator`.
+3. An identity MUST declare its `access_tier` as `credential-distributor`, `tenant`, `administrator`, or `credential-rotator`. The Go domain type `AccessRole` MUST carry the tiers which the CLI resolves, `administrator` and `credential-rotator`.
 4. A tenant identifier MUST be an owner code formatted as lowercase alphanumerics delimited by hyphens, matching the repository name of the tenant.
 5. A tenant operator AppRole in the Bastion Vault MUST follow the pattern `<owner_code>-terraform-operator`.
 
