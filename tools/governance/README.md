@@ -2064,12 +2064,12 @@ if becomePass == "" {
 
 CLI 透過 `a.topology.ResolveProxyEndpoint` 依角色解析端點設定：
 
-- `accessFoundation`（`topology.AccessRoleFoundation`）
-- `accessRotation`（`topology.AccessRoleRotation`）
+- `accessAdministrator`（`topology.AccessRoleAdministrator`）
+- `accessCredentialRotator`（`topology.AccessRoleCredentialRotator`）
 
 `newRotationClient` 建立的 Vault 客戶端走的是本機 Proxy 代理端點（由 Proxy 自行完成 mTLS 驗證與身分維護）。因此輪替與調諧操作完全不接觸、也不需要 root token。
 
-當 bootstrap 完成且 foundation Proxy 成功登入後，`revokeRootToken` 在操作者確認後，透過 `accessFoundation` 身分向 Vault 撤銷 `~/.vault-token` 的 root token，將特權及時收斂。
+當 bootstrap 完成且 administrator Proxy 成功登入後，`revokeRootToken` 在操作者確認後，透過 `accessAdministrator` 身分向 Vault 撤銷 `~/.vault-token` 的 root token，將特權及時收斂。
 
 #### 4. 憑證查詢與調諧輸入
 

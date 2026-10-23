@@ -17,7 +17,7 @@ This document records the privilege boundaries, roots of trust, fact publication
 - **Tenant**: A product repository granted a restricted set of privileges on the Bastion Vault and identified by an owner code, such as `platform-foundation`.
 - **Owner Code**: An identifier string for a tenant, formatted as lowercase alphanumerics connected by hyphens, such as `platform-foundation`, denoted as `<code>` below.
 - **root token**: The Bastion Vault root token, which `~/.vault-token` holds during the bootstrap and a break-glass alone.
-- **Operator identity**: An entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor`, `platform-foundation`, `parent-group-governance`, or `service-admin-passwords`, with `access_tier` `governance`, `tenant`, `foundation`, or `rotation`.
+- **Operator identity**: An entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor`, `platform-foundation`, `administrator`, or `credential-rotator`, with `access_tier` `credential-distributor`, `tenant`, `administrator`, or `credential-rotator`.
 - **Operator Vault Proxy**: The Vault Proxy of one operator identity on the operator workstation, which logs in through the cert auth mount `operator-cert` and overwrites the token of every request on its loopback mTLS listener.
 - **Operator cert role**: The cert auth role `operator-<identity>`, which admits the client certificate of CN `operator-<identity>` signed by the ML-DSA-87 CA of `vault/tls`.
 - **Assignment Scope**: The set of policy names which a tenant role on one class of auth mount is allowed to carry.
@@ -93,14 +93,14 @@ Each row in the table below represents a threat scenario. The unmitigated conseq
 
 Identities on the Bastion Vault are structured into five tiers. Each tier receives its policies from the tier above, and a tier cannot obtain a policy which the tier above has neither declared nor placed within an assignment scope.
 
-| Tier | Identity                 | Acquisition Method                                      | Privilege Scope                                                      | Location                                     |
-| ---- | ------------------------ | ------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------- |
-| L0   | root token               | Vault initialization                                    | Complete privileges on Bastion Vault                                 | `~/.vault-token` on the operator workstation |
-| L1   | pgg Terraform            | The foundation Proxy, root for the first apply alone    | Declaring mounts, policies, roles, PKI, and registry                 | The Terraform process of pgg                 |
-| L2   | tenant operator token    | Logged in by the Proxy of a tenant identity, cert auth  | Tenant ACL and `registry-reader-<code>`                              | Memory of the Vault Proxy of the identity    |
-| L2   | governance token         | Logged in by the governance Proxy, cert auth            | Reads on the group keys alone                                        | Memory of the governance Vault Proxy         |
-| L3   | Component operator token | Logged in to the Downstream Vault with a SPIRE JWT-SVID | None on the Bastion Vault, and policies on the Downstream Vault      | The Terraform process of mp                  |
-| L4   | Workload token           | Logged in via Kubernetes auth, AppRole, or JWT          | Single-purpose policies, such as transit unseal or sign-intermediate | Workload processes                           |
+| Tier | Identity                     | Acquisition Method                                       | Privilege Scope                                                      | Location                                         |
+| ---- | ---------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------ |
+| L0   | root token                   | Vault initialization                                     | Complete privileges on Bastion Vault                                 | `~/.vault-token` on the operator workstation     |
+| L1   | pgg Terraform                | The administrator Proxy, root for the first apply alone  | Declaring mounts, policies, roles, PKI, and registry                 | The Terraform process of pgg                     |
+| L2   | tenant operator token        | Logged in by the Proxy of a tenant identity, cert auth   | Tenant ACL and `registry-reader-<code>`                              | Memory of the Vault Proxy of the identity        |
+| L2   | credential-distributor token | Logged in by the credential-distributor Proxy, cert auth | Reads on the group keys alone                                        | Memory of the credential-distributor Vault Proxy |
+| L3   | Component operator token     | Logged in to the Downstream Vault with a SPIRE JWT-SVID  | None on the Bastion Vault, and policies on the Downstream Vault      | The Terraform process of mp                      |
+| L4   | Workload token               | Logged in via Kubernetes auth, AppRole, or JWT           | Single-purpose policies, such as transit unseal or sign-intermediate | Workload processes                               |
 
 ### Item B. L0 root token
 
@@ -125,15 +125,15 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 
 `foundation-vault-bastion/access-operator-proxy.tf` declares the cert auth mount `operator-cert` and one cert role per entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`.
 
-| Attribute              | Value                                                                                                                                       | Rationale                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                 | `operator-<identity>`                                                                                                                       | The role name matches the CN which the role admits.                                                                             |
-| `certificate`          | The ML-DSA-87 CA `vault/tls/ca-ml-dsa-87.pem`                                                                                               | The CA of the loopback listener signs the client certificates, hence the operator path trusts one CA alone.                     |
-| `allowed_common_names` | `operator-<identity>`                                                                                                                       | A certificate of one identity cannot log in through the role of another identity.                                               |
-| `token_policies`       | `operator-<identity>` for tier `governance`, `foundation`, or `rotation`, and the tenant ACL and `registry-reader-<code>` for tier `tenant` | A governance identity reads group keys alone. Foundation and rotation hold scoped administrative policies. Tenant holds Item E. |
-| `token_ttl`            | 3600s                                                                                                                                       | The Proxy renews the token within the TTL.                                                                                      |
-| `token_max_ttl`        | 14400s                                                                                                                                      | The Proxy logs in again after the maximum TTL.                                                                                  |
-| `token_bound_cidrs`    | `127.0.0.1/32`                                                                                                                              | The Proxies connect through the loopback listener, and a token presented from any other source fails.                           |
+| Attribute              | Value                                                                                                                                                                | Rationale                                                                                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                 | `operator-<identity>`                                                                                                                                                | The role name matches the CN which the role admits.                                                                                                      |
+| `certificate`          | The ML-DSA-87 CA `vault/tls/ca-ml-dsa-87.pem`                                                                                                                        | The CA of the loopback listener signs the client certificates, hence the operator path trusts one CA alone.                                              |
+| `allowed_common_names` | `operator-<identity>`                                                                                                                                                | A certificate of one identity cannot log in through the role of another identity.                                                                        |
+| `token_policies`       | `operator-<identity>` for tier `credential-distributor`, `administrator`, or `credential-rotator`, and the tenant ACL and `registry-reader-<code>` for tier `tenant` | A credential-distributor identity reads group keys alone. Administrator and credential-rotator hold scoped administrative policies. Tenant holds Item E. |
+| `token_ttl`            | 3600s                                                                                                                                                                | The Proxy renews the token within the TTL.                                                                                                               |
+| `token_max_ttl`        | 14400s                                                                                                                                                               | The Proxy logs in again after the maximum TTL.                                                                                                           |
+| `token_bound_cidrs`    | `127.0.0.1/32`                                                                                                                                                       | The Proxies connect through the loopback listener, and a token presented from any other source fails.                                                    |
 
 `terraform_data.operator_identities_validation` stops the plan when an identity declares an `access_tier` other than `governance`, `tenant`, `foundation`, or `rotation`, when there is not exactly one `governance` identity, exactly one `foundation` identity, and exactly one `rotation` identity, or when a tenant identity names no tenant of `access-tenant.tf`. Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
 
@@ -162,29 +162,29 @@ The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Work
 3. After the Downstream Vault is established, the remaining mp layers authenticate to the Downstream Vault with SPIRE JWT-SVIDs and do not operate on the Bastion Vault.
 4. Rebooting the Bastion Vault requires only `./governance vault unseal`. The Proxies log in again without an operator action.
 
-#### Item D.5 Governance Identity
+#### Item D.5 Credential Distributor Identity
 
-The tenant registry lists platforms alone, and a repository of the group registers no tenant for the governance layer. Every governance layer of the group runs through the governance Proxy.
+The tenant registry lists platforms alone, and a repository of the group registers no tenant for the governance layer. Every governance layer of the group runs through the credential-distributor Proxy.
 
 1. The policy `operator-credential-distributor` reads `parent-group-governance/terraform/state-backend` and the paths of `allowed_read_secret_paths` of the identity in `workstation-topology.yaml`, and writes nothing, since `allowed_write_secret_paths` lists no prefix.
 2. The paths of `allowed_read_secret_paths` are the group keys: the Anthropic admin key, the GitHub publication token, the SonarQube analysis token, and the two bot tokens below `gitlab-ci-with-code-reviewer/integration`.
 3. The Workload Identity Federation module writes no Vault path, hence `allowed_write_secret_paths` lists no prefix, and a governance layer holds no Vault write privilege.
 
-#### Item D.6 Foundation Identity
+#### Item D.6 Administrator Identity
 
-The foundation identity replaces the root token after the bootstrap for everyday `parent-group-governance` post-bootstrap operations.
+The administrator identity replaces the root token after the bootstrap for everyday `parent-group-governance` post-bootstrap operations.
 
-1. The policy `operator-parent-group-governance` manages every mount, auth method, audit device, and policy declared in `foundation-vault-bastion`.
+1. The policy `operator-administrator` manages every mount, auth method, audit device, and policy declared in `foundation-vault-bastion`.
 2. The policy grants `manage_mount` and `administer` capabilities across `foundation_mount_paths` (`pki-root`, `transit-unseal`, `registry`, and constrained intermediate mounts).
 3. The policy grants `manage_mount` and `administer` capabilities across `foundation_auth_paths` (`approle`, `operator-cert`, `gitlab-saas-ci-job-jwt-provider`).
 4. The policy grants `manage_mount` across `foundation_audit_paths` (`file`, `stdout`) and permits Raft snapshot reads on `sys/storage/raft/snapshot`.
 5. The policy grants CRUD on KV paths under `parent-group-governance/` on the state backend mount.
 
-#### Item D.7 Rotation Identity
+#### Item D.7 Credential Rotator Identity
 
-The rotation identity scopes privileges strictly to secret rotation routines executed by the governance CLI.
+The credential-rotator identity scopes privileges strictly to secret rotation routines executed by the governance CLI.
 
-1. The policy `operator-service-admin-passwords` grants `kv_rotate` on `${password.vault_kv_mount}/data/${password.vault_kv_path}` for every entry of `service_admin_passwords` in `workstation-topology.yaml`.
+1. The policy `operator-credential-rotator` grants `kv_rotate` on `${password.vault_kv_mount}/data/${password.vault_kv_path}` for every entry of `service_admin_passwords` in `workstation-topology.yaml`.
 2. The policy grants `read` on the corresponding metadata paths, and writes nothing outside the declared service admin passwords.
 
 ### Item E. L2 Tenant ACL
@@ -256,9 +256,9 @@ pgg declares five categories of policies. The tenant cannot rewrite these polici
 | `pki-intermediate-spire-signer-<code>` | Updates on `pki-intermediate-spire/root/sign-intermediate`                                                                                        | SPIRE Parent upstream authority        |
 | `pki-leaf-platform-issuer-<code>`      | Updates on `pki-leaf-platform/issue/<code>-*` and `pki-leaf-platform/sign/<code>-*`                                                               | cert-manager of the Downstream Vault   |
 | `gitlab-ci-code-reviewer-read`         | Reads on `secret/data/parent-group-governance/ci/*`                                                                                               | Automated code reviewer GitLab CI jobs |
-| `operator-credential-distributor`      | Reads on the state backend token and the group keys of the governance identity                                                                    | Governance cert role                   |
-| `operator-parent-group-governance`     | Management of every mount, auth method, audit device, and policy of `foundation-vault-bastion`, and the KV paths below `parent-group-governance/` | Foundation cert role                   |
-| `operator-service-admin-passwords`     | Reads and writes on the paths of `service_admin_passwords` alone                                                                                  | Rotation cert role                     |
+| `operator-credential-distributor`      | Reads on the state backend token and the group keys of the credential-distributor identity                                                        | Credential-distributor cert role       |
+| `operator-administrator`               | Management of every mount, auth method, audit device, and policy of `foundation-vault-bastion`, and the KV paths below `parent-group-governance/` | Administrator cert role                |
+| `operator-credential-rotator`          | Reads and writes on the paths of `service_admin_passwords` alone                                                                                  | Credential-rotator cert role           |
 
 ## Section 4. Root of Trust and Fact Publication
 
@@ -558,7 +558,7 @@ The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 
 5. Apply `foundation-vault-bastion` with `vault-proxy-env root`. The apply creates the operator cert roles, after which every Proxy logs in.
 6. Execute the `workstation_vault_audit` playbook, passing `workstation_vault_audit_home`.
 7. Run the mp layers which require the Bastion Vault through the platform-foundation Proxy, following the sequence documented in `architecture_platform-foundation_deployment-chain.md` in the planning repository.
-8. Revoke the root token with `./governance vault revoke-root` once the foundation Proxy logs in.
+8. Revoke the root token with `./governance vault revoke-root` once the administrator Proxy logs in.
 
 ### Step B. Routine Operations
 
