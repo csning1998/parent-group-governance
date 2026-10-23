@@ -111,7 +111,7 @@ Identities on the Bastion Vault are structured into five tiers. Each tier receiv
 
 ### Item C. L1 pgg Terraform
 
-1. The Terraform runs for pgg are executed on the operator workstation through the Vault Proxy of the identity `parent-group-governance`, access tier `foundation`, after the first apply of `foundation-vault-bastion` with the root token.
+1. The Terraform runs for pgg are executed on the operator workstation through the Vault Proxy of the identity `administrator`, access tier `administrator`, after the first apply of `foundation-vault-bastion` with the root token.
 2. `foundation-vault-bastion` declares auth mounts, PKI mounts, transit mounts, registry mounts, audit devices, the operator cert auth mount and cert roles, and policies held by pgg.
 3. `foundation-vault-bastion` also declares the tenant ACL and every policy which a tenant may assign.
 4. The state file of the layer is stored in GitLab project `86417732`, and the state MUST NOT contain any secrets, as verified in Section 9 Step E.
@@ -135,7 +135,7 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 | `token_max_ttl`        | 14400s                                                                                                                                                               | The Proxy logs in again after the maximum TTL.                                                                                                           |
 | `token_bound_cidrs`    | `127.0.0.1/32`                                                                                                                                                       | The Proxies connect through the loopback listener, and a token presented from any other source fails.                                                    |
 
-`terraform_data.operator_identities_validation` stops the plan when an identity declares an `access_tier` other than `governance`, `tenant`, `foundation`, or `rotation`, when there is not exactly one `governance` identity, exactly one `foundation` identity, and exactly one `rotation` identity, or when a tenant identity names no tenant of `access-tenant.tf`. Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
+`terraform_data.operator_identities_validation` stops the plan when an identity declares an `access_tier` other than `credential-distributor`, `tenant`, `administrator`, or `credential-rotator`, when there is not exactly one `credential-distributor` identity, exactly one `administrator` identity, and exactly one `credential-rotator` identity, or when a tenant identity names no tenant of `access-tenant.tf`. Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
 
 #### Item D.2 Workflow of the Operator Vault Proxy
 
