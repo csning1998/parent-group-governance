@@ -9,9 +9,9 @@ locals {
       root_ca_id            = "ec-p384"
       common_name           = "On-prem SPIRE Upstream Intermediate CA"
       max_path_length       = 2
-      permitted_dns_domains = local.spire_trust_domains
+      permitted_dns_domains = local.stage_domains
       excluded_dns_domains  = []
-      permitted_uri_domains = local.spire_trust_domains
+      permitted_uri_domains = local.stage_domains
       excluded_uri_domains  = []
       permitted_ip_ranges   = []
       excluded_ip_ranges    = ["0.0.0.0/0", "::/0"]
@@ -27,12 +27,12 @@ locals {
       root_ca_id            = "ec-p384"
       common_name           = "On-prem Downstream Vault Intermediate CA"
       max_path_length       = 2
-      permitted_dns_domains = concat([local.platform_trust.domain_suffix], local.platform_trust.downstream_extra_dns_domains)
+      permitted_dns_domains = concat([local.network_allocation.domain_suffix], local.cilium_hubble_extra_dns_domains)
       excluded_dns_domains  = []
       permitted_uri_domains = []
-      excluded_uri_domains  = [local.platform_trust.domain_suffix, ".${local.platform_trust.domain_suffix}"]
-      permitted_ip_ranges   = [local.platform_trust.network_cidr]
-      excluded_ip_ranges    = [local.platform_trust.bastion_publish_cidr]
+      excluded_uri_domains  = [local.network_allocation.domain_suffix, ".${local.network_allocation.domain_suffix}"]
+      permitted_ip_ranges   = [local.network_allocation.network_cidr]
+      excluded_ip_ranges    = [local.network_allocation.bastion_publish_cidr]
       assignable            = null
     }
     # The mount issues leaf certificates alone, since the zero path length forbids a subordinate CA.
@@ -41,12 +41,12 @@ locals {
       root_ca_id            = "ec-p384"
       common_name           = "On-prem Platform Leaf Intermediate CA"
       max_path_length       = 0
-      permitted_dns_domains = [local.platform_trust.domain_suffix, local.platform_trust.kubernetes_cluster_domain]
+      permitted_dns_domains = [local.network_allocation.domain_suffix, local.kubernetes_default_cluster_domain]
       excluded_dns_domains  = []
       permitted_uri_domains = []
-      excluded_uri_domains  = [local.platform_trust.domain_suffix, ".${local.platform_trust.domain_suffix}"]
-      permitted_ip_ranges   = [local.platform_trust.network_cidr]
-      excluded_ip_ranges    = [local.platform_trust.bastion_publish_cidr]
+      excluded_uri_domains  = [local.network_allocation.domain_suffix, ".${local.network_allocation.domain_suffix}"]
+      permitted_ip_ranges   = [local.network_allocation.network_cidr]
+      excluded_ip_ranges    = [local.network_allocation.bastion_publish_cidr]
       assignable = {
         suffix = "issuer"
         scopes = ["owned"]

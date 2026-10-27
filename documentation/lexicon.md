@@ -55,6 +55,7 @@ The following rules of the organization naming standard apply directly in this r
 2. Declarations governing authentication mounts, operator proxies, tenant AppRoles, and access control policies MUST reside in files prefixed with `access-`.
 3. Declarations establishing downstream platform dependencies, including fact publication and transit unseal keys, MUST reside in files prefixed with `service-`.
 4. Declarations establishing cryptographic roots of trust and issuing intermediates MUST reside in files prefixed with `trust-`.
+5. Declarations establishing platform network allocation facts and validations MUST reside in files prefixed with `network-`.
 
 ## Section 6. Go Architecture and Secret Zero Type Safety
 

@@ -1,6 +1,6 @@
 # Bastion Vault Privilege Convergence Architecture
 
-This document records the privilege boundaries, roots of trust, fact publications, audits, and the supporting `./governance` CLI on the Bastion Vault for `parent-group-governance` (referred to below as pgg). The intended audience includes engineers maintaining pgg and `platform-foundation` (referred to below as mp). Concrete names and addresses in this document are the example values of `platform-trust.example.json`, with `10.20.0.1` as the Bastion publish address.
+This document records the privilege boundaries, roots of trust, fact publications, audits, and the supporting `./governance` CLI on the Bastion Vault for `parent-group-governance` (referred to below as pgg). The intended audience includes engineers maintaining pgg and `platform-foundation` (referred to below as mp). Concrete names and addresses in this document are the example values of `network-allocation.example.json`, with `10.20.0.1` as the Bastion publish address.
 
 ## Section 1. Scope and Terminology
 
@@ -31,7 +31,7 @@ This document records the privilege boundaries, roots of trust, fact publication
 1. The issuance capabilities of `pki-root` and subordinate intermediate CAs. The trust bundles of both the workstation and platform nodes trust `pki-root`. An issuer able to produce a certificate chaining back to `pki-root` can impersonate any service which those trust bundles accept.
 2. The unseal capability of the Downstream Vault. Decrypt privileges on the transit key, combined with the encrypted root key in the Downstream Vault storage, yield the root key of the Downstream Vault, which is equivalent to acquiring all secrets inside the Downstream Vault.
 3. The authorization boundaries between tenants, as well as between tenants and pgg.
-4. Platform trust facts, specifically domains, SPIRE trust domains, and CIDR blocks. These values determine the permitted and excluded scopes of Name Constraints.
+4. Network allocation facts, specifically domains, stage domains, and CIDR blocks. These values determine the permitted and excluded scopes of Name Constraints.
 5. Audit logs. The audit log serves as the sole ground truth for forensic analysis.
 
 ### Item B. Threat Sources
@@ -54,7 +54,7 @@ Each row in the table below represents a threat scenario. The unmitigated conseq
 | T3  | Operator login credentials are issued by Terraform                       | Secret IDs or tokens enter state files, outputs, and KV storage, allowing any layer with read access to pgg state to log in as the operator identity indefinitely                                                                                                                                                                                    | Section 3 Item D                     |
 | T4  | mp reads pgg state via `terraform_remote_state`                          | The reader acquires the entire state snapshot. If the GitLab token used for reading carries the Maintainer role, the reader could tamper with pgg state to induce unintended actions during the next apply                                                                                                                                           | Section 4 Item C                     |
 | T5  | Published facts reside on paths writable by the tenant                   | The tenant tampers with the domains or CIDR blocks constraining itself, causing subsequent layers reading those facts to apply relaxed values                                                                                                                                                                                                        | Section 4 Item C.2                   |
-| T6  | Platform trust facts can be overridden by tfvars, `-var`, or `TF_VAR_`   | An uncommitted local value can relax Name Constraints without visibility in the code review process                                                                                                                                                                                                                                                  | Section 4 Item A                     |
+| T6  | Network allocation can be overridden by tfvars, `-var`, or `TF_VAR_`     | An uncommitted local value can relax Name Constraints without visibility in the code review process                                                                                                                                                                                                                                                  | Section 4 Item A                     |
 | T7  | Intermediate CAs lack Name Constraints                                   | A compromised SPIRE or Downstream Vault CA can issue certificates for `127.0.0.1` or `10.20.0.1` to spoof the Bastion Vault listener. An attacker controlling the network path, such as DNS or routing, receives the tokens of clients which trust the `pki-root` bundle. Clients pinned to `Vault Transport Root CA` reject the spoofed certificate | Section 4 Item B                     |
 | T8  | Downstream Vault CA is allowed to issue SPIFFE URIs                      | A compromised Downstream Vault can issue arbitrary SVIDs to impersonate any workload identity                                                                                                                                                                                                                                                        | Section 4 Item B.2                   |
 | T9  | The transit unseal policy is assignable on shared mounts                 | A leaked tenant token creates a GitLab CI JWT role with overly broad claims and attaches the transit unseal policy, allowing any CI job with network reachability to the Bastion Vault to decrypt the Downstream Vault root key once the CI job also obtains the encrypted root key from the Downstream Vault storage                                | Section 3 Item E.3                   |
@@ -105,7 +105,7 @@ Identities on the Bastion Vault are structured into five tiers. Each tier receiv
 ### Item B. L0 root token
 
 1. The root token MUST only be used on the operator workstation.
-2. The root token serves the bootstrap alone: `vault init`, `vault enable-kv`, the first writes of the state backend token and the platform trust facts, and the first apply of `foundation-vault-bastion` through `vault-proxy-env root`. `./governance vault revoke-root` then revokes the token, and `./governance vault generate-root` restores one from the unseal key quorum for a break-glass.
+2. The root token serves the bootstrap alone: `vault init`, `vault enable-kv`, the first writes of the state backend token and the network allocation facts, and the first apply of `foundation-vault-bastion` through `vault-proxy-env root`. `./governance vault revoke-root` then revokes the token, and `./governance vault generate-root` restores one from the unseal key quorum for a break-glass.
 3. The root token MUST NOT reach a Vault Proxy or the environment of a non-root identity. `vault-proxy-env` unsets `VAULT_TOKEN` for the identity `root`, and prints the placeholder token for every other identity.
 4. Every use of the root token triggers a `vault-audit-alert`, which serves as an expected operational signal.
 
@@ -262,28 +262,28 @@ pgg declares five categories of policies. The tenant cannot rewrite these polici
 
 ## Section 4. Root of Trust and Fact Publication
 
-### Item A. Platform Trust Facts
+### Item A. Network Allocation Facts
 
-This section addresses T6 from Section 2 Item C. Platform trust facts govern the permitted and excluded scopes of Name Constraints. Any unreviewed modification is equivalent to relaxing certificate trust boundaries.
+This section addresses T6 from Section 2 Item C. Network allocation facts govern the permitted and excluded scopes of Name Constraints. Any unreviewed modification is equivalent to relaxing certificate trust boundaries.
 
-`foundation-vault-bastion/trust-platform-facts.tf` reads the instance values from `secret/parent-group-governance/platform-trust` on the Bastion Vault. The instance values do not reside in the repository, since the repository is public and serves every deployment.
+`foundation-vault-bastion/network-allocation.tf` reads the instance values from `secret/parent-group-governance/network/allocation` on the Bastion Vault. The instance values do not reside in the repository, since the repository is public and serves every deployment.
 
-| Field                          | Source                | Example                                           | Purpose                                                                                                               |
-| ------------------------------ | --------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `domain_suffix`                | Bastion KV            | `example.internal`                                | Platform domain, permitted DNS scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`                  |
-| `stages`                       | Bastion KV, JSON list | `["production"]`                                  | Derivation of the SPIRE trust domain, formatted as `<stage>.<domain_suffix>`                                          |
-| `network_cidr`                 | Bastion KV            | `10.20.0.0/16`                                    | Platform network CIDR, permitted IP scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`             |
-| `bastion_publish_cidr`         | Bastion KV            | `10.20.0.0/24`                                    | Bastion publish network CIDR, excluded IP scope, and the source of the Bastion publish address in `token_bound_cidrs` |
-| `downstream_extra_dns_domains` | Code constant         | `hubble-grpc.cilium.io`, `hubble-relay.cilium.io` | Fixed suffixes under which Cilium names Hubble mTLS peers                                                             |
-| `kubernetes_cluster_domain`    | Code constant         | `cluster.local`                                   | Permitted DNS scope for `pki-leaf-platform`, which covers the Service names of in-cluster raft peers                  |
+| Field                  | Source                | Example            | Purpose                                                                                                               |
+| ---------------------- | --------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `domain_suffix`        | Bastion KV            | `example.internal` | Platform domain, permitted DNS scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`                  |
+| `stages`               | Bastion KV, JSON list | `["production"]`   | Derivation of the stage domains, formatted as `<stage>.<domain_suffix>`                                               |
+| `network_cidr`         | Bastion KV            | `10.20.0.0/16`     | Platform network CIDR, permitted IP scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`             |
+| `bastion_publish_cidr` | Bastion KV            | `10.20.0.0/24`     | Bastion publish network CIDR, excluded IP scope, and the source of the Bastion publish address in `token_bound_cidrs` |
 
-1. The instance values MUST reside in `secret/parent-group-governance/platform-trust`, which only the root token writes.
-2. `platform-trust.example.json` documents the fields with example values. Git ignores the instance file `platform-trust.json`.
-3. tfvars, `-var`, and `TF_VAR_` MUST NOT be able to override platform trust facts.
-4. `terraform_data.platform_trust_validation` carries a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, or when `bastion_publish_cidr` lies outside `network_cidr`.
+The locals `cilium_hubble_extra_dns_domains` (`hubble-grpc.cilium.io`, `hubble-relay.cilium.io`) and `kubernetes_default_cluster_domain` (`cluster.local`) are code constants outside the fact object. The Hubble names are the fixed suffixes under which Cilium names Hubble mTLS peers. `cluster.local` is the permitted DNS scope of `pki-leaf-platform` for the Service names of in-cluster raft peers.
+
+1. The instance values MUST reside in `secret/parent-group-governance/network/allocation`, which the root token writes during the bootstrap and the administrator identity writes afterwards.
+2. `network-allocation.example.json` documents the fields with example values. Git ignores the instance file `network-allocation.json`.
+3. tfvars, `-var`, and `TF_VAR_` MUST NOT be able to override network allocation facts.
+4. `terraform_data.network_allocation_validation` carries a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, when `network_cidr` is not a `/16`, or when `bastion_publish_cidr` differs from segment 0 of `network_cidr`. A further precondition stops the plan when `host_log_rendezvous_offset` equals the host number of `bastion_vault.publish_address`.
 5. A `check` block is not used for the validation, because a failed `check` assertion only produces a warning (refer to the [Terraform check block documentation](https://developer.hashicorp.com/terraform/language/block/check)).
 6. KV v2 keeps every version of the path. A change of the instance values replaces the constrained intermediate certificates in the next plan, which exposes the change during review of the plan.
-7. `bastion_vault.publish_address` of `workstation-topology.yaml` declares the Bastion publish address, and a precondition of `terraform_data.platform_trust_validation` stops the plan when the address lies outside `bastion_publish_cidr`.
+7. `bastion_vault.publish_address` of `workstation-topology.yaml` declares the Bastion publish address, and a precondition of `terraform_data.network_allocation_validation` stops the plan when the address lies outside `bastion_publish_cidr`.
 
 ### Item B. Intermediate CAs Restricted by Name Constraints
 
@@ -304,18 +304,18 @@ Every intermediate mount holds dual issuers: an ECDSA P-384 issuer and an ML-DSA
 
 #### Item B.2 Constraint Details
 
-| Mount                               | Permitted                                                              | Excluded                                                              |
-| ----------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `pki-intermediate-spire`            | DNS and URI: SPIRE trust domain                                        | All IPv4 and IPv6                                                     |
-| `pki-intermediate-vault-downstream` | DNS `domain_suffix` and Hubble names, IP `network_cidr`                | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
-| `pki-leaf-platform`                 | DNS `domain_suffix` and `kubernetes_cluster_domain`, IP `network_cidr` | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
+| Mount                               | Permitted                                                                      | Excluded                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `pki-intermediate-spire`            | DNS and URI: SPIRE trust domain                                                | All IPv4 and IPv6                                                     |
+| `pki-intermediate-vault-downstream` | DNS `domain_suffix` and Hubble names, IP `network_cidr`                        | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
+| `pki-leaf-platform`                 | DNS `domain_suffix` and `kubernetes_default_cluster_domain`, IP `network_cidr` | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
 
 1. `pki-intermediate-spire` excludes all IP addresses, preventing certificates issued by SPIRE from spoofing Bastion addresses `127.0.0.1` or `10.20.0.1`.
 2. `pki-intermediate-vault-downstream` excludes URIs under the platform domain and every subdomain of the platform domain, a range which contains the SPIFFE trust domain, preventing the Downstream Vault from issuing SVIDs.
 3. `pki-intermediate-vault-downstream` excludes the Bastion publish CIDR, ensuring that a compromised Downstream Vault cannot issue listener certificates for the Bastion Vault.
 4. `pki-leaf-platform` permits neither a loopback address nor the Bastion publish CIDR, and a tenant leaf role therefore cannot issue a Bastion listener certificate.
 5. The Downstream Vault listener certificate MUST NOT carry `localhost` or `127.0.0.1`.
-6. The raft peers of the Downstream Vault MUST join through names under `kubernetes_cluster_domain`.
+6. The raft peers of the Downstream Vault MUST join through names under `kubernetes_default_cluster_domain`.
 7. Every intermediate mount below `pki-root` carries Name Constraints.
 
 #### Item B.3 SAN Requirements for Subordinate CAs
@@ -331,15 +331,17 @@ This section addresses T4 and T5 from Section 2 Item C. The choice of publicatio
 
 #### Item C.1 Publication Contents
 
-`foundation-vault-bastion/service-registry.tf` declares the KV v2 mount `registry` along with two types of publications. Each field of `registry/<code>/bastion` holds one JSON object. In `registry/platform/trust`, `spire_trust_domains` holds a JSON array, and the remaining fields hold plain strings.
+`foundation-vault-bastion/service-registry.tf` declares the KV v2 mount `registry` along with two types of publications. Each field of `registry/<code>/bastion` holds one JSON object. In `registry/platform/network/allocation`, `stage_domains` and `host_log_rendezvous_server_names` hold JSON arrays, and the remaining fields hold plain strings.
 
-| Path                      | Field                                                                          | Contents                                                                                                                  |
-| ------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `registry/platform/trust` | `domain_suffix`, `spire_trust_domains`, `network_cidr`, `bastion_publish_cidr` | Platform trust facts from Item A                                                                                          |
-| `registry/<code>/bastion` | `vault`                                                                        | Bastion endpoint and listener CA PEM                                                                                      |
-| `registry/<code>/bastion` | `pki`                                                                          | Root CA PEM, and the mount path, the certificate, and the assignable policy of each constrained mount owned by the tenant |
-| `registry/<code>/bastion` | `transit_unseal`                                                               | Transit mount path, and the key and policy names owned by the tenant                                                      |
-| `registry/<code>/bastion` | `assignable_policies`                                                          | Assignable policy names of each assignment scope from Section 3 Item E.3                                                  |
+| Path                                   | Field                                                                                         | Contents                                                                                                                                                 |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `registry/platform/network/allocation` | `domain_suffix`, `stage_domains`, `network_cidr`, `bastion_publish_cidr`                      | Network allocation facts from Item A                                                                                                                     |
+| `registry/platform/network/allocation` | `host_telemetry_scrape_cidr`, `host_telemetry_scrape_address`                                 | Segment 249 for the host telemetry scrape, and the host address on the segment                                                                           |
+| `registry/platform/network/allocation` | `host_log_rendezvous_cidr`, `host_log_rendezvous_address`, `host_log_rendezvous_server_names` | Segment 250 for the host log rendezvous, the receiver address at `host_log_rendezvous_offset`, and the server names `host-log-rendezvous.<stage domain>` |
+| `registry/<code>/bastion`              | `vault`                                                                                       | Bastion endpoint and listener CA PEM                                                                                                                     |
+| `registry/<code>/bastion`              | `pki`                                                                                         | Root CA PEM, and the mount path, the certificate, and the assignable policy of each constrained mount owned by the tenant                                |
+| `registry/<code>/bastion`              | `transit_unseal`                                                                              | Transit mount path, and the key and policy names owned by the tenant                                                                                     |
+| `registry/<code>/bastion`              | `assignable_policies`                                                                         | Assignable policy names of each assignment scope from Section 3 Item E.3                                                                                 |
 
 #### Item C.2 Access Rules
 
@@ -483,12 +485,12 @@ For risks associated with rejecting this choice, refer to T4 and T5.
 
 Terraform documentation recommends publishing external data outside state files to maintain decoupled access controls (refer to [The terraform_remote_state Data Source](https://developer.hashicorp.com/terraform/language/state/remote-state-data)).
 
-### Item D. Platform Trust Facts Declaration Mechanism
+### Item D. Network Allocation Facts Declaration Mechanism
 
 For risks associated with rejecting this choice, refer to T6.
 
 1. Constraint: The repository is public and serves every deployment. Git ignores `*.tfvars`, and a `variable` yields to `-var` and `TF_VAR_`.
-2. Decision: The instance values reside in the Bastion KV, which only the root token writes and which keeps every version.
+2. Decision: The instance values reside in the Bastion KV, which the root token writes during the bootstrap, which the administrator identity writes afterwards, and which keeps every version.
 3. Cost: A greenfield deployment writes the KV entry once before the first apply. A change of the instance values is reviewed through the KV version history and the plan diff instead of a merge request.
 
 | Alternative                     | Rationale for Rejection                                                             |
@@ -554,7 +556,7 @@ The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 
 1. Run the first menu item `[Host] Apply All Workstation Prerequisites` of `./governance`, which applies SELinux, the libvirt prerequisites, the local CA when absent, and the Vault Proxies.
 2. Start the Bastion Vault container from `compose.yml`, which declares the audit volume, together with every service of `service_admin_passwords`.
 3. Initialize the Bastion Vault, unseal the Bastion Vault, and enable the KV v2 engine through `./governance`.
-4. Write the instance values with `vault kv put secret/parent-group-governance/platform-trust @platform-trust.json`, using `platform-trust.example.json` as the template.
+4. Write the instance values with `vault kv put secret/parent-group-governance/network/allocation @network-allocation.json`, using `network-allocation.example.json` as the template.
 5. Apply `foundation-vault-bastion` with `vault-proxy-env root`. The apply creates the operator cert roles, after which every Proxy logs in.
 6. Execute the `workstation_vault_audit` playbook, passing `workstation_vault_audit_home`.
 7. Run the mp layers which require the Bastion Vault through the platform-foundation Proxy, following the sequence documented in `architecture_platform-foundation_deployment-chain.md` in the planning repository.
@@ -610,7 +612,7 @@ Execute the following commands in the same shell as Step B:
 
 ```bash
 vault kv get -format=json registry/platform-foundation/bastion | jq '.data.data | keys'
-vault kv get -field=spire_trust_domains registry/platform/trust
+vault kv get -field=stage_domains registry/platform/network/allocation
 vault kv put registry/platform-foundation/bastion x=y
 vault write auth/approle/role/platform-foundation-scope-test token_policies=transit-unseal-platform-foundation-vault-downstream
 vault write auth/gitlab-saas-ci-job-jwt-provider/role/platform-foundation-scope-test token_policies=pki-intermediate-spire-signer-platform-foundation
@@ -621,7 +623,7 @@ vault kv metadata get secret/platform-foundation/terraform/approle
 | Command                                                                  | Expected Result                                                           |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | Read `registry/platform-foundation/bastion`                              | Fields are `assignable_policies`, `pki`, `transit_unseal`, `vault`        |
-| Read `registry/platform/trust`                                           | `["production.example.internal"]`                                         |
+| Read `registry/platform/network/allocation`                              | `["production.example.internal"]`                                         |
 | Write to registry                                                        | 403 permission denied                                                     |
 | Assign transit unseal policy on shared AppRole mount                     | 403 permission denied, and triggers a `denied policy or role write` alert |
 | Assign `pki-intermediate-spire-signer-<code>` on the GitLab CI JWT mount | 403 permission denied, and triggers a `denied policy or role write` alert |
@@ -690,7 +692,7 @@ for res in state["resources"]:
 '
 ```
 
-In the expected output, only `data_json` of `registry_platform_trust` and `registry_tenant_bastion` contains data, representing the public facts detailed in Section 4 Item C. The data source `vault_generic_secret.platform_trust` also contains data, representing the platform trust facts of Section 4 Item A. All other sensitive attributes MUST be `null`.
+In the expected output, only `data_json` of `registry_platform_network_allocation` and `registry_tenant_bastion` contains data, representing the public facts detailed in Section 4 Item C. The data source `vault_generic_secret.network_allocation` also contains data, representing the network allocation facts of Section 4 Item A. All other sensitive attributes MUST be `null`.
 
 ### Step F. Alerts
 
@@ -710,7 +712,7 @@ Root token usage and rejected role writes MUST appear in the systemd journal.
 3. Alerts are written only to journald without push notification channels, and the user timer requires systemd linger when the operator is not logged in.
 4. The owned scope of `auth/<code>-*` covers JWT auth mounts created by the tenant.
 5. `meta-gitlab-project` in mp still reads state from other pgg layers. mp therefore still requires a GitLab token with read privileges on the pgg project.
-6. `workstation-topology.yaml` declares the Bastion publish address, while `bastion_publish_cidr` of the platform trust facts declares the publish network. A precondition ties both, and the two values remain two declaration sources.
+6. `workstation-topology.yaml` declares the Bastion publish address, while `bastion_publish_cidr` of the network allocation facts declares the publish network. A precondition ties both, and the two values remain two declaration sources.
 7. The client private key of each operator identity resides below `~/.config/vault-proxy` with mode `0600`. A process of the operator account reads the key and logs in as the identity until the certificate expires.
 8. `vault/tls/ca-ml-dsa-87-key.pem` signs a client certificate for any operator identity, hence the key is equivalent to every operator identity. The file carries mode `0600`.
 9. Classical digital signatures, ECDSA P-384 included, are quantum vulnerable. NIST IR 8547 initial public draft disallows quantum vulnerable signatures after 2035. `pki-root` and every constrained intermediate mount hold an ML-DSA-87 issuer, while the `root_ca_id` of every constrained intermediate remains `ec-p384`, hence every issued chain stays ECDSA until the switch.
@@ -722,5 +724,5 @@ Root token usage and rejected role writes MUST appear in the systemd journal.
 3. Integrate the secret scanning routine from Section 9 Step E into pgg CI pipelines.
 4. Conduct verification testing for path length limit rejections when exceeding allowed CA tiers.
 5. Consolidate the publish address of `workstation-topology.yaml` and `bastion_publish_cidr` into one declaration source.
-6. Add an audit rule which alerts on writes to `secret/parent-group-governance/platform-trust`.
+6. Add an audit rule which alerts on writes to `secret/parent-group-governance/network/allocation`.
 7. Move the remaining instance values of pgg, such as the backend addresses, the listener addresses, and the Ansible defaults, out of the repository.

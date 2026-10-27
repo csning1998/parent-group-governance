@@ -37,7 +37,7 @@ terraform/layers/foundation-vault-bastion/tls
 # Environment
 .env
 .env*.local
-platform-trust.json
+network-allocation.json
 stdout.txt
 
 # Temporary
