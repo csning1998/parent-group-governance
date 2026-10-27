@@ -423,7 +423,12 @@ The layer `group-sonarqube` writes the path `sonarqube/ci-analysis-bot`. The `./
 
 ### Item C. Apply Order
 
-The order follows the upstream state column of Item B. The Bastion Vault instance MUST be unsealed with the KV version 2 engine mounted before the first layer is applied. The platform trust facts MUST reside at `secret/parent-group-governance/platform-trust` before `foundation-vault-bastion` is planned. Step 1 to Step 4 run with the root token, which `eval "$(vault-proxy-env root)"` selects, and every later step runs in the layer directory with the `.envrc` of Item A.
+The order follows the upstream state column of Item B.
+
+- The Bastion Vault instance MUST be unsealed with the KV version 2 engine mounted before the first layer is applied.
+- The network allocation facts MUST reside at `secret/parent-group-governance/network/allocation` before `foundation-vault-bastion` is planned.
+
+Step 1 to Step 4 run with the root token, which `eval "$(vault-proxy-env root)"` selects, and every later step runs in the layer directory with the `.envrc` of Item A.
 
 1. Write the shared GitLab token into the field `token` as listed below. Any path modification MUST be reflected across consuming Terraform layers. The function `put_secret` prompts for each value without echo and writes the value to Vault through stdin without a trailing newline, hence no value enters the shell history or the argument list of `vault`, which other local users can read through `/proc/<pid>/cmdline`.
 
@@ -437,7 +442,7 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
     }
 
     vault kv put \
-        secret/parent-group-governance/platform-trust \
+        secret/parent-group-governance/network/allocation \
         @terraform/layers/foundation-vault-bastion/network-allocation.json
 
     put_secret parent-group-governance/terraform/state-backend token
@@ -450,8 +455,8 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 
     The operator writes `anthropic_oauth_access_token` immediately before Step 6 as described in Section 2 Item C, since the OAuth token expires within minutes.
 
-2. Copy `terraform/layers/foundation-vault-bastion/platform-trust.example.json` to `network-allocation.json` in the same directory, and replace every example value with the value of the deployment. Git ignores `network-allocation.json`.
-3. Write the facts: `vault kv put secret/parent-group-governance/platform-trust @terraform/layers/foundation-vault-bastion/network-allocation.json`.
+2. Copy `terraform/layers/foundation-vault-bastion/network-allocation.example.json` to `network-allocation.json` in the same directory, and replace every example value with the value of the deployment. Git ignores `network-allocation.json`.
+3. Write the facts: `vault kv put secret/parent-group-governance/network/allocation @terraform/layers/foundation-vault-bastion/network-allocation.json`.
 4. Apply `foundation-vault-bastion` with the root token. The apply creates the cert auth mount `operator-cert` and one cert role per identity of `workstation-topology.yaml`, after which every Vault Proxy logs in, and every later apply of the layer runs as `administrator`.
 5. Apply `group-foundation`.
 6. Apply `group-federation-*` (for example `group-federation-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
