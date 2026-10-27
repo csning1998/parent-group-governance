@@ -278,7 +278,7 @@ This section addresses T6 from Section 2 Item C. Platform trust facts govern the
 | `kubernetes_cluster_domain`    | Code constant         | `cluster.local`                                   | Permitted DNS scope for `pki-leaf-platform`, which covers the Service names of in-cluster raft peers                  |
 
 1. The instance values MUST reside in `secret/parent-group-governance/platform-trust`, which only the root token writes.
-2. `platform-trust.example.json` documents the fields with example values. Git ignores the instance file `platform-trust.json`.
+2. `platform-trust.example.json` documents the fields with example values. Git ignores the instance file `network-allocation.json`.
 3. tfvars, `-var`, and `TF_VAR_` MUST NOT be able to override platform trust facts.
 4. `terraform_data.platform_trust_validation` carries a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, or when `bastion_publish_cidr` lies outside `network_cidr`.
 5. A `check` block is not used for the validation, because a failed `check` assertion only produces a warning (refer to the [Terraform check block documentation](https://developer.hashicorp.com/terraform/language/block/check)).
@@ -554,7 +554,7 @@ The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 
 1. Run the first menu item `[Host] Apply All Workstation Prerequisites` of `./governance`, which applies SELinux, the libvirt prerequisites, the local CA when absent, and the Vault Proxies.
 2. Start the Bastion Vault container from `compose.yml`, which declares the audit volume, together with every service of `service_admin_passwords`.
 3. Initialize the Bastion Vault, unseal the Bastion Vault, and enable the KV v2 engine through `./governance`.
-4. Write the instance values with `vault kv put secret/parent-group-governance/platform-trust @platform-trust.json`, using `platform-trust.example.json` as the template.
+4. Write the instance values with `vault kv put secret/parent-group-governance/platform-trust @network-allocation.json`, using `platform-trust.example.json` as the template.
 5. Apply `foundation-vault-bastion` with `vault-proxy-env root`. The apply creates the operator cert roles, after which every Proxy logs in.
 6. Execute the `workstation_vault_audit` playbook, passing `workstation_vault_audit_home`.
 7. Run the mp layers which require the Bastion Vault through the platform-foundation Proxy, following the sequence documented in `architecture_platform-foundation_deployment-chain.md` in the planning repository.

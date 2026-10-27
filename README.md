@@ -438,7 +438,7 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 
     vault kv put \
         secret/parent-group-governance/platform-trust \
-        @terraform/layers/foundation-vault-bastion/platform-trust.json
+        @terraform/layers/foundation-vault-bastion/network-allocation.json
 
     put_secret parent-group-governance/terraform/state-backend token
     put_secret parent-group-governance/ai-provider-console/anthropic anthropic_admin_api_key
@@ -450,8 +450,8 @@ The order follows the upstream state column of Item B. The Bastion Vault instanc
 
     The operator writes `anthropic_oauth_access_token` immediately before Step 6 as described in Section 2 Item C, since the OAuth token expires within minutes.
 
-2. Copy `terraform/layers/foundation-vault-bastion/platform-trust.example.json` to `platform-trust.json` in the same directory, and replace every example value with the value of the deployment. Git ignores `platform-trust.json`.
-3. Write the facts: `vault kv put secret/parent-group-governance/platform-trust @terraform/layers/foundation-vault-bastion/platform-trust.json`.
+2. Copy `terraform/layers/foundation-vault-bastion/platform-trust.example.json` to `network-allocation.json` in the same directory, and replace every example value with the value of the deployment. Git ignores `network-allocation.json`.
+3. Write the facts: `vault kv put secret/parent-group-governance/platform-trust @terraform/layers/foundation-vault-bastion/network-allocation.json`.
 4. Apply `foundation-vault-bastion` with the root token. The apply creates the cert auth mount `operator-cert` and one cert role per identity of `workstation-topology.yaml`, after which every Vault Proxy logs in, and every later apply of the layer runs as `administrator`.
 5. Apply `group-foundation`.
 6. Apply `group-federation-*` (for example `group-federation-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
