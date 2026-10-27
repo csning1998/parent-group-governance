@@ -30,3 +30,14 @@ variable "pki_root_ca" {
     error_message = "pki_root_ca.ec_p384.common_name and pki_root_ca.ml_dsa_87.common_name must declare distinct common names."
   }
 }
+
+variable "host_log_rendezvous_offset" {
+  description = "Host number of the log rendezvous receiver inside the host log rendezvous segment."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.host_log_rendezvous_offset >= 1 && var.host_log_rendezvous_offset <= 254
+    error_message = "host_log_rendezvous_offset MUST lie between 1 and 254."
+  }
+}

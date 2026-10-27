@@ -10,15 +10,20 @@ resource "vault_mount" "registry" {
 }
 
 # Each field holds one category in JSON, and a consumer decodes only the consumed field.
-resource "vault_kv_secret_v2" "registry_platform_trust" {
+resource "vault_kv_secret_v2" "registry_platform_network_allocation" {
   provider = vault.bastion
   mount    = vault_mount.registry.path
-  name     = "platform/trust"
+  name     = "platform/network/allocation"
   data_json = jsonencode({
-    domain_suffix        = local.platform_trust.domain_suffix
-    spire_trust_domains  = jsonencode(local.spire_trust_domains)
-    network_cidr         = local.platform_trust.network_cidr
-    bastion_publish_cidr = local.platform_trust.bastion_publish_cidr
+    domain_suffix                    = local.network_allocation.domain_suffix
+    stage_domains                    = jsonencode(local.stage_domains)
+    network_cidr                     = local.network_allocation.network_cidr
+    bastion_publish_cidr             = local.network_allocation.bastion_publish_cidr
+    host_telemetry_scrape_cidr       = local.host_segment_cidrs.host_telemetry_scrape
+    host_telemetry_scrape_address    = local.host_telemetry_scrape_address
+    host_log_rendezvous_cidr         = local.host_segment_cidrs.host_log_rendezvous
+    host_log_rendezvous_address      = local.host_log_rendezvous_address
+    host_log_rendezvous_server_names = jsonencode(local.host_log_rendezvous_server_names)
   })
 }
 
