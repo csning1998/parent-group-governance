@@ -3,21 +3,26 @@
 # Refer to tools/governance/README.md Section 11.
 ignores:
   foundation-vault-bastion:
-    - address: data.vault_generic_secret.platform_trust
+    - address: data.vault_generic_secret.network_allocation
       paths:
         - data.bastion_publish_cidr
         - data.domain_suffix
         - data.network_cidr
         - data.stages
-      reason: The platform trust facts are network CIDRs, stages, and the domain suffix.
+      reason: The network allocation facts are network CIDRs, stages, and the domain suffix.
 
-    - address: vault_kv_secret_v2.registry_platform_trust
+    - address: vault_kv_secret_v2.registry_platform_network_allocation
       paths:
         - data_json.bastion_publish_cidr
         - data_json.domain_suffix
         - data_json.network_cidr
-        - data_json.spire_trust_domains
-      reason: The registry republishes the platform trust facts.
+        - data_json.stage_domains
+        - data_json.host_telemetry_scrape_cidr
+        - data_json.host_telemetry_scrape_address
+        - data_json.host_log_rendezvous_cidr
+        - data_json.host_log_rendezvous_address
+        - data_json.host_log_rendezvous_server_names
+      reason: The registry republishes the network allocation facts and the derived host segments.
 
     - address: vault_kv_secret_v2.registry_tenant_bastion["platform-foundation"]
       paths:
