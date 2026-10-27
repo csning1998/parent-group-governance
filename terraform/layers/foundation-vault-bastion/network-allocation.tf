@@ -1,6 +1,7 @@
 
 # The instance values reside in the Bastion Vault since this repository is public and serves every deployment.
-# The administrator identity writes the path, and network-allocation.example.json documents the fields.
+# The root token writes the path during the bootstrap, and the administrator identity writes the path afterwards.
+# network-allocation.example.json documents the fields.
 data "vault_generic_secret" "network_allocation" {
   provider = vault.bastion
   path     = "secret/parent-group-governance/network/allocation"

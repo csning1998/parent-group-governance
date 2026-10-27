@@ -268,19 +268,19 @@ This section addresses T6 from Section 2 Item C. Network allocation facts govern
 
 `foundation-vault-bastion/network-allocation.tf` reads the instance values from `secret/parent-group-governance/network/allocation` on the Bastion Vault. The instance values do not reside in the repository, since the repository is public and serves every deployment.
 
-| Field                          | Source                | Example                                           | Purpose                                                                                                               |
-| ------------------------------ | --------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `domain_suffix`                | Bastion KV            | `example.internal`                                | Platform domain, permitted DNS scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`                  |
-| `stages`                       | Bastion KV, JSON list | `["production"]`                                  | Derivation of the stage domains, formatted as `<stage>.<domain_suffix>`                                               |
-| `network_cidr`                 | Bastion KV            | `10.20.0.0/16`                                    | Platform network CIDR, permitted IP scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`             |
-| `bastion_publish_cidr`         | Bastion KV            | `10.20.0.0/24`                                    | Bastion publish network CIDR, excluded IP scope, and the source of the Bastion publish address in `token_bound_cidrs` |
-| `downstream_extra_dns_domains` | Code constant         | `hubble-grpc.cilium.io`, `hubble-relay.cilium.io` | Fixed suffixes under which Cilium names Hubble mTLS peers                                                             |
-| `kubernetes_cluster_domain`    | Code constant         | `cluster.local`                                   | Permitted DNS scope for `pki-leaf-platform`, which covers the Service names of in-cluster raft peers                  |
+| Field                  | Source                | Example            | Purpose                                                                                                               |
+| ---------------------- | --------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `domain_suffix`        | Bastion KV            | `example.internal` | Platform domain, permitted DNS scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`                  |
+| `stages`               | Bastion KV, JSON list | `["production"]`   | Derivation of the stage domains, formatted as `<stage>.<domain_suffix>`                                               |
+| `network_cidr`         | Bastion KV            | `10.20.0.0/16`     | Platform network CIDR, permitted IP scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`             |
+| `bastion_publish_cidr` | Bastion KV            | `10.20.0.0/24`     | Bastion publish network CIDR, excluded IP scope, and the source of the Bastion publish address in `token_bound_cidrs` |
 
-1. The instance values MUST reside in `secret/parent-group-governance/network/allocation`, which only the root token writes.
+The locals `cilium_hubble_extra_dns_domains` (`hubble-grpc.cilium.io`, `hubble-relay.cilium.io`) and `kubernetes_default_cluster_domain` (`cluster.local`) are code constants outside the fact object. The Hubble names are the fixed suffixes under which Cilium names Hubble mTLS peers. `cluster.local` is the permitted DNS scope of `pki-leaf-platform` for the Service names of in-cluster raft peers.
+
+1. The instance values MUST reside in `secret/parent-group-governance/network/allocation`, which the root token writes during the bootstrap and the administrator identity writes afterwards.
 2. `network-allocation.example.json` documents the fields with example values. Git ignores the instance file `network-allocation.json`.
 3. tfvars, `-var`, and `TF_VAR_` MUST NOT be able to override network allocation facts.
-4. `terraform_data.network_allocation_validation` carries a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, or when `bastion_publish_cidr` lies outside `network_cidr`.
+4. `terraform_data.network_allocation_validation` carries a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, when `network_cidr` is not a `/16`, or when `bastion_publish_cidr` differs from segment 0 of `network_cidr`. A further precondition stops the plan when `host_log_rendezvous_offset` equals the host number of `bastion_vault.publish_address`.
 5. A `check` block is not used for the validation, because a failed `check` assertion only produces a warning (refer to the [Terraform check block documentation](https://developer.hashicorp.com/terraform/language/block/check)).
 6. KV v2 keeps every version of the path. A change of the instance values replaces the constrained intermediate certificates in the next plan, which exposes the change during review of the plan.
 7. `bastion_vault.publish_address` of `workstation-topology.yaml` declares the Bastion publish address, and a precondition of `terraform_data.network_allocation_validation` stops the plan when the address lies outside `bastion_publish_cidr`.
@@ -304,18 +304,18 @@ Every intermediate mount holds dual issuers: an ECDSA P-384 issuer and an ML-DSA
 
 #### Item B.2 Constraint Details
 
-| Mount                               | Permitted                                                              | Excluded                                                              |
-| ----------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `pki-intermediate-spire`            | DNS and URI: SPIRE trust domain                                        | All IPv4 and IPv6                                                     |
-| `pki-intermediate-vault-downstream` | DNS `domain_suffix` and Hubble names, IP `network_cidr`                | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
-| `pki-leaf-platform`                 | DNS `domain_suffix` and `kubernetes_cluster_domain`, IP `network_cidr` | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
+| Mount                               | Permitted                                                                      | Excluded                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `pki-intermediate-spire`            | DNS and URI: SPIRE trust domain                                                | All IPv4 and IPv6                                                     |
+| `pki-intermediate-vault-downstream` | DNS `domain_suffix` and Hubble names, IP `network_cidr`                        | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
+| `pki-leaf-platform`                 | DNS `domain_suffix` and `kubernetes_default_cluster_domain`, IP `network_cidr` | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
 
 1. `pki-intermediate-spire` excludes all IP addresses, preventing certificates issued by SPIRE from spoofing Bastion addresses `127.0.0.1` or `10.20.0.1`.
 2. `pki-intermediate-vault-downstream` excludes URIs under the platform domain and every subdomain of the platform domain, a range which contains the SPIFFE trust domain, preventing the Downstream Vault from issuing SVIDs.
 3. `pki-intermediate-vault-downstream` excludes the Bastion publish CIDR, ensuring that a compromised Downstream Vault cannot issue listener certificates for the Bastion Vault.
 4. `pki-leaf-platform` permits neither a loopback address nor the Bastion publish CIDR, and a tenant leaf role therefore cannot issue a Bastion listener certificate.
 5. The Downstream Vault listener certificate MUST NOT carry `localhost` or `127.0.0.1`.
-6. The raft peers of the Downstream Vault MUST join through names under `kubernetes_cluster_domain`.
+6. The raft peers of the Downstream Vault MUST join through names under `kubernetes_default_cluster_domain`.
 7. Every intermediate mount below `pki-root` carries Name Constraints.
 
 #### Item B.3 SAN Requirements for Subordinate CAs
@@ -331,15 +331,17 @@ This section addresses T4 and T5 from Section 2 Item C. The choice of publicatio
 
 #### Item C.1 Publication Contents
 
-`foundation-vault-bastion/service-registry.tf` declares the KV v2 mount `registry` along with two types of publications. Each field of `registry/<code>/bastion` holds one JSON object. In `registry/platform/network/allocation`, `stage_domains` holds a JSON array, and the remaining fields hold plain strings.
+`foundation-vault-bastion/service-registry.tf` declares the KV v2 mount `registry` along with two types of publications. Each field of `registry/<code>/bastion` holds one JSON object. In `registry/platform/network/allocation`, `stage_domains` and `host_log_rendezvous_server_names` hold JSON arrays, and the remaining fields hold plain strings.
 
-| Path                                   | Field                                                                    | Contents                                                                                                                  |
-| -------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `registry/platform/network/allocation` | `domain_suffix`, `stage_domains`, `network_cidr`, `bastion_publish_cidr` | Network allocation facts from Item A                                                                                      |
-| `registry/<code>/bastion`              | `vault`                                                                  | Bastion endpoint and listener CA PEM                                                                                      |
-| `registry/<code>/bastion`              | `pki`                                                                    | Root CA PEM, and the mount path, the certificate, and the assignable policy of each constrained mount owned by the tenant |
-| `registry/<code>/bastion`              | `transit_unseal`                                                         | Transit mount path, and the key and policy names owned by the tenant                                                      |
-| `registry/<code>/bastion`              | `assignable_policies`                                                    | Assignable policy names of each assignment scope from Section 3 Item E.3                                                  |
+| Path                                   | Field                                                                                         | Contents                                                                                                                                                 |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `registry/platform/network/allocation` | `domain_suffix`, `stage_domains`, `network_cidr`, `bastion_publish_cidr`                      | Network allocation facts from Item A                                                                                                                     |
+| `registry/platform/network/allocation` | `host_telemetry_scrape_cidr`, `host_telemetry_scrape_address`                                 | Segment 249 for the host telemetry scrape, and the host address on the segment                                                                           |
+| `registry/platform/network/allocation` | `host_log_rendezvous_cidr`, `host_log_rendezvous_address`, `host_log_rendezvous_server_names` | Segment 250 for the host log rendezvous, the receiver address at `host_log_rendezvous_offset`, and the server names `host-log-rendezvous.<stage domain>` |
+| `registry/<code>/bastion`              | `vault`                                                                                       | Bastion endpoint and listener CA PEM                                                                                                                     |
+| `registry/<code>/bastion`              | `pki`                                                                                         | Root CA PEM, and the mount path, the certificate, and the assignable policy of each constrained mount owned by the tenant                                |
+| `registry/<code>/bastion`              | `transit_unseal`                                                                              | Transit mount path, and the key and policy names owned by the tenant                                                                                     |
+| `registry/<code>/bastion`              | `assignable_policies`                                                                         | Assignable policy names of each assignment scope from Section 3 Item E.3                                                                                 |
 
 #### Item C.2 Access Rules
 
@@ -488,7 +490,7 @@ Terraform documentation recommends publishing external data outside state files 
 For risks associated with rejecting this choice, refer to T6.
 
 1. Constraint: The repository is public and serves every deployment. Git ignores `*.tfvars`, and a `variable` yields to `-var` and `TF_VAR_`.
-2. Decision: The instance values reside in the Bastion KV, which only the root token writes and which keeps every version.
+2. Decision: The instance values reside in the Bastion KV, which the root token writes during the bootstrap, which the administrator identity writes afterwards, and which keeps every version.
 3. Cost: A greenfield deployment writes the KV entry once before the first apply. A change of the instance values is reviewed through the KV version history and the plan diff instead of a merge request.
 
 | Alternative                     | Rationale for Rejection                                                             |
