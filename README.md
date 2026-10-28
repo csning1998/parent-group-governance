@@ -413,7 +413,7 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 | `group-sonarqube`                | The SonarQube global analysis token, written into Vault                                  | `administrator`                             | None                                              |
 | `group-ai-provider-anthropic`    | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`          | `administrator`                             | None                                              |
 | `group-ai-provider-google-cloud` | The Google Cloud Workload Identity Federation pool and provider                          | `administrator`                             | None                                              |
-| `group-ai-provider-azure`        | The Azure Entra ID application and federated identity credentials                        | `administrator`                             | None                                              |
+| `group-ai-provider-azure`        | The Azure OpenAI Cognitive Services account, the customer managed key, and the Key Vault | `administrator`                             | None                                              |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing constrained intermediates. Each constrained intermediate issues subordinate certificates. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 

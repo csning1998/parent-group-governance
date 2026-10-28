@@ -41,7 +41,7 @@ output "deployments" {
 }
 
 output "network" {
-  description = "Private endpoint network metadata. Values are null on the free tier."
+  description = "Private endpoint network metadata. Values are null on the Standard tier."
   value = {
     virtual_network_id  = one(azurerm_virtual_network.private_endpoints[*].id)
     subnet_id           = one(azurerm_subnet.private_endpoints[*].id)

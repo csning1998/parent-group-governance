@@ -33,7 +33,7 @@ variable "sku_name" {
 }
 
 variable "is_premium_tier" {
-  description = "Enables the premium Key Vault SKU, an HSM key, and private endpoints. False keeps the free tier."
+  description = "Enables the premium Key Vault SKU, an HSM key, and private endpoints. False keeps the Standard tier."
   type        = bool
   default     = false
 }
@@ -61,7 +61,7 @@ variable "private_endpoint_subnet_prefix" {
 }
 
 variable "key_vault_ip_rules" {
-  description = "IPv4 addresses or CIDR blocks which can call the Key Vault data plane and the cognitive account data plane on the free tier. The list contains the workstation public egress address. The group GitLab runner uses the same address."
+  description = "IPv4 addresses or CIDR blocks which can call the Key Vault data plane and the cognitive account data plane on the Standard tier. The list contains the workstation public egress address. The group GitLab runner uses the same address."
   type        = list(string)
 
   validation {

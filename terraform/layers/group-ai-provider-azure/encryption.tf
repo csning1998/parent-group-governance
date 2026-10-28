@@ -53,7 +53,7 @@ resource "azurerm_role_assignment" "cognitive_encryption" {
 }
 
 resource "azurerm_key_vault_key" "openai" {
-  #checkov:skip=CKV_AZURE_112: Free tier limitation uses software RSA because an HSM key requires the premium SKU.
+  #checkov:skip=CKV_AZURE_112: Standard tier limitation uses software RSA because an HSM key requires the premium SKU.
   name         = "cognitive-account"
   key_vault_id = azurerm_key_vault.openai.id
   key_type     = var.is_premium_tier ? "RSA-HSM" : "RSA"

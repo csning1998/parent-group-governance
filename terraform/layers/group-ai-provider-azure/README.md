@@ -1,4 +1,4 @@
-# Microsoft Azure & Azure OpenAI Workload Identity Federation Layer Specification
+# Microsoft Azure & Azure OpenAI Organization Layer Specification
 
 This document defines the architecture, bootstrap procedure, credential lifecycle, and verification mechanisms for the `group-ai-provider-azure` layer.
 
@@ -8,84 +8,110 @@ This document defines the architecture, bootstrap procedure, credential lifecycl
 
 The `group-ai-provider-azure` layer manages the root Microsoft Entra ID and Azure OpenAI Cognitive Services infrastructure at the organization subscription level.
 
-- The layer provisions the foundation Azure Resource Group, the Azure OpenAI Cognitive Account, and the Key Vault.
-- `is_premium_tier` defaults to false and keeps the free tier.
-- The free tier keeps public HTTPS. A network ACL denies clients outside `key_vault_ip_rules`.
-- The premium tier disables public network access and provisions a private endpoint.
-- The cognitive account disables local authentication. Callers present Entra ID tokens.
-- Encryption at rest uses a customer managed key in the layer Key Vault.
-- The layer discovers Microsoft Entra ID tenant ID and Azure subscription metadata.
-- The layer publishes root tenant, subscription, and Azure OpenAI endpoint contracts via Terraform Remote State Outputs for downstream consumption.
-- The layer does not provision downstream application registrations, service principals, or federated identity credentials. Downstream isolation remains the sole responsibility of consuming project layers invoking `provisioner-workload-identity-federation`.
+- The layer provisions the foundation Azure Resource Group, the Azure OpenAI Cognitive Account, and the Key Vault instance.
+- The input variable `is_premium_tier` defaults to false to maintain the Standard tier.
+- The Standard tier keeps public HTTPS access enabled because the Standard tier does not provision private endpoints.
+- A network ACL restricts cognitive account ingress by denying client traffic originating outside the IP addresses configured in `key_vault_ip_rules`.
+- Setting `is_premium_tier` to true disables public network access on the cognitive service account.
+- The Premium tier provisions an Azure Virtual Network, private DNS zones, and private endpoints for secure internal network ingress.
+- The cognitive account disables local key authentication to enforce centralized access management.
+- All client applications must authenticate by presenting Microsoft Entra ID OAuth tokens.
+- Encryption at rest relies on a customer managed key stored in the layer Key Vault.
+- Terraform data sources dynamically discover the Microsoft Entra ID tenant identifier and Azure subscription metadata from the authenticated operator session.
+- The layer exposes the tenant ID, subscription ID, resource group name, and OpenAI endpoint URL through Terraform remote state outputs for downstream consumption.
+- The root layer does not provision project level application registrations, service principals, or federated identity credentials.
+- Consuming project layers maintain sole responsibility for provisioning downstream identity federation by invoking `provisioner-workload-identity-federation`.
+- This division of responsibility preserves strict tenant isolation across project boundaries.
 
 ### Item B. Authentication Model
 
-The AzureAD and AzureRM Terraform providers authenticate using Azure CLI credentials.
+The AzureAD and AzureRM Terraform providers authenticate by consuming local Azure CLI credentials.
 
-- The providers retrieve authentication tokens in memory from the local Azure CLI profile.
-- The layer consumes state backend credentials via environment variables or Bastion Vault token injection.
-- The root layer does not write back any project-level WIF binding secrets into Vault, preserving strict multi-tenant boundary isolation.
+- The Terraform providers acquire OAuth authentication tokens in memory from the active Azure CLI user profile.
+- This token acquisition mechanism avoids storing long lived cloud service principal credentials on the operator workstation.
+- The layer retrieves remote state backend credentials through environment variables or Bastion Vault token injection.
+- The root layer does not store project level Workload Identity Federation credentials in Vault.
+- This boundary maintains strict multi-tenant security isolation across independent downstream projects.
 
 ### Item C. Network Boundary
 
-The free tier keeps public HTTPS and applies a network ACL.
+The network topology provides two distinct security tiers controlled by the `is_premium_tier` variable.
 
-- `is_premium_tier` false sets the cognitive account network ACL default action to Deny. The ACL permits addresses in `key_vault_ip_rules`.
-- Callers present Entra ID tokens because the account disables local authentication.
-- `is_premium_tier` true disables public network access and provisions a virtual network, a private endpoint, and private DNS.
-- GitLab CI runners reach the free tier data plane over public HTTPS from the address in `key_vault_ip_rules`.
+- In the Standard tier, public network access remains active over HTTPS because the Standard tier does not provision private endpoints.
+- The cognitive account network ACL assigns a default action of Deny to all external traffic.
+- The network ACL permits incoming requests exclusively from the public IPv4 addresses specified in `key_vault_ip_rules`.
+- The cognitive account ACL configuration strips single host `/32` CIDR masks because the Azure Cognitive Services API rejects prefix notation on individual IP rules.
+- GitLab CI runners and operator workstations communicate with the Standard tier data plane over public HTTPS from the authorized egress addresses defined in `key_vault_ip_rules`.
+- All callers must authenticate by supplying Microsoft Entra ID tokens because the cognitive service account disables local API keys.
+- In the Premium tier, setting `is_premium_tier` to true disables public network access on both the cognitive account and the Key Vault.
+- The Premium tier configuration provisions a dedicated Azure Virtual Network alongside a private endpoint subnet.
+- Private endpoints link the cognitive account and the Key Vault directly to the private subnet through Azure Private Link.
+- Private DNS zones for `privatelink.openai.azure.com` and `privatelink.vaultcore.azure.net` attach to the virtual network.
+- The private DNS zones resolve service hostnames to internal private IP addresses for secure internal communication.
 
 ### Item D. Encryption at Rest
 
-The cognitive account uses a customer managed key stored in the layer Key Vault.
+The Azure OpenAI cognitive account encrypts all data at rest using a customer managed key stored in the layer Key Vault.
 
-- The user assigned managed identity of the cognitive account receives the Key Vault Crypto Service Encryption User role.
-- The free tier uses the standard SKU and a software RSA key. The premium tier uses the premium SKU and an RSA-HSM key.
-- The cognitive account restricts outbound network access to the account hostname and the Key Vault hostname.
-- The Key Vault firewall denies data plane calls. The firewall permits Azure services and addresses in `key_vault_ip_rules`. The premium tier also permits the private endpoint subnet.
-- `key_vault_ip_rules` must contain the workstation public egress address. The group GitLab runner uses the same address.
+- Terraform provisions a dedicated User Assigned Managed Identity for the cognitive account.
+- The managed identity receives the Key Vault Crypto Service Encryption User role assignment on the Key Vault scope.
+- This role assignment grants the managed identity permission to execute `wrapKey` and `unwrapKey` cryptographic operations.
+- The Standard tier deploys the `standard` Key Vault SKU and generates a software protected 2048 bit RSA key to minimize deployment expenses.
+- The Premium tier deploys the `premium` Key Vault SKU and generates an RSA-HSM hardware protected key to satisfy enterprise compliance requirements.
+- The cognitive account enables outbound network access restrictions to prevent data exfiltration.
+- Outbound network routing permits egress traffic only to the cognitive account hostname and the Key Vault hostname.
+- The Key Vault firewall enforces a default Deny policy against all data plane calls.
+- The Key Vault firewall permits trusted Azure services through the service bypass configuration.
+- The Key Vault firewall permits incoming connections from operator workstations and GitLab runners matching `key_vault_ip_rules`.
+- The Premium tier configuration additionally permits traffic from the private endpoint subnet.
+- The variable `key_vault_ip_rules` must contain the public egress IPv4 address of the operator workstation.
+- The group GitLab CI runner shares this same public egress address to maintain administrative and deployment access.
 
 ## Section 2. Host Prerequisites
 
 ### Item A. Operator Role Requirements
 
-Execution requires administrative access to the target Microsoft Entra ID tenant and Azure subscription.
+Layer deployment requires administrative privileges across both the Azure subscription and the Microsoft Entra ID tenant.
 
-- The operator account requires `Contributor` or `Owner` role on the target Azure subscription.
-- The operator account requires permission to assign roles on the Key Vault. The Owner role includes permission to assign roles. The Contributor role does not include permission to assign roles.
-- The operator account requires `Application Administrator` or `Global Administrator` role in Microsoft Entra ID to create app registrations and service principals.
-- The operator environment configures GitLab HTTP backend authentication via `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD`.
+- The operator account requires the `Contributor` or `Owner` role on the target Azure subscription to create foundational resources.
+- The operator account requires explicit role assignment permissions on the Key Vault scope.
+- The subscription `Owner` role inherently includes permission to manage role assignments.
+- The subscription `Contributor` role does not grant role assignment authority.
+- An operator holding only `Contributor` status must obtain an additional role, such as `User Access Administrator` or `Role Based Access Control Administrator`.
+- The layer does not create Microsoft Entra ID applications, hence the operator does not require a Microsoft Entra ID administrative role.
+- The operator shell environment requires valid GitLab HTTP backend credentials stored in `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD`.
 
 ### Item B. CLI Tooling
 
-The Azure CLI `az` is required for interactive operator authentication and verification.
+The Azure CLI toolchain `az` is required for operator authentication and deployment verification.
 
-- The operator can install `az` using the repository playbook `ansible/playbooks/workstation_cloud_cli.yaml`.
-- The `az` executable must be available on `PATH`.
+- Operators can install the `az` utility by executing the repository Ansible playbook `ansible/playbooks/workstation_cloud_cli.yaml`.
+- The `az` executable must reside in a directory registered on the system `PATH` environment variable.
 
-### Item C. Variable Correspondence Mapping
+### Item C. Terraform Variables
 
-The following table defines the correspondence between shell environment variables and Terraform variables in `terraform.tfvars`:
+The following table lists the Terraform variables in `terraform.tfvars`.
+Terraform does not read the `AZURE_*` shell variables of Section 3 Step A, which serve the Azure CLI commands alone.
 
-| Environment Variable                   | Terraform Variable               | Default / Example Value   | Description                                               |
-| :------------------------------------- | :------------------------------- | :------------------------ | :-------------------------------------------------------- |
-| `AZURE_SUBSCRIPTION_ID`                | `azure_subscription_id`          | `<azure-subscription-id>` | Target Azure Subscription ID                              |
-| `AZURE_TENANT_ID`                      | `azure_tenant_id`                | `<azure-tenant-id>`       | Target Microsoft Entra ID Tenant ID                       |
-| `AZURE_RESOURCE_GROUP_NAME`            | `resource_group_name`            | `<resource-group-name>`   | Azure Resource Group name                                 |
-| `AZURE_LOCATION`                       | `location`                       | `<location>`              | Azure deployment region                                   |
-| `AZURE_COGNITIVE_ACCOUNT_NAME`         | `cognitive_account_name`         | `<openai-account-name>`   | Azure OpenAI Cognitive Services account name              |
-| `AZURE_SKU_NAME`                       | `sku_name`                       | `S0`                      | Cognitive Services SKU tier                               |
-| `AZURE_IS_PREMIUM_TIER`                | `is_premium_tier`                | `false`                   | Premium SKU, HSM key, and private endpoints               |
-| `AZURE_VNET_ADDRESS_SPACE`             | `virtual_network_address_space`  | `["10.80.0.0/16"]`        | Address space of the layer virtual network                |
-| `AZURE_PRIVATE_ENDPOINT_SUBNET_PREFIX` | `private_endpoint_subnet_prefix` | `10.80.0.0/24`            | Subnet prefix for private endpoints                       |
-| `AZURE_KEY_VAULT_IP_RULES`             | `key_vault_ip_rules`             | `["203.0.113.10/32"]`     | Operator IPv4 CIDR blocks for Key Vault data plane access |
-| `AZURE_CMK_EXPIRATION_DATE`            | `cmk_expiration_date`            | `2027-09-27T00:00:00Z`    | Expiration timestamp for the customer managed key         |
+| Terraform Variable               | Default / Example Value   | Description                                                                |
+| :------------------------------- | :------------------------ | :------------------------------------------------------------------------- |
+| `azure_subscription_id`          | `<azure-subscription-id>` | Target Azure subscription identifier hosting the cognitive services layer  |
+| `azure_tenant_id`                | `<azure-tenant-id>`       | Target Microsoft Entra ID directory tenant identifier                      |
+| `resource_group_name`            | `<resource-group-name>`   | Name of the Azure Resource Group hosting OpenAI and Key Vault resources    |
+| `location`                       | `<location>`              | Azure geographical region selected for resource deployment                 |
+| `cognitive_account_name`         | `<openai-account-name>`   | Globally unique account name for Azure OpenAI Cognitive Services           |
+| `sku_name`                       | `S0`                      | Pricing and capacity SKU tier for Cognitive Services                       |
+| `is_premium_tier`                | `false`                   | Toggle enabling premium Key Vault SKU, HSM key, and private endpoints      |
+| `virtual_network_address_space`  | `["10.80.0.0/16"]`        | IPv4 address space allocated to the private endpoint virtual network       |
+| `private_endpoint_subnet_prefix` | `10.80.0.0/24`            | Subnet CIDR block hosting private endpoints within the virtual network     |
+| `key_vault_ip_rules`             | `["203.0.113.10/32"]`     | Operator IPv4 addresses or CIDR blocks permitted for Key Vault data access |
+| `cmk_expiration_date`            | `2027-09-27T00:00:00Z`    | RFC 3339 UTC expiration timestamp for the customer managed key             |
 
 ## Section 3. Initial Bootstrap Operations
 
 ### Step A. Authenticate with Azure
 
-The operator exports the target subscription and resource identifiers, and logs in interactively to establish user credentials for Azure and Entra ID.
+The operator exports the target subscription and resource identifiers before logging in interactively to establish authenticated sessions for Azure and Microsoft Entra ID.
 
 ```bash
 export AZURE_SUBSCRIPTION_ID="<azure-subscription-id>"
@@ -101,16 +127,24 @@ az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
 
 ### Step B. Export State Backend Credentials
 
-The operator exports the HTTP state backend credentials from Bastion Vault.
+The operator exports the HTTP state backend credentials through the `administrator` Vault Proxy, which `terraform/.envrc` also loads.
 
 ```bash
-export TF_HTTP_USERNAME='gitlab-ci-token'
-export TF_HTTP_PASSWORD=$(VAULT_ADDR='https://172.16.0.1:8200' VAULT_CACERT="$HOME/GitLab/csning1998-lab/parent-group-governance/vault/tls/ca-ec-p384.pem" VAULT_TOKEN=$(cat $HOME/.vault-token) vault kv get -field=token secret/parent-group-governance/terraform/state-backend)
+eval "$(vault-proxy-env administrator)"
 ```
 
 ### Step C. Execute Terraform Layer Deployment
 
-The operator copies `terraform.tfvars.example` to `terraform.tfvars`. The operator leaves `is_premium_tier` false for the free tier. The operator replaces the documentation address in `key_vault_ip_rules` with the workstation public IPv4 CIDR. The group GitLab runner uses the same CIDR. The operator initializes the Terraform layer. The operator applies the configuration.
+Initial layer deployment requires copying the variable template and configuring environment parameters.
+
+- The operator creates `terraform.tfvars` by copying `terraform.tfvars.example`.
+- The operator retains `is_premium_tier = false` to deploy the Standard tier.
+- The operator replaces the documentation placeholder IP address in `key_vault_ip_rules` with the workstation public IPv4 CIDR block.
+- This IP rule update prevents firewall lockout during subsequent Terraform execution.
+- The group GitLab CI runner shares this public egress IP address for pipeline executions.
+- The operator initializes the Terraform workspace to download provider plugins.
+- The operator reviews planned infrastructure changes by running a speculative plan.
+- The operator applies the configuration to provision Azure resources.
 
 ```bash
 cd terraform/layers/group-ai-provider-azure
@@ -123,28 +157,28 @@ terraform apply
 
 ### Item A. Remote State Outputs Verification
 
-The operator inspects the published outputs to confirm state publication.
+The operator inspects published Terraform outputs to confirm successful state persistence and contract generation.
 
 ```bash
 terraform output
 ```
 
-The output contains the following structures:
+The published state outputs provide the following integration contracts:
 
-- `tenant.id`: The Microsoft Entra ID tenant ID resolved by `azuread_client_config`.
-- `subscription.id`: The Azure subscription ID resolved by `azurerm_client_config`.
-- `resource_group.name`: The Azure Resource Group name hosting cognitive services.
-- `openai.id`: The resource ID of the Azure OpenAI Cognitive Account.
-- `openai.name`: The account name of the Azure OpenAI Cognitive Account.
-- `openai.endpoint`: The HTTPS endpoint URL of the Azure OpenAI Cognitive Account. The premium tier resolves the hostname to the private endpoint through private DNS.
-- `deployments`: Map of deployed model deployment IDs and names.
-- `network.private_endpoint_id`: The resource ID of the cognitive account private endpoint. The value is null on the free tier.
-- `encryption.key_vault_id`: The resource ID of the Key Vault.
-- `encryption.key_id`: The versionless resource ID of the customer managed key.
+- `tenant.id`: The Microsoft Entra ID tenant identifier discovered by `azuread_client_config`.
+- `subscription.id`: The Azure subscription identifier discovered by `azurerm_client_config`.
+- `resource_group.name`: The Azure Resource Group name housing cognitive services.
+- `openai.id`: The Azure resource identifier of the Cognitive Services account.
+- `openai.name`: The account name of the Azure OpenAI Cognitive Services instance.
+- `openai.endpoint`: The HTTPS endpoint URL for Azure OpenAI API calls.
+- `deployments`: The catalog mapping deployed model deployment identifiers and names.
+- `network.private_endpoint_id`: The resource identifier of the cognitive account private endpoint, which evaluates to null on the Standard tier.
+- `encryption.key_vault_id`: The resource identifier of the supporting Azure Key Vault instance.
+- `encryption.key_id`: The versionless resource identifier of the customer managed encryption key.
 
 ### Item B. External Console and CLI Validation
 
-The operator validates cognitive account registration directly against Azure CLI.
+The operator validates cognitive account provisioning directly against the Azure resource management API using the Azure CLI.
 
 ```bash
 az cognitiveservices account show \
@@ -153,9 +187,9 @@ az cognitiveservices account show \
     --output table
 ```
 
-### Item C. Downstream Consumption Validation
+### Item C. Downstream Consumption Verification
 
-The operator validates that consuming layers can resolve the remote state.
+The operator validates remote state accessibility by executing a test plan within a downstream consuming layer.
 
 ```bash
 cd ../administration-gitlab-project
@@ -163,13 +197,18 @@ terraform init
 terraform plan
 ```
 
-- The plan step reads `data.terraform_remote_state.group_ai_provider_azure`.
-- The plan step resolves `tenant.id`, `subscription.id`, and `openai.endpoint` without state acquisition errors.
+- The plan execution reads the published remote state from `data.terraform_remote_state.group_ai_provider_azure`.
+- The plan execution resolves `tenant.id`, `subscription.id`, and `openai.endpoint` attributes without remote state acquisition failures.
 
 ## Section 5. Credential Lifecycle and Maintenance
 
-### Item A. Destruction Protection
+### Item A. Destruction Protection and Decommissioning
 
-- Destruction of `azurerm_resource_group.openai` and `azurerm_cognitive_account.openai` carries `prevent_destroy = true` lifecycle protection to avoid invalidating downstream project federation bindings.
-- Destruction of `azurerm_key_vault.openai` and `azurerm_cognitive_account_customer_managed_key.openai` carries `prevent_destroy = true`.
-- The operator must disable purge protection before removal of the Key Vault.
+Lifecycle guardrails protect root cognitive infrastructure against accidental destruction and service disruption.
+
+- The resources `azurerm_resource_group.openai` and `azurerm_cognitive_account.openai` declare `lifecycle { prevent_destroy = true }` protection blocks.
+- This lifecycle rule prevents accidental destruction from breaking downstream Workload Identity Federation bindings and deleting model deployments.
+- The resources `azurerm_key_vault.openai` and `azurerm_cognitive_account_customer_managed_key.openai` declare `lifecycle { prevent_destroy = true }` protection blocks.
+- This encryption guardrail prevents cryptographic data loss by preserving the active encryption key material.
+- Decommissioning the Key Vault requires an intentional administrative sequence.
+- Purge protection cannot be disabled once enabled, hence a deleted Key Vault stays soft deleted for the 90 days of `soft_delete_retention_days` before Azure deletes the Key Vault permanently.

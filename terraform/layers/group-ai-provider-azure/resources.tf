@@ -9,7 +9,7 @@ resource "azurerm_resource_group" "openai" {
 }
 
 resource "azurerm_cognitive_account" "openai" {
-  #checkov:skip=CKV_AZURE_134: Free tier limitation keeps public HTTPS and denies other clients with a network ACL.
+  #checkov:skip=CKV_AZURE_134: Standard tier limitation keeps public HTTPS and denies other clients with a network ACL.
   name                = var.cognitive_account_name
   location            = azurerm_resource_group.openai.location
   resource_group_name = azurerm_resource_group.openai.name
