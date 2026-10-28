@@ -1,9 +1,9 @@
-resource "azurerm_virtual_network" "group_federation" {
+resource "azurerm_virtual_network" "private_endpoints" {
   count = var.is_premium_tier ? 1 : 0
 
   name                = local.virtual_network_name
-  location            = azurerm_resource_group.group_federation.location
-  resource_group_name = azurerm_resource_group.group_federation.name
+  location            = azurerm_resource_group.openai.location
+  resource_group_name = azurerm_resource_group.openai.name
   address_space       = var.virtual_network_address_space
 }
 
@@ -11,8 +11,8 @@ resource "azurerm_network_security_group" "private_endpoints" {
   count = var.is_premium_tier ? 1 : 0
 
   name                = "nsg-private-endpoints"
-  location            = azurerm_resource_group.group_federation.location
-  resource_group_name = azurerm_resource_group.group_federation.name
+  location            = azurerm_resource_group.openai.location
+  resource_group_name = azurerm_resource_group.openai.name
 
   security_rule {
     name                       = "DenyInternetRdp"
@@ -43,8 +43,8 @@ resource "azurerm_subnet" "private_endpoints" {
   count = var.is_premium_tier ? 1 : 0
 
   name                 = "snet-private-endpoints"
-  resource_group_name  = azurerm_resource_group.group_federation.name
-  virtual_network_name = azurerm_virtual_network.group_federation[count.index].name
+  resource_group_name  = azurerm_resource_group.openai.name
+  virtual_network_name = azurerm_virtual_network.private_endpoints[count.index].name
   address_prefixes     = [var.private_endpoint_subnet_prefix]
 
   private_endpoint_network_policies = "Disabled"
@@ -65,14 +65,14 @@ resource "azurerm_private_dns_zone" "openai" {
   count = var.is_premium_tier ? 1 : 0
 
   name                = "privatelink.openai.azure.com"
-  resource_group_name = azurerm_resource_group.group_federation.name
+  resource_group_name = azurerm_resource_group.openai.name
 }
 
 resource "azurerm_private_dns_zone" "vault" {
   count = var.is_premium_tier ? 1 : 0
 
   name                = "privatelink.vaultcore.azure.net"
-  resource_group_name = azurerm_resource_group.group_federation.name
+  resource_group_name = azurerm_resource_group.openai.name
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "openai" {
@@ -80,7 +80,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "openai" {
 
   name                 = "link-openai"
   private_dns_zone_id  = azurerm_private_dns_zone.openai[count.index].id
-  virtual_network_id   = azurerm_virtual_network.group_federation[count.index].id
+  virtual_network_id   = azurerm_virtual_network.private_endpoints[count.index].id
   registration_enabled = false
 }
 
@@ -89,7 +89,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "vault" {
 
   name                 = "link-vault"
   private_dns_zone_id  = azurerm_private_dns_zone.vault[count.index].id
-  virtual_network_id   = azurerm_virtual_network.group_federation[count.index].id
+  virtual_network_id   = azurerm_virtual_network.private_endpoints[count.index].id
   registration_enabled = false
 }
 
@@ -97,8 +97,8 @@ resource "azurerm_private_endpoint" "openai" {
   count = var.is_premium_tier ? 1 : 0
 
   name                = local.private_endpoint_openai_name
-  location            = azurerm_resource_group.group_federation.location
-  resource_group_name = azurerm_resource_group.group_federation.name
+  location            = azurerm_resource_group.openai.location
+  resource_group_name = azurerm_resource_group.openai.name
   subnet_id           = azurerm_subnet.private_endpoints[count.index].id
 
   private_service_connection {
@@ -118,8 +118,8 @@ resource "azurerm_private_endpoint" "vault" {
   count = var.is_premium_tier ? 1 : 0
 
   name                = local.private_endpoint_vault_name
-  location            = azurerm_resource_group.group_federation.location
-  resource_group_name = azurerm_resource_group.group_federation.name
+  location            = azurerm_resource_group.openai.location
+  resource_group_name = azurerm_resource_group.openai.name
   subnet_id           = azurerm_subnet.private_endpoints[count.index].id
 
   private_service_connection {

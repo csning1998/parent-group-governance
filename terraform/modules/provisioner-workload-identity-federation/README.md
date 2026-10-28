@@ -22,22 +22,22 @@ module "workload_identity_federation" {
   }
 
   anthropic_federation = {
-    issuer_id       = data.terraform_remote_state.group_federation_anthropic.outputs.issuers.gitlab_saas.id
-    organization_id = data.terraform_remote_state.group_federation_anthropic.outputs.organization.id
+    issuer_id       = data.terraform_remote_state.group_ai_provider_anthropic.outputs.issuers.gitlab_saas.id
+    organization_id = data.terraform_remote_state.group_ai_provider_anthropic.outputs.organization.id
   }
 
   google_federation = {
-    project_id     = data.terraform_remote_state.group_federation_gcp.outputs.project.id
-    project_number = data.terraform_remote_state.group_federation_gcp.outputs.project.number
-    pool_id        = data.terraform_remote_state.group_federation_gcp.outputs.pool.id
-    provider_id    = data.terraform_remote_state.group_federation_gcp.outputs.provider.id
+    project_id     = data.terraform_remote_state.group_ai_provider_google_cloud.outputs.project.id
+    project_number = data.terraform_remote_state.group_ai_provider_google_cloud.outputs.project.number
+    pool_id        = data.terraform_remote_state.group_ai_provider_google_cloud.outputs.pool.id
+    provider_id    = data.terraform_remote_state.group_ai_provider_google_cloud.outputs.provider.id
   }
 
   azure_federation = {
-    tenant_id            = data.terraform_remote_state.group_federation_azure.outputs.tenant.id
-    subscription_id      = data.terraform_remote_state.group_federation_azure.outputs.subscription.id
-    cognitive_account_id = data.terraform_remote_state.group_federation_azure.outputs.openai.id
-    openai_endpoint      = data.terraform_remote_state.group_federation_azure.outputs.openai.endpoint
+    tenant_id            = data.terraform_remote_state.group_ai_provider_azure.outputs.tenant.id
+    subscription_id      = data.terraform_remote_state.group_ai_provider_azure.outputs.subscription.id
+    cognitive_account_id = data.terraform_remote_state.group_ai_provider_azure.outputs.openai.id
+    openai_endpoint      = data.terraform_remote_state.group_ai_provider_azure.outputs.openai.endpoint
     subjects = [
       "project_path:${module.provisioner_gitlab_project.full_path}:ref_type:branch:ref:main",
     ]
@@ -115,7 +115,7 @@ The module publishes the following outputs:
 
 ### Item A. Anthropic Federation Prerequisites
 
-The `group-federation-anthropic` layer MUST be applied prior to consuming Anthropic federation. The `group-federation-anthropic` layer registers the organization-level OIDC issuer for GitLab SaaS (`https://gitlab.com`).
+The `group-ai-provider-anthropic` layer MUST be applied prior to consuming Anthropic federation. The `group-ai-provider-anthropic` layer registers the organization-level OIDC issuer for GitLab SaaS (`https://gitlab.com`).
 
 The Terraform operator executing this module MUST configure valid credentials for the `ippontech/anthropic` provider:
 
@@ -126,7 +126,7 @@ The module provisions a dedicated workspace `ws-<project_code>` when `workspace_
 
 ### Item B. Google Cloud Platform Prerequisites
 
-The `group-federation-gcp` layer MUST be applied prior to consuming Google Cloud federation. The `group-federation-gcp` layer provisions the Workload Identity Pool and Workload Identity Provider. The target GCP project MUST have the following APIs enabled:
+The `group-ai-provider-google-cloud` layer MUST be applied prior to consuming Google Cloud federation. The `group-ai-provider-google-cloud` layer provisions the Workload Identity Pool and Workload Identity Provider. The target GCP project MUST have the following APIs enabled:
 
 - `iam.googleapis.com`
 - `iamcredentials.googleapis.com`
@@ -142,7 +142,7 @@ The module provisions a dedicated service account `sa-p-<project_code>` and gran
 
 ### Item C. Microsoft Azure Prerequisites
 
-The `group-federation-azure` layer MUST be applied prior to consuming Microsoft Azure federation. The `group-federation-azure` layer provisions the target Azure OpenAI Cognitive Account.
+The `group-ai-provider-azure` layer MUST be applied prior to consuming Microsoft Azure federation. The `group-ai-provider-azure` layer provisions the target Azure OpenAI Cognitive Account.
 
 The Terraform operator MUST possess permissions to create Microsoft Entra ID Applications and assign Azure Role-Based Access Control (RBAC) roles:
 

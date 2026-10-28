@@ -1,5 +1,5 @@
 
-resource "azurerm_resource_group" "group_federation" {
+resource "azurerm_resource_group" "openai" {
   name     = var.resource_group_name
   location = var.location
 
@@ -9,10 +9,10 @@ resource "azurerm_resource_group" "group_federation" {
 }
 
 resource "azurerm_cognitive_account" "openai" {
-  #checkov:skip=CKV_AZURE_134: Free tier limitation keeps public HTTPS and denies other clients with a network ACL.
+  #checkov:skip=CKV_AZURE_134: Standard tier limitation keeps public HTTPS and denies other clients with a network ACL.
   name                = var.cognitive_account_name
-  location            = azurerm_resource_group.group_federation.location
-  resource_group_name = azurerm_resource_group.group_federation.name
+  location            = azurerm_resource_group.openai.location
+  resource_group_name = azurerm_resource_group.openai.name
   kind                = "OpenAI"
   sku_name            = var.sku_name
 
@@ -59,9 +59,4 @@ resource "azurerm_cognitive_deployment" "this" {
     name     = each.value.sku.name
     capacity = each.value.sku.capacity
   }
-}
-
-moved {
-  from = azurerm_resource_group.ai
-  to   = azurerm_resource_group.group_federation
 }

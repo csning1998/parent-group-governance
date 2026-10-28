@@ -8,14 +8,14 @@ terraform {
     }
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "5.7.0"
+      version = "5.11.0"
     }
   }
 
   backend "http" {
-    address        = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-federation-azure"
-    lock_address   = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-federation-azure/lock"
-    unlock_address = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-federation-azure/lock"
+    address        = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-ai-provider-azure"
+    lock_address   = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-ai-provider-azure/lock"
+    unlock_address = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-ai-provider-azure/lock"
     lock_method    = "POST"
     unlock_method  = "DELETE"
     retry_wait_min = 5

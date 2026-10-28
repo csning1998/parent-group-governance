@@ -45,7 +45,7 @@ The bootstrap is one linear sequence. Each step depends on the steps above, and 
 6. Apply `foundation-vault-bastion` with the root token in the same shell, as described in Section 6 Item C Step 4. The apply creates `operator-cert` and the cert roles, after which each background Vault Proxy logs in.
 7. Run `[Credentials] Rotate Service Admin Passwords` or `./governance credentials rotate sonarqube-admin-password`, which moves each service admin password into the Bastion Vault through the credential-rotator Vault Proxy as described in Section 4 Item D Step 3.
 8. Run `direnv allow` once in `terraform/` and once in `terraform/layers/administration-gitlab-project`, as described in Section 6 Item A.
-9. Apply the downstream Terraform layers in the order of Section 6 Item C Step 5 onwards: `group-foundation`, `administration-gitlab-project`, `group-topology`, `group-gitlab-runner`, `group-sonarqube`, and `group-governance`.
+9. Apply the downstream Terraform layers in the order of Section 6 Item C Step 5 onwards: `group-foundation`, `group-ai-provider-anthropic`, `group-ai-provider-google-cloud`, `group-ai-provider-azure`, `administration-gitlab-project`, `group-topology`, `group-gitlab-runner`, `group-sonarqube`, and `group-gitlab-configuration`.
 10. Restart the runner with `podman compose restart gitlab-runner` after `group-gitlab-runner` renders the runner configuration.
 11. Run `[Vault] Revoke Root Token After Bootstrap`, or `./governance vault revoke-root`, which ends the bootstrap as described in Section 6 Item G.
 
@@ -85,7 +85,7 @@ Anthropic authentication requires two credentials in Bastion Vault at `parent-gr
 - `anthropic_admin_api_key`: The Admin API key, written once by the operator.
 - `anthropic_oauth_access_token`: A short-lived OAuth token, refreshed immediately before each apply.
 
-The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to applying `group-federation-anthropic` or `administration-gitlab-project`, the operator MUST authenticate via the Anthropic CLI and write the fresh OAuth token with `vault kv patch` through the `administrator` identity. Provider client credential mappings are documented in `terraform/layers/group-federation-anthropic/README.md` Section 1 Item B.
+The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to applying `group-ai-provider-anthropic` or `administration-gitlab-project`, the operator MUST authenticate via the Anthropic CLI and write the fresh OAuth token with `vault kv patch` through the `administrator` identity. Provider client credential mappings are documented in `terraform/layers/group-ai-provider-anthropic/README.md` Section 1 Item B.
 
 ```bash
 ant auth login --profile <profile> --scope "org:admin"
@@ -101,7 +101,7 @@ The profile defaults to `issuer-gitlab-saas`. Because the OAuth token expires wi
 
 The platform architecture implements a multi-tenant Workload Identity Federation pattern to govern AI provider access across consumer projects:
 
-1. **Global Governance Layer (`group-federation-anthropic`)**:
+1. **Global Governance Layer (`group-ai-provider-anthropic`)**:
     - Manages the single OIDC Issuer (`issuer-gitlab-saas` pointing to `https://gitlab.com`) at the Anthropic organization level.
     - Publishes the root trust contract (`organization` and `issuers`) via Terraform Remote State Outputs.
     - Remains strictly decoupled from individual downstream workspaces and projects.
@@ -325,7 +325,7 @@ SonarQube holds the analysis token which `group-sonarqube` mints, and the token 
     ```
 
 4. Apply `group-sonarqube`, which writes the analysis token into `secret/parent-group-governance/sonarqube/ci-analysis-bot`, field `sonarqube_ci_token`.
-5. Apply `group-governance`, which publishes `SONAR_TOKEN` as a masked group variable.
+5. Apply `group-gitlab-configuration`, which publishes `SONAR_TOKEN` as a masked group variable.
 
 The administrator password exists in two places alone: the Bastion Vault and the hash inside `sonarqube/postgres-data`. A rebuilt Bastion Vault therefore orphans a retained database, whose password no tool can recover. `./governance vault init` refuses while SonarQube rejects the factory default password, hence a rebuild of the Bastion Vault rebuilds SonarQube before Section 1 Item C Step 3.
 
@@ -402,22 +402,22 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 
 ### Item B. Layer Inventory
 
-| Layer                           | Responsibility                                                                           | Vault Proxy Role (`<role>`)                 | Upstream State                                   |
-| ------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------ |
-| `foundation-vault-bastion`      | The PKI hierarchy, operator cert roles, tenant ACLs, the registry, transit unseal, audit | `root` (bootstrap), `administrator` (day-2) | None                                             |
-| `group-foundation`              | The top level group `Personal Lab` at path `csning1998-lab`                              | `administrator`                             | None                                             |
-| `administration-gitlab-project` | The GitLab project hosting this repository and every Terraform state                     | `credential-distributor`                    | `group-foundation`, `group-federation-anthropic` |
-| `group-topology`                | Every subgroup and nested subgroup beneath the top level group                           | `administrator`                             | `group-foundation`                               |
-| `group-governance`              | Group labels and the group CI variables sourced from Vault                               | `administrator`                             | `group-topology`                                 |
-| `group-gitlab-runner`           | The group runner registration and the rendered `gitlab-runner-configs/config.toml`       | `administrator`                             | `group-topology`                                 |
-| `group-sonarqube`               | The SonarQube global analysis token, written into Vault                                  | `administrator`                             | None                                             |
-| `group-federation-anthropic`    | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`          | `administrator`                             | None                                             |
-| `group-federation-gcp`          | The Google Cloud Workload Identity Federation pool and provider                          | `administrator`                             | None                                             |
-| `group-federation-azure`        | The Azure Entra ID application and federated identity credentials                        | `administrator`                             | None                                             |
+| Layer                            | Responsibility                                                                           | Vault Proxy Role (`<role>`)                 | Upstream State                                                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `foundation-vault-bastion`       | The PKI hierarchy, operator cert roles, tenant ACLs, the registry, transit unseal, audit | `root` (bootstrap), `administrator` (day-2) | None                                                                                                           |
+| `group-foundation`               | The top level group `Personal Lab` at path `csning1998-lab`                              | `administrator`                             | None                                                                                                           |
+| `administration-gitlab-project`  | The GitLab project hosting this repository and every Terraform state                     | `credential-distributor`                    | `group-foundation`, `group-ai-provider-anthropic`, `group-ai-provider-google-cloud`, `group-ai-provider-azure` |
+| `group-topology`                 | Every subgroup and nested subgroup beneath the top level group                           | `administrator`                             | `group-foundation`                                                                                             |
+| `group-gitlab-configuration`     | Group labels and the group CI variables sourced from Vault                               | `administrator`                             | `group-topology`                                                                                               |
+| `group-gitlab-runner`            | The group runner registration and the rendered `gitlab-runner-configs/config.toml`       | `administrator`                             | `group-topology`                                                                                               |
+| `group-sonarqube`                | The SonarQube global analysis token, written into Vault                                  | `administrator`                             | None                                                                                                           |
+| `group-ai-provider-anthropic`    | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`          | `administrator`                             | None                                                                                                           |
+| `group-ai-provider-google-cloud` | The Google Cloud Workload Identity Federation pool and provider                          | `administrator`                             | None                                                                                                           |
+| `group-ai-provider-azure`        | The Azure OpenAI Cognitive Services account, the customer managed key, and the Key Vault | `administrator`                             | None                                                                                                           |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing constrained intermediates. Each constrained intermediate issues subordinate certificates. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
-The layer `group-governance` publishes the masked group variable `SONAR_TOKEN` read out of Vault. Reviewer bot credentials have migrated to the project layer (`administration-gitlab-project`) via `provisioner-code-reviewer`.
+The layer `group-gitlab-configuration` publishes the masked group variable `SONAR_TOKEN` read out of Vault. Reviewer bot credentials have migrated to the project layer (`administration-gitlab-project`) via `provisioner-code-reviewer`.
 
 The layer `group-sonarqube` writes the path `sonarqube/ci-analysis-bot`. The `./governance` rotation of `sonarqube-admin-password` writes the path `sonarqube/admin-account`. The separation keeps one writer per Vault path.
 
@@ -459,11 +459,11 @@ Step 1 to Step 4 run with the root token, which `eval "$(vault-proxy-env root)"`
 3. Write the facts: `vault kv put secret/parent-group-governance/network/allocation @terraform/layers/foundation-vault-bastion/network-allocation.json`.
 4. Apply `foundation-vault-bastion` with the root token. The apply creates the cert auth mount `operator-cert` and one cert role per identity of `workstation-topology.yaml`, after which every Vault Proxy logs in, and every later apply of the layer runs as `administrator`.
 5. Apply `group-foundation`.
-6. Apply `group-federation-*` (for example `group-federation-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
+6. Apply `group-ai-provider-*` (for example `group-ai-provider-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
 7. Apply `administration-gitlab-project`, whose `.envrc` loads the `credential-distributor` identity, and apply `group-topology` in either order.
 8. Apply `group-gitlab-runner`. Restart the runner container with `podman compose restart gitlab-runner` afterwards.
 9. Apply `group-sonarqube` after Section 1 Item C Step 7 writes the administrator password into the Bastion Vault.
-10. Apply `group-governance`, which reads the token written by `group-sonarqube`.
+10. Apply `group-gitlab-configuration`, which reads the token written by `group-sonarqube`.
 
 The platform trust facts hold four fields. Every field is a string, because KV version 2 stores flat string values.
 
@@ -488,10 +488,10 @@ A precondition of `foundation-vault-bastion` stops the plan when a field is miss
 | Layer                           | Address                                                                      | Value                                                                    |
 | ------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `administration-gitlab-project` | `module.code_reviewer`                                                       | The reviewer and tag bot tokens, read and published as project variables |
-| `group-governance`              | `data.vault_kv_secret_v2.sonar_token`, `gitlab_group_variable.review_secret` | The SonarQube analysis token, read and published as a group variable     |
+| `group-gitlab-configuration`    | `data.vault_kv_secret_v2.sonar_token`, `gitlab_group_variable.review_secret` | The SonarQube analysis token, read and published as a group variable     |
 | `group-sonarqube`               | `sonarqube_user_token.ci_analysis`, `vault_kv_secret_v2.sonar_token`         | The SonarQube analysis token, minted by the provider                     |
 | `group-gitlab-runner`           | `gitlab_user_runner.shared`, `local_sensitive_file.runner_config`            | The runner authentication token                                          |
-| `group-federation-azure`        | `azurerm_cognitive_account.openai`                                           | The account access keys, inert while `local_auth_enabled = false`        |
+| `group-ai-provider-azure`       | `azurerm_cognitive_account.openai`                                           | The account access keys, inert while `local_auth_enabled = false`        |
 
 The historical state versions of every layer still hold values which a later change removed. A purge of the history and a rotation of each exposed value close the record.
 

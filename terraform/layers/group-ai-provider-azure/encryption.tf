@@ -1,8 +1,8 @@
 
 resource "azurerm_key_vault" "openai" {
   name                = local.key_vault_name
-  location            = azurerm_resource_group.group_federation.location
-  resource_group_name = azurerm_resource_group.group_federation.name
+  location            = azurerm_resource_group.openai.location
+  resource_group_name = azurerm_resource_group.openai.name
   tenant_id           = data.azurerm_client_config.current.tenant_id
   sku_name            = var.is_premium_tier ? "premium" : "standard"
 
@@ -31,8 +31,8 @@ resource "azurerm_key_vault" "openai" {
 
 resource "azurerm_user_assigned_identity" "openai" {
   name                = substr("id-${var.cognitive_account_name}", 0, 128)
-  location            = azurerm_resource_group.group_federation.location
-  resource_group_name = azurerm_resource_group.group_federation.name
+  location            = azurerm_resource_group.openai.location
+  resource_group_name = azurerm_resource_group.openai.name
 
   lifecycle {
     prevent_destroy = true
@@ -53,7 +53,7 @@ resource "azurerm_role_assignment" "cognitive_encryption" {
 }
 
 resource "azurerm_key_vault_key" "openai" {
-  #checkov:skip=CKV_AZURE_112: Free tier limitation uses software RSA because an HSM key requires the premium SKU.
+  #checkov:skip=CKV_AZURE_112: Standard tier limitation uses software RSA because an HSM key requires the premium SKU.
   name         = "cognitive-account"
   key_vault_id = azurerm_key_vault.openai.id
   key_type     = var.is_premium_tier ? "RSA-HSM" : "RSA"

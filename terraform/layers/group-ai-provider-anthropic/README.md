@@ -1,12 +1,12 @@
 # Anthropic Workload Identity Federation Layer Specification
 
-This document defines the architecture, bootstrap procedure, credential lifecycle, and verification mechanisms for the `group-federation-anthropic` layer.
+This document defines the architecture, bootstrap procedure, credential lifecycle, and verification mechanisms for the `group-ai-provider-anthropic` layer.
 
 ## Section 1. Architecture Overview
 
 ### Item A. Layer Responsibility
 
-The `group-federation-anthropic` layer manages the root Anthropic Workload Identity Federation (WIF) OIDC trust issuer at the organization level.
+The `group-ai-provider-anthropic` layer manages the root Anthropic Workload Identity Federation (WIF) OIDC trust issuer at the organization level.
 
 - The layer registers the root OIDC trust issuer `issuer-gitlab-saas` pointing to `https://gitlab.com`.
 - The layer publishes organization identifiers and issuer trust contracts via Terraform Remote State Outputs for downstream consumption.
@@ -103,7 +103,7 @@ The operator writes the credentials to Bastion Vault through the `administrator`
 The operator initializes the Terraform layer and applies the root federation issuer.
 
 ```bash
-cd terraform/layers/group-federation-anthropic
+cd terraform/layers/group-ai-provider-anthropic
 terraform init
 terraform plan
 terraform apply
@@ -148,7 +148,7 @@ terraform init
 terraform plan
 ```
 
-- The plan step reads `data.terraform_remote_state.group_federation_anthropic`.
+- The plan step reads `data.terraform_remote_state.group_ai_provider_anthropic`.
 - The plan step resolves `organization.id` and `issuers.gitlab_saas.id` without state acquisition errors.
 
 ## Section 5. Credential Lifecycle and Maintenance
