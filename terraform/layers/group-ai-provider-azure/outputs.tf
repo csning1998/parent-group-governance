@@ -16,8 +16,8 @@ output "subscription" {
 output "resource_group" {
   description = "Azure resource group metadata."
   value = {
-    name     = azurerm_resource_group.group_federation.name
-    location = azurerm_resource_group.group_federation.location
+    name     = azurerm_resource_group.openai.name
+    location = azurerm_resource_group.openai.location
   }
 }
 
@@ -43,7 +43,7 @@ output "deployments" {
 output "network" {
   description = "Private endpoint network metadata. Values are null on the free tier."
   value = {
-    virtual_network_id  = one(azurerm_virtual_network.group_federation[*].id)
+    virtual_network_id  = one(azurerm_virtual_network.private_endpoints[*].id)
     subnet_id           = one(azurerm_subnet.private_endpoints[*].id)
     private_endpoint_id = one(azurerm_private_endpoint.openai[*].id)
   }

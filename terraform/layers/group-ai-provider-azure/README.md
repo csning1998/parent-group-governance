@@ -170,6 +170,6 @@ terraform plan
 
 ### Item A. Destruction Protection
 
-- Destruction of `azurerm_resource_group.group_federation` and `azurerm_cognitive_account.openai` carries `prevent_destroy = true` lifecycle protection to avoid invalidating downstream project federation bindings.
+- Destruction of `azurerm_resource_group.openai` and `azurerm_cognitive_account.openai` carries `prevent_destroy = true` lifecycle protection to avoid invalidating downstream project federation bindings.
 - Destruction of `azurerm_key_vault.openai` and `azurerm_cognitive_account_customer_managed_key.openai` carries `prevent_destroy = true`.
 - The operator must disable purge protection before removal of the Key Vault.
