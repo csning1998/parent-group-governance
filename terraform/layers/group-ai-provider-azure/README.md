@@ -1,12 +1,12 @@
 # Microsoft Azure & Azure OpenAI Workload Identity Federation Layer Specification
 
-This document defines the architecture, bootstrap procedure, credential lifecycle, and verification mechanisms for the `group-federation-azure` layer.
+This document defines the architecture, bootstrap procedure, credential lifecycle, and verification mechanisms for the `group-ai-provider-azure` layer.
 
 ## Section 1. Architecture Overview
 
 ### Item A. Layer Responsibility
 
-The `group-federation-azure` layer manages the root Microsoft Entra ID and Azure OpenAI Cognitive Services infrastructure at the organization subscription level.
+The `group-ai-provider-azure` layer manages the root Microsoft Entra ID and Azure OpenAI Cognitive Services infrastructure at the organization subscription level.
 
 - The layer provisions the foundation Azure Resource Group, the Azure OpenAI Cognitive Account, and the Key Vault.
 - `is_premium_tier` defaults to false and keeps the free tier.
@@ -113,7 +113,7 @@ export TF_HTTP_PASSWORD=$(VAULT_ADDR='https://172.16.0.1:8200' VAULT_CACERT="$HO
 The operator copies `terraform.tfvars.example` to `terraform.tfvars`. The operator leaves `is_premium_tier` false for the free tier. The operator replaces the documentation address in `key_vault_ip_rules` with the workstation public IPv4 CIDR. The group GitLab runner uses the same CIDR. The operator initializes the Terraform layer. The operator applies the configuration.
 
 ```bash
-cd terraform/layers/group-federation-azure
+cd terraform/layers/group-ai-provider-azure
 terraform init
 terraform plan
 terraform apply
@@ -163,7 +163,7 @@ terraform init
 terraform plan
 ```
 
-- The plan step reads `data.terraform_remote_state.group_federation_azure`.
+- The plan step reads `data.terraform_remote_state.group_ai_provider_azure`.
 - The plan step resolves `tenant.id`, `subscription.id`, and `openai.endpoint` without state acquisition errors.
 
 ## Section 5. Credential Lifecycle and Maintenance

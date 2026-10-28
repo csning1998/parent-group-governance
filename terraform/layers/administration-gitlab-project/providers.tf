@@ -50,12 +50,12 @@ provider "anthropic" {
 }
 
 provider "azuread" {
-  tenant_id = data.terraform_remote_state.group_federation_azure.outputs.tenant.id
+  tenant_id = local.state.group_ai_provider_azure.tenant.id
 }
 
 provider "azurerm" {
-  subscription_id = data.terraform_remote_state.group_federation_azure.outputs.subscription.id
-  tenant_id       = data.terraform_remote_state.group_federation_azure.outputs.tenant.id
+  subscription_id = local.state.group_ai_provider_azure.subscription.id
+  tenant_id       = local.state.group_ai_provider_azure.tenant.id
   features {}
 }
 

@@ -1,12 +1,12 @@
 # Google Cloud Workload Identity Federation Layer Specification
 
-This document defines the architecture, bootstrap procedure, credential lifecycle, and verification mechanisms for the `group-federation-gcp` layer.
+This document defines the architecture, bootstrap procedure, credential lifecycle, and verification mechanisms for the `group-ai-provider-google-cloud` layer.
 
 ## Section 1. Architecture Overview
 
 ### Item A. Layer Responsibility
 
-The `group-federation-gcp` layer manages the root Google Cloud Workload Identity Federation (WIF) Pool, OIDC Provider, and core API enablement at the organization project level.
+The `group-ai-provider-google-cloud` layer manages the root Google Cloud Workload Identity Federation (WIF) Pool, OIDC Provider, and core API enablement at the organization project level.
 
 - The layer enables required foundational GCP APIs: `iam.googleapis.com`, `iamcredentials.googleapis.com`, `sts.googleapis.com`, `aiplatform.googleapis.com`, and `generativelanguage.googleapis.com`.
 - The layer registers the root Workload Identity Pool `gitlab-pool` and OIDC Provider `gitlab-provider` pointing to `https://gitlab.com`.
@@ -76,7 +76,7 @@ export TF_HTTP_PASSWORD=$(VAULT_ADDR='https://172.16.0.1:8200' VAULT_CACERT="$HO
 The operator initializes the Terraform layer and applies the root federation pool and provider.
 
 ```bash
-cd terraform/layers/group-federation-gcp
+cd terraform/layers/group-ai-provider-google-cloud
 terraform init
 terraform plan
 terraform apply
@@ -142,7 +142,7 @@ terraform init
 terraform plan
 ```
 
-- The plan step reads `data.terraform_remote_state.group_federation_gcp`.
+- The plan step reads `data.terraform_remote_state.group_ai_provider_google_cloud`.
 - The plan step resolves `project.id`, `pool.id`, and `provider.id` without state acquisition errors.
 
 ## Section 5. Credential Lifecycle and Maintenance
