@@ -17,13 +17,14 @@ operator_vault_proxy:
   placeholder_token: "proxy-supplied"
   state_backend:
     vault_kv_mount: "secret"
-    vault_kv_path: "parent-group-governance/terraform/state-backend"
     vault_kv_field: "token"
     terraform_http_username: "gitlab-ci-token"
   identities:
     credential-distributor:
       listen_port: 8210
       access_tier: "credential-distributor"
+      owner_code: "parent-group-governance"
+      state_backend_path: "parent-group-governance/terraform/state-backend"
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
@@ -32,15 +33,91 @@ operator_vault_proxy:
         - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
         - "gitlab-ci-with-code-reviewer/terraform/state-backend"
       allowed_write_secret_paths: []
+      allowed_read_registry_paths:
+        - "platform/ai-provider"
     platform-foundation:
       listen_port: 8211
       access_tier: "tenant"
+      owner_code: "platform-foundation"
+      state_backend_path: "platform-foundation/terraform/state-backend"
     administrator:
       listen_port: 8212
       access_tier: "administrator"
+      owner_code: "parent-group-governance"
+      state_backend_path: "parent-group-governance/terraform/state-backend"
     credential-rotator:
       listen_port: 8213
       access_tier: "credential-rotator"
+      owner_code: "parent-group-governance"
+    credential-distributor-platform-foundation:
+      listen_port: 8214
+      access_tier: "credential-distributor"
+      owner_code: "platform-foundation"
+      state_backend_path: "platform-foundation/terraform/state-backend"
+      allowed_read_secret_paths:
+        - "parent-group-governance/ai-provider-console/anthropic"
+        - "parent-group-governance/github/publication"
+        - "parent-group-governance/sonarqube/ci-analysis-bot"
+        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+      allowed_write_secret_paths: []
+      allowed_read_registry_paths:
+        - "platform/ai-provider"
+    credential-distributor-opgitlab:
+      listen_port: 8215
+      access_tier: "credential-distributor"
+      owner_code: "opgitlab"
+      state_backend_path: "opgitlab/terraform/state-backend"
+      allowed_read_secret_paths:
+        - "parent-group-governance/ai-provider-console/anthropic"
+        - "parent-group-governance/github/publication"
+        - "parent-group-governance/sonarqube/ci-analysis-bot"
+        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+      allowed_write_secret_paths: []
+      allowed_read_registry_paths:
+        - "platform/ai-provider"
+    credential-distributor-gitlab-ci-with-code-reviewer:
+      listen_port: 8216
+      access_tier: "credential-distributor"
+      owner_code: "gitlab-ci-with-code-reviewer"
+      state_backend_path: "gitlab-ci-with-code-reviewer/terraform/state-backend"
+      allowed_read_secret_paths:
+        - "parent-group-governance/ai-provider-console/anthropic"
+        - "parent-group-governance/github/publication"
+        - "parent-group-governance/sonarqube/ci-analysis-bot"
+        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+      allowed_write_secret_paths: []
+      allowed_read_registry_paths:
+        - "platform/ai-provider"
+    credential-distributor-generic-agent-criteria-source:
+      listen_port: 8217
+      access_tier: "credential-distributor"
+      owner_code: "generic-agent-criteria-source"
+      state_backend_path: "generic-agent-criteria-source/terraform/state-backend"
+      allowed_read_secret_paths:
+        - "parent-group-governance/ai-provider-console/anthropic"
+        - "parent-group-governance/github/publication"
+        - "parent-group-governance/sonarqube/ci-analysis-bot"
+        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+      allowed_write_secret_paths: []
+      allowed_read_registry_paths:
+        - "platform/ai-provider"
+    consumer-opgitlab:
+      listen_port: 8218
+      access_tier: "consumer"
+      owner_code: "opgitlab"
+      state_backend_path: "opgitlab/terraform/state-backend"
+      allowed_read_registry_paths:
+        - "platform/network"
+    consumer-platform-observability:
+      listen_port: 8219
+      access_tier: "consumer"
+      owner_code: "platform-observability"
+      state_backend_path: "platform-observability/terraform/state-backend"
+      allowed_read_registry_paths: []
 
 # Credential Lifecycle Plane: Automated service password rotation registry.
 service_admin_passwords:
