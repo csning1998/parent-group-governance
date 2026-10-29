@@ -8,8 +8,9 @@ ignores:
         - data.bastion_publish_cidr
         - data.domain_suffix
         - data.network_cidr
+        - data.network_baseline
         - data.stages
-      reason: The network allocation facts are network CIDRs, stages, and the domain suffix.
+      reason: The network allocation facts are network CIDRs, stages, the domain suffix, and the host network baseline.
 
     - address: vault_kv_secret_v2.registry_platform_network_allocation
       paths:
@@ -22,7 +23,8 @@ ignores:
         - data_json.host_log_rendezvous_cidr
         - data_json.host_log_rendezvous_address
         - data_json.host_log_rendezvous_server_names
-      reason: The registry republishes the network allocation facts and the derived host segments.
+        - data_json.network_baseline
+      reason: The registry republishes the network allocation facts, the host segments, and the network baseline.
 
     - address: vault_kv_secret_v2.registry_tenant_bastion["platform-foundation"]
       paths:

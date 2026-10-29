@@ -18,6 +18,20 @@ locals {
     bastion_publish_cidr = lookup(local.network_allocation_raw, "bastion_publish_cidr", "")
   }
 
+  # Every repository which creates a libvirt network on the shared host reads the same baseline from the registry.
+  # A missing or malformed field resolves to an invalid value, hence the precondition below names the field.
+  network_baseline_raw = try(jsondecode(lookup(local.network_allocation_raw, "network_baseline", "{}")), {})
+  network_baseline = {
+    host_vip_offset    = try(tonumber(local.network_baseline_raw.host_vip_offset), -1)
+    global_mac_prefix  = try(tostring(local.network_baseline_raw.global_mac_prefix), "")
+    global_mtu         = try(tonumber(local.network_baseline_raw.global_mtu), 0)
+    global_mss         = try(tonumber(local.network_baseline_raw.global_mss), 0)
+    node_exporter_port = try(tonumber(local.network_baseline_raw.node_exporter_port), 0)
+    cidr_subnet_bits   = try(tonumber(local.network_baseline_raw.cidr_subnet_bits), 0)
+    cidr_nat_offset    = try(tonumber(local.network_baseline_raw.cidr_nat_offset), 0)
+    cidr_index_max     = try(tonumber(local.network_baseline_raw.cidr_index_max), 0)
+  }
+
   # Cilium names the Hubble mTLS peers under these fixed suffixes outside the platform domain.
   cilium_hubble_extra_dns_domains = ["hubble-grpc.cilium.io", "hubble-relay.cilium.io"]
   # Raft peers of an in-cluster Vault join through the Service names under the cluster domain.
@@ -32,7 +46,7 @@ locals {
   }
   host_segment_cidrs = {
     for name, index in local.host_segment_indexes : name => (
-      can(cidrsubnet(local.network_allocation.network_cidr, 8, index)) ? cidrsubnet(local.network_allocation.network_cidr, 8, index) : ""
+      can(cidrsubnet(local.network_allocation.network_cidr, local.network_baseline.cidr_subnet_bits, index)) ? cidrsubnet(local.network_allocation.network_cidr, local.network_baseline.cidr_subnet_bits, index) : ""
     )
   }
 
@@ -65,8 +79,24 @@ locals {
     can(cidrnetmask(local.network_allocation.network_cidr)),
     can(cidrnetmask(local.network_allocation.bastion_publish_cidr)),
     can(cidrnetmask(local.network_allocation.network_cidr)) ? split("/", local.network_allocation.network_cidr)[1] == "16" : false,
-    can(cidrsubnet(local.network_allocation.network_cidr, 8, 0)) ? local.network_allocation.bastion_publish_cidr == cidrsubnet(local.network_allocation.network_cidr, 8, 0) : false,
+    # A missing network_baseline fails the baseline precondition alone, which names the field.
+    local.network_baseline.cidr_subnet_bits == 0 || (
+      can(cidrsubnet(local.network_allocation.network_cidr, local.network_baseline.cidr_subnet_bits, 0)) ? local.network_allocation.bastion_publish_cidr == cidrsubnet(local.network_allocation.network_cidr, local.network_baseline.cidr_subnet_bits, 0) : false
+    ),
     local.bastion_publish_inside_network,
+  ])
+
+  # The bounds mirror the network_baseline validations of platform-foundation, which consumed the baseline from tfvars.
+  network_baseline_valid = alltrue([
+    local.network_baseline.host_vip_offset > 0 && local.network_baseline.host_vip_offset < 255,
+    can(regex("^([0-9a-f]{2}:){2}[0-9a-f]{2}$", local.network_baseline.global_mac_prefix)),
+    local.network_baseline.global_mss > 0 && local.network_baseline.global_mss < local.network_baseline.global_mtu,
+    local.network_baseline.node_exporter_port > 0 && local.network_baseline.node_exporter_port < 65536,
+    local.network_baseline.cidr_subnet_bits > 0,
+    local.network_baseline.cidr_nat_offset >= 1,
+    local.network_baseline.cidr_index_max > local.network_baseline.cidr_nat_offset,
+    local.network_baseline.cidr_index_max <= 2 * local.network_baseline.cidr_nat_offset,
+    alltrue([for index in values(local.host_segment_indexes) : index > local.network_baseline.cidr_index_max && index < pow(2, local.network_baseline.cidr_subnet_bits)]),
   ])
 }
 
@@ -78,6 +108,10 @@ resource "terraform_data" "network_allocation_validation" {
     precondition {
       condition     = local.network_allocation_valid
       error_message = "secret/parent-group-governance/network/allocation MUST hold a DNS domain_suffix, a JSON list of DNS label stages, IPv4 network_cidr of /16, and bastion_publish_cidr of segment 0 inside network_cidr."
+    }
+    precondition {
+      condition     = local.network_baseline_valid
+      error_message = "secret/parent-group-governance/network/allocation MUST hold network_baseline as a JSON object of host_vip_offset, global_mac_prefix, global_mtu, global_mss, node_exporter_port, cidr_subnet_bits, cidr_nat_offset, and cidr_index_max, with every host segment index above cidr_index_max."
     }
     precondition {
       condition     = local.topology_publish_inside_network
