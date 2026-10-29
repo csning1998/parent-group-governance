@@ -9,7 +9,8 @@ This document defines the architecture, bootstrap procedure, credential lifecycl
 The `group-ai-provider-anthropic` layer manages the root Anthropic Workload Identity Federation (WIF) OIDC trust issuer at the organization level.
 
 - The layer registers the root OIDC trust issuer `issuer-gitlab-saas` pointing to `https://gitlab.com`.
-- The layer publishes organization identifiers and issuer trust contracts via Terraform Remote State Outputs for downstream consumption.
+- The layer publishes organization identifiers and issuer trust contracts via Terraform Remote State Outputs for the governance layer of this repository.
+- The layer publishes `issuer_id` and `organization_id` at `registry/platform/ai-provider/anthropic` of the Bastion Vault for the governance layers of other repositories, which read no state of this project.
 - The layer does not provision downstream workspaces, service accounts, or federation rules. Multi-tenant project isolation is delegated to project layers invoking `provisioner-workload-identity-federation`.
 
 ### Item B. Ephemeral Credential Model

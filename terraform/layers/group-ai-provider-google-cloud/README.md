@@ -10,7 +10,8 @@ The `group-ai-provider-google-cloud` layer manages the root Google Cloud Workloa
 
 - The layer enables required foundational GCP APIs: `iam.googleapis.com`, `iamcredentials.googleapis.com`, `sts.googleapis.com`, `aiplatform.googleapis.com`, and `generativelanguage.googleapis.com`.
 - The layer registers the root Workload Identity Pool `gitlab-pool` and OIDC Provider `gitlab-provider` pointing to `https://gitlab.com`.
-- The layer publishes root project metadata, pool identifiers, and provider contracts via Terraform Remote State Outputs for downstream consumption.
+- The layer publishes root project metadata, pool identifiers, and provider contracts via Terraform Remote State Outputs for the governance layer of this repository.
+- The layer publishes `project_id`, `project_number`, `pool_id`, and `provider_id` at `registry/platform/ai-provider/google-cloud` of the Bastion Vault for the governance layers of other repositories, which read no state of this project.
 - The layer does not provision downstream service accounts or IAM role bindings. Downstream isolation remains the sole responsibility of consuming project layers invoking `provisioner-workload-identity-federation`.
 
 ### Item B. Authentication Model
@@ -19,6 +20,7 @@ The Google Cloud Terraform provider authenticates using Application Default Cred
 
 - The provider retrieves OAuth2 tokens in memory from the local ADC credentials file `~/.config/gcloud/application_default_credentials.json`.
 - The layer consumes state backend credentials via environment variables or Bastion Vault token injection.
+- The Vault provider writes the registry key through the `administrator` Proxy, which `eval "$(vault-proxy-env administrator)"` loads.
 - The root layer does not write back any project-level WIF binding secrets into Vault, preserving strict multi-tenant boundary isolation.
 
 ## Section 2. Host Prerequisites

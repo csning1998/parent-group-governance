@@ -18,7 +18,8 @@ The `group-ai-provider-azure` layer manages the root Microsoft Entra ID and Azur
 - All client applications must authenticate by presenting Microsoft Entra ID OAuth tokens.
 - Encryption at rest relies on a customer managed key stored in the layer Key Vault.
 - Terraform data sources dynamically discover the Microsoft Entra ID tenant identifier and Azure subscription metadata from the authenticated operator session.
-- The layer exposes the tenant ID, subscription ID, resource group name, and OpenAI endpoint URL through Terraform remote state outputs for downstream consumption.
+- The layer exposes the tenant ID, subscription ID, resource group name, and OpenAI endpoint URL through Terraform remote state outputs for the governance layer of this repository.
+- The layer publishes `tenant_id`, `subscription_id`, `cognitive_account_id`, and `openai_endpoint` at `registry/platform/ai-provider/azure` of the Bastion Vault for the governance layers of other repositories, which read no state of this project.
 - The root layer does not provision project level application registrations, service principals, or federated identity credentials.
 - Consuming project layers maintain sole responsibility for provisioning downstream identity federation by invoking `provisioner-workload-identity-federation`.
 - This division of responsibility preserves strict tenant isolation across project boundaries.
@@ -30,6 +31,7 @@ The AzureAD and AzureRM Terraform providers authenticate by consuming local Azur
 - The Terraform providers acquire OAuth authentication tokens in memory from the active Azure CLI user profile.
 - This token acquisition mechanism avoids storing long lived cloud service principal credentials on the operator workstation.
 - The layer retrieves remote state backend credentials through environment variables or Bastion Vault token injection.
+- The Vault provider writes the registry key through the `administrator` Proxy, which `eval "$(vault-proxy-env administrator)"` loads.
 - The root layer does not store project level Workload Identity Federation credentials in Vault.
 - This boundary maintains strict multi-tenant security isolation across independent downstream projects.
 

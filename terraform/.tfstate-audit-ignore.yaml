@@ -34,6 +34,31 @@ ignores:
         - data_json.vault
       reason: The registry holds endpoints, mount paths, policy names, and public certificates.
 
+  group-ai-provider-anthropic:
+    - address: vault_kv_secret_v2.registry_platform_ai_provider_anthropic
+      paths:
+        - data_json.issuer_id
+        - data_json.organization_id
+      reason: The registry publishes the federation issuer and organization identifiers, which carry no credential.
+
+  group-ai-provider-google-cloud:
+    - address: vault_kv_secret_v2.registry_platform_ai_provider_google_cloud
+      paths:
+        - data_json.project_id
+        - data_json.project_number
+        - data_json.pool_id
+        - data_json.provider_id
+      reason: The registry publishes the project and workload identity pool identifiers, which carry no credential.
+
+  group-ai-provider-azure:
+    - address: vault_kv_secret_v2.registry_platform_ai_provider_azure
+      paths:
+        - data_json.tenant_id
+        - data_json.subscription_id
+        - data_json.cognitive_account_id
+        - data_json.openai_endpoint
+      reason: The registry publishes the tenant, subscription, and account identifiers and the endpoint, without credential.
+
   administration-gitlab-project:
     - address: module.github_mirror.gitlab_project_push_mirror.this
       path: url
