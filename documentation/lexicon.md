@@ -4,7 +4,7 @@ This document records the naming conventions which are specific to the Terraform
 
 ## Section 1. Scope and Precedence
 
-1. The organization naming standard `planning/architecture-naming-standard.md` governs every naming axis which the organization naming standard defines.
+1. The organization naming standard `planning/organization-naming-standard.md` governs every naming axis which the organization naming standard defines.
 2. This document MUST NOT redefine a rule of the organization naming standard.
 3. A conflict between this document and the organization naming standard MUST be resolved in favor of the organization naming standard.
 4. This document MUST name only identifiers which exist in the code.
@@ -32,11 +32,11 @@ The following rules of the organization naming standard apply directly in this r
 
 ## Section 3. Operator Identities and Access Roles
 
-1. An operator identity is a key of `operator_vault_proxy.identities` in `workstation-topology.yaml`: `credential-distributor`, `platform-foundation`, `administrator`, and `credential-rotator`.
+1. An operator identity is a key of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor`, `platform-foundation`, `administrator`, `credential-rotator`, `credential-distributor-opgitlab`, and `consumer-opgitlab`.
 2. A certificate authentication role and its client certificate CN MUST carry the prefix `operator-` before the identity, as in `operator-administrator` and `operator-credential-rotator`.
-3. An identity MUST declare its `access_tier` as `credential-distributor`, `tenant`, `administrator`, or `credential-rotator`. The Go domain type `AccessRole` MUST carry the tiers which the CLI resolves, `administrator` and `credential-rotator`.
+3. An identity MUST declare its `access_tier` as `credential-distributor`, `consumer`, `tenant`, `administrator`, or `credential-rotator`. The Go domain type `AccessRole` MUST carry the tiers which the CLI resolves, `administrator` and `credential-rotator`.
 4. A tenant identifier MUST be an owner code formatted as lowercase alphanumerics delimited by hyphens, matching the repository name of the tenant.
-5. A tenant operator AppRole in the Bastion Vault MUST follow the pattern `<owner_code>-terraform-operator`.
+5. The tenant ACL policy in the Bastion Vault MUST follow the pattern `<owner_code>-terraform-operator`, which the cert role `operator-<owner_code>` assigns.
 
 ## Section 4. Vault Mounts and Service Boundaries
 

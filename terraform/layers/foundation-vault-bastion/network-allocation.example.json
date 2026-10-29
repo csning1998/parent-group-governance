@@ -2,5 +2,6 @@
     "domain_suffix": "example.internal",
     "stages": "[\"production\"]",
     "network_cidr": "10.20.0.0/16",
-    "bastion_publish_cidr": "10.20.0.0/24"
+    "bastion_publish_cidr": "10.20.0.0/24",
+    "network_baseline": "{\"host_vip_offset\":250,\"global_mac_prefix\":\"52:54:00\",\"global_mtu\":1450,\"global_mss\":1360,\"node_exporter_port\":9100,\"cidr_subnet_bits\":8,\"cidr_nat_offset\":124,\"cidr_index_max\":248}"
 }

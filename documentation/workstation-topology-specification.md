@@ -89,15 +89,22 @@ The `operator_vault_proxy` map configures workstation-local forwarding proxies t
 - Semantics: Declarative specification of the GitLab access token stored in Bastion Vault, utilized by Terraform HTTP remote state backends.
 - Child fields:
     - `vault_kv_mount` (`string`): KV v2 secrets engine mount path (`secret`).
-    - `vault_kv_path` (`string`): Full secret path holding the state backend token (`parent-group-governance/terraform/state-backend`).
     - `vault_kv_field` (`string`): JSON field name containing the token string (`token`).
     - `terraform_http_username` (`string`): Basic auth HTTP username required by GitLab HTTP remote state API (`gitlab-ci-token`).
 
 #### `operator_vault_proxy.identities`
 
 - Type: `map[string]IdentitySpec`
-- Constraint: Sibling identity keys MUST use role or agent nouns. Sibling keys MUST NOT mix distinct naming dimensions. A tenant proxy key MUST equal the owner code of the tenant, since `outputs.tf` matches identity keys against the tenant registry of `access-tenant.tf`.
+- Constraint: Sibling identity keys MUST name operator Proxy identities. Sibling keys MAY span naming dimensions, since the owner code exclusion of Item F and the reserved words of Item G in Section 3 of the organization naming standard prevent a collision. A tenant proxy key MUST equal the owner code of the tenant, since `outputs.tf` matches identity keys against the tenant registry of `access-tenant.tf`.
 - Semantics: Registry of distinct operational identities running as local proxy systemd services. Callers bind their environment using `vault-proxy-env <identity>`.
+- Fields of `IdentitySpec`:
+    - `listen_port` (`number`): Loopback port of the Proxy, distinct across identities.
+    - `access_tier` (`string`): One of `credential-distributor`, `consumer`, `tenant`, `administrator`, and `credential-rotator`.
+    - `owner_code` (`string`): Owner code of the repository which the identity serves. Code MUST read the owner from this field and MUST NOT split the identity key.
+    - `state_backend_path` (`string`): KV path of the GitLab token of the owner below `<owner_code>/`, such as `opgitlab/terraform/state-backend`. Every tier except `credential-rotator` MUST declare the field, and `vault-proxy-env` exports the token as `TF_HTTP_PASSWORD`.
+    - `allowed_read_secret_paths` and `allowed_write_secret_paths` (`list(string)`): KV paths of whole segments, declared by `credential-distributor` alone.
+    - `allowed_read_registry_paths` (`list(string)`): Registry domains below `platform/`, such as `platform/ai-provider`, declared by `credential-distributor` and `consumer`.
+- Naming: `administrator` and `credential-rotator` carry the tier name, a tenant carries its owner code, and a `credential-distributor` or `consumer` identity carries `<access_tier>-<owner_code>`. The governance `credential-distributor` keeps the bare tier name until every repository runs with its own identity.
 
 ### Item C. Credential Lifecycle Plane: `service_admin_passwords`
 

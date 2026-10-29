@@ -42,14 +42,14 @@ func (b BastionVault) APIEndpoint() string {
 // ProxyIdentity defines one operator proxy instance listening on loopback and mapping to a Vault cert role.
 type ProxyIdentity struct {
 	ListenPort int    `yaml:"listen_port"` // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)
-	AccessTier string `yaml:"access_tier"` // logical privilege tier of the operator role (credential-distributor, tenant, administrator, credential-rotator)
+	AccessTier string `yaml:"access_tier"` // logical privilege tier of the operator role (credential-distributor, consumer, tenant, administrator, credential-rotator)
 }
 
 // OperatorVaultProxy holds client connection parameters and identity mappings for operator Vault proxies.
 type OperatorVaultProxy struct {
 	CertAuthMount    string                   `yaml:"cert_auth_mount"`   // Vault TLS certificate auth mount path matching CN operator-<identity>
 	UserConfigDir    string                   `yaml:"user_config_dir"`   // directory relative to user $HOME storing mTLS client certs and systemd units
-	PlaceholderToken string                   `yaml:"placeholder_token"` // dummy token string required by client headers; stripped and replaced by proxy
+	PlaceholderToken string                   `yaml:"placeholder_token"` // dummy token string required by client headers, which the proxy strips and replaces
 	Identities       map[string]ProxyIdentity `yaml:"identities"`        // operator role entries mapped to their local listener ports and tiers
 }
 
@@ -60,7 +60,7 @@ type ProxyEndpoint struct {
 	CACert     string // absolute filesystem path to local root CA certificate bundle (ca.pem)
 	ClientCert string // absolute filesystem path to operator mTLS client certificate (client.pem)
 	ClientKey  string // absolute filesystem path to operator mTLS client private key (client-key.pem)
-	Token      string // dummy placeholder token (proxy-supplied); proxy replaces it via mTLS
+	Token      string // dummy placeholder token (proxy-supplied), which the proxy replaces via mTLS
 }
 
 // VaultTopology represents the Bastion Vault and operator proxy network endpoints declared in workstation-topology.yaml.

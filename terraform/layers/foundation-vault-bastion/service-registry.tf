@@ -1,6 +1,6 @@
 
 # The registry publishes the facts which tenants consume, in place of terraform_remote_state on this layer.
-# Only this layer writes the mount, hence a tenant cannot widen the facts which bind the tenant.
+# Only pgg layers running as administrator write the mount, hence a tenant cannot widen the facts which bind the tenant.
 resource "vault_mount" "registry" {
   provider    = vault.bastion
   path        = "registry"
@@ -24,6 +24,7 @@ resource "vault_kv_secret_v2" "registry_platform_network_allocation" {
     host_log_rendezvous_cidr         = local.host_segment_cidrs.host_log_rendezvous
     host_log_rendezvous_address      = local.host_log_rendezvous_address
     host_log_rendezvous_server_names = jsonencode(local.host_log_rendezvous_server_names)
+    network_baseline                 = jsonencode(local.network_baseline)
   })
 }
 

@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "5.11.0"
     }
+    vault = {
+      source  = "hashicorp/vault"
+      version = "5.13.0"
+    }
   }
 
   backend "http" {
@@ -30,4 +34,9 @@ provider "azurerm" {
   subscription_id = var.azure_subscription_id
   tenant_id       = var.azure_tenant_id
   features {}
+}
+
+# The Bastion Vault. The .envrc of the layer supplies VAULT_ADDR, VAULT_CACERT, and the credential of the identity.
+provider "vault" {
+  alias = "bastion"
 }

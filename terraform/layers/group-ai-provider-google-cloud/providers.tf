@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/google"
       version = "7.40.0"
     }
+    vault = {
+      source  = "hashicorp/vault"
+      version = "5.13.0"
+    }
   }
 
   backend "http" {
@@ -20,4 +24,9 @@ terraform {
 
 provider "google" {
   project = var.gcp_project_id
+}
+
+# The Bastion Vault. The .envrc of the layer supplies VAULT_ADDR, VAULT_CACERT, and the credential of the identity.
+provider "vault" {
+  alias = "bastion"
 }
