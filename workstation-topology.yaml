@@ -63,6 +63,7 @@ operator_vault_proxy:
       allowed_write_secret_paths: []
       allowed_read_registry_paths:
         - "platform/ai-provider"
+        - "platform/gitlab-group"
     credential-distributor-opgitlab:
       listen_port: 8215
       access_tier: "credential-distributor"
@@ -77,6 +78,7 @@ operator_vault_proxy:
       allowed_write_secret_paths: []
       allowed_read_registry_paths:
         - "platform/ai-provider"
+        - "platform/gitlab-group"
     credential-distributor-gitlab-ci-with-code-reviewer:
       listen_port: 8216
       access_tier: "credential-distributor"
@@ -91,6 +93,7 @@ operator_vault_proxy:
       allowed_write_secret_paths: []
       allowed_read_registry_paths:
         - "platform/ai-provider"
+        - "platform/gitlab-group"
     credential-distributor-generic-agent-criteria-source:
       listen_port: 8217
       access_tier: "credential-distributor"
@@ -117,7 +120,35 @@ operator_vault_proxy:
       access_tier: "consumer"
       owner_code: "platform-observability"
       state_backend_path: "platform-observability/terraform/state-backend"
-      allowed_read_registry_paths: []
+      allowed_read_registry_paths:
+        - "platform/gitlab-group"
+    credential-distributor-personal:
+      listen_port: 8220
+      access_tier: "credential-distributor"
+      owner_code: "personal"
+      state_backend_path: "personal/terraform/state-backend"
+      allowed_read_secret_paths:
+        - "parent-group-governance/ai-provider-console/anthropic"
+        - "parent-group-governance/github/publication"
+        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+      allowed_write_secret_paths: []
+      allowed_read_registry_paths:
+        - "platform/ai-provider"
+        - "platform/gitlab-group"
+    credential-distributor-terraform-provider-sshclient:
+      listen_port: 8221
+      access_tier: "credential-distributor"
+      owner_code: "terraform-provider-sshclient"
+      state_backend_path: "terraform-provider-sshclient/terraform/state-backend"
+      allowed_read_secret_paths:
+        - "parent-group-governance/ai-provider-console/anthropic"
+        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+      allowed_write_secret_paths: []
+      allowed_read_registry_paths:
+        - "platform/ai-provider"
+        - "platform/gitlab-group"
 
 # Credential Lifecycle Plane: Automated service password rotation registry.
 service_admin_passwords:
