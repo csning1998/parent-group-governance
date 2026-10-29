@@ -144,7 +144,7 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 5. A `state_backend_path` lies outside `<owner_code>/` of its identity, which keeps the governance GitLab token with the identities of `parent-group-governance`.
 6. A secret path carries a wildcard or an empty segment, a registry path names anything other than one domain below `platform/`, or a consumer identity declares a secret path.
 
- Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
+Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
 
 #### Item D.2 Workflow of the Operator Vault Proxy
 
