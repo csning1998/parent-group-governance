@@ -31,7 +31,6 @@ operator_vault_proxy:
         - "parent-group-governance/sonarqube/ci-analysis-bot"
         - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
         - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
-        - "gitlab-ci-with-code-reviewer/terraform/state-backend"
       allowed_write_secret_paths: []
       allowed_read_registry_paths:
         - "platform/ai-provider"
