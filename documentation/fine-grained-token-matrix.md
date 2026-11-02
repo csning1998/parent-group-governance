@@ -15,18 +15,20 @@ This document defines the GitLab.com fine-grained personal access tokens across 
 
 ### Item A. Names and Paths
 
-1. A token name MUST follow `terraform-state-backend-<repository name>`. The token name serves display purposes only, placing the kind before the repository name to match operator Proxy identity conventions.
+1. A token name MUST follow `terraform-state-backend-<repository name>`, or `terraform-state-backend-<owner code>` for a subgroup token. The token name serves display purposes only, placing the kind before the repository name to match operator Proxy identity conventions.
 2. A token description MUST be `Bastion Vault secret/<owner code>/terraform/state-backend` to record the exact path hosting the token.
 3. The token MUST reside in the `token` field under `secret/<owner code>/terraform/state-backend`. The `administrator` proxy identity writes to this path.
 
-| Token name                                              | Owner code                      | Project ID | Selected memberships                                                  | Reading identities                                                              |
-| ------------------------------------------------------- | ------------------------------- | ---------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `terraform-state-backend-parent-group-governance`       | `parent-group-governance`       | `86417732` | Group `csning1998-lab` and project `parent-group-governance`          | `credential-distributor`, `administrator`                                       |
-| `terraform-state-backend-platform-foundation`           | `platform-foundation`           | `84608830` | Project `csning1998-lab/platform-engineering-lab/platform-foundation` | `platform-foundation`, `credential-distributor-platform-foundation`             |
-| `terraform-state-backend-on-premise-gitlab-deployment`  | `opgitlab`                      | `82448331` | Project `on-premise-gitlab-deployment`                                | `credential-distributor-opgitlab`, `consumer-opgitlab`                          |
-| `terraform-state-backend-gitlab-ci-with-code-reviewer`  | `gitlab-ci-with-code-reviewer`  | `83083739` | Project `gitlab-ci-with-code-reviewer`                                | `credential-distributor-gitlab-ci-with-code-reviewer`, `credential-distributor` |
-| `terraform-state-backend-generic-agent-criteria-source` | `generic-agent-criteria-source` | `85419450` | Project `generic-agent-criteria-source`                               | `credential-distributor-generic-agent-criteria-source`                          |
-| `terraform-state-backend-platform-observability`        | `platform-observability`        | `87321619` | Project `platform-observability`                                      | `consumer-platform-observability`                                               |
+| Token name                                              | Owner code                      | Project or group ID | Selected memberships                                                  | Reading identities                                                              |
+| ------------------------------------------------------- | ------------------------------- | ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `terraform-state-backend-parent-group-governance`       | `parent-group-governance`       | `86417732`          | Group `csning1998-lab` and project `parent-group-governance`          | `credential-distributor`, `administrator`                                       |
+| `terraform-state-backend-platform-foundation`           | `platform-foundation`           | `84608830`          | Project `csning1998-lab/platform-engineering-lab/platform-foundation` | `platform-foundation`, `credential-distributor-platform-foundation`             |
+| `terraform-state-backend-on-premise-gitlab-deployment`  | `opgitlab`                      | `82448331`          | Project `on-premise-gitlab-deployment`                                | `credential-distributor-opgitlab`, `consumer-opgitlab`                          |
+| `terraform-state-backend-gitlab-ci-with-code-reviewer`  | `gitlab-ci-with-code-reviewer`  | `83083739`          | Project `gitlab-ci-with-code-reviewer`                                | `credential-distributor-gitlab-ci-with-code-reviewer`, `credential-distributor` |
+| `terraform-state-backend-generic-agent-criteria-source` | `generic-agent-criteria-source` | `85419450`          | Project `generic-agent-criteria-source`                               | `credential-distributor-generic-agent-criteria-source`                          |
+| `terraform-state-backend-platform-observability`        | `platform-observability`        | `87321619`          | Project `platform-observability`                                      | `consumer-platform-observability`                                               |
+| `terraform-state-backend-personal`                      | `personal`                      | `137823265`         | Group `csning1998-lab/personal`                                       | `credential-distributor-personal`                                               |
+| `terraform-state-backend-terraform-provider-sshclient`  | `terraform-provider-sshclient`  | `86090557`          | Project `terraform-provider-sshclient`                                | `credential-distributor-terraform-provider-sshclient`                           |
 
 The Reading identities column follows `state_backend_path` and `allowed_read_secret_paths` of `workstation-topology.yaml`. The governance identity `credential-distributor` reads the `gitlab-ci-with-code-reviewer` path through `allowed_read_secret_paths`. The `administrator` identity writes every path of the table.
 
@@ -38,36 +40,37 @@ Action codes: `C` Create, `R` Read, `U` Update, `D` Delete, `L` Lock, `P` Protec
 
 ### Item A. Group and Project Tab
 
-| Category         | Resource                  | `parent-group-governance` | `platform-foundation` | `opgitlab` | `gitlab-ci-with-code-reviewer` | `generic-agent-criteria-source` | `platform-observability` |
-| ---------------- | ------------------------- | ------------------------- | --------------------- | ---------- | ------------------------------ | ------------------------------- | ------------------------ |
-| Projects         | Project                   | RU                        | RU                    | RU         | RU                             | RU                              | RU                       |
-| CI/CD            | Terraform State           | CRL                       | CRL                   | CRL        | CRL                            | CRL                             | CRL                      |
-| CI/CD            | Variable                  | CRUD                      | CRUD                  | CRUD       | CRUD                           | CRUD                            | CRUD                     |
-| CI/CD            | Catalog Resource          | -                         | -                     | -          | CD                             | -                               | -                        |
-| CI/CD            | Runner                    | RUD                       | -                     | -          | -                              | -                               | -                        |
-| Repository       | Branch                    | RP                        | P                     | P          | P                              | P                               | P                        |
-| Repository       | Protected Branch          | RU                        | RU                    | RU         | RU                             | RU                              | RU                       |
-| Repository       | Push Rule                 | R                         | R                     | R          | R                              | R                               | R                        |
-| System Access    | Job Token Scope Allowlist | CRD                       | -                     | -          | -                              | -                               | -                        |
-| Project Features | Remote Mirror             | CRUD                      | CRUD                  | CRUD       | CRUD                           | CRUD                            | CRUD                     |
-| Project Features | Remote Mirror Public Key  | R                         | R                     | R          | R                              | R                               | R                        |
-| Groups           | Group                     | RU                        | -                     | -          | -                              | -                               | -                        |
-| Project Planning | Label                     | CRUD                      | -                     | -          | -                              | -                               | -                        |
+| Category         | Resource                  | `parent-group-governance` | `platform-foundation` | `opgitlab` | `gitlab-ci-with-code-reviewer` | `generic-agent-criteria-source` | `platform-observability` | `personal` | `terraform-provider-sshclient` |
+| ---------------- | ------------------------- | ------------------------- | --------------------- | ---------- | ------------------------------ | ------------------------------- | ------------------------ | ---------- | ------------------------------ |
+| Projects         | Project                   | RU                        | RU                    | RU         | RU                             | RU                              | RU                       | RU         | RU                             |
+| CI/CD            | Terraform State           | CRL                       | CRL                   | CRL        | CRL                            | CRL                             | CRL                      | CRL        | CRL                            |
+| CI/CD            | Variable                  | CRUD                      | CRUD                  | CRUD       | CRUD                           | CRUD                            | CRUD                     | CRUD       | CRUD                           |
+| CI/CD            | Catalog Resource          | -                         | -                     | -          | CD                             | -                               | -                        | -          | -                              |
+| CI/CD            | Runner                    | RUD                       | -                     | -          | -                              | -                               | -                        | -          | -                              |
+| Repository       | Branch                    | RP                        | P                     | P          | P                              | P                               | P                        | P          | P                              |
+| Repository       | Protected Branch          | RU                        | RU                    | RU         | RU                             | RU                              | RU                       | RU         | RU                             |
+| Repository       | Push Rule                 | R                         | R                     | R          | R                              | R                               | R                        | R          | R                              |
+| System Access    | Job Token Scope Allowlist | CRD                       | -                     | -          | -                              | -                               | -                        | -          | -                              |
+| Project Features | Remote Mirror             | CRUD                      | CRUD                  | CRUD       | CRUD                           | CRUD                            | CRUD                     | CRUD       | CRUD                           |
+| Project Features | Remote Mirror Public Key  | R                         | R                     | R          | R                              | R                               | R                        | R          | R                              |
+| Groups           | Group                     | RU                        | -                     | -          | -                              | -                               | -                        | -          | -                              |
+| Project Planning | Label                     | CRUD                      | -                     | -          | -                              | -                               | -                        | -          | -                              |
+| Project Planning | Work Item                 | -                         | -                     | -          | -                              | -                               | -                        | CRUD       | -                              |
 
 ### Item B. User Tab
 
-| Category      | Resource | `parent-group-governance` | `platform-foundation` | `opgitlab` | `gitlab-ci-with-code-reviewer` | `generic-agent-criteria-source` | `platform-observability` |
-| ------------- | -------- | ------------------------- | --------------------- | ---------- | ------------------------------ | ------------------------------- | ------------------------ |
-| System Access | User     | R                         | R                     | R          | R                              | R                               | R                        |
-| Groups        | Group    | C                         | -                     | -          | -                              | -                               | -                        |
-| CI/CD         | Runner   | C                         | -                     | -          | -                              | -                               | -                        |
-| Projects      | Project  | C                         | -                     | -          | -                              | -                               | -                        |
+| Category      | Resource | `parent-group-governance` | `platform-foundation` | `opgitlab` | `gitlab-ci-with-code-reviewer` | `generic-agent-criteria-source` | `platform-observability` | `personal` | `terraform-provider-sshclient` |
+| ------------- | -------- | ------------------------- | --------------------- | ---------- | ------------------------------ | ------------------------------- | ------------------------ | ---------- | ------------------------------ |
+| System Access | User     | R                         | R                     | R          | R                              | R                               | R                        | R          | R                              |
+| Groups        | Group    | C                         | -                     | -          | -                              | -                               | -                        | -          | -                              |
+| CI/CD         | Runner   | C                         | -                     | -          | -                              | -                               | -                        | -          | -                              |
+| Projects      | Project  | C                         | -                     | -          | -                              | -                               | -                        | -          | -                              |
 
 ### Item C. Global Tab
 
-| Category      | Resource | `parent-group-governance` | `platform-foundation` | `opgitlab` | `gitlab-ci-with-code-reviewer` | `generic-agent-criteria-source` | `platform-observability` |
-| ------------- | -------- | ------------------------- | --------------------- | ---------- | ------------------------------ | ------------------------------- | ------------------------ |
-| System Access | Metadata | R                         | R                     | R          | R                              | R                               | R                        |
+| Category      | Resource | `parent-group-governance` | `platform-foundation` | `opgitlab` | `gitlab-ci-with-code-reviewer` | `generic-agent-criteria-source` | `platform-observability` | `personal` | `terraform-provider-sshclient` |
+| ------------- | -------- | ------------------------- | --------------------- | ---------- | ------------------------------ | ------------------------------- | ------------------------ | ---------- | ------------------------------ |
+| System Access | Metadata | R                         | R                     | R          | R                              | R                               | R                        | R          | R                              |
 
 ### Item D. Terraform Consumers
 
@@ -92,6 +95,7 @@ Action codes: `C` Create, `R` Read, `U` Update, `D` Delete, `L` Lock, `P` Protec
 | Groups           | Group                     | C       | Subgroups of `group-topology` through `POST /groups`                                                                                  |
 | Groups           | Group                     | RU      | `gitlab_group` of `group-foundation` and `group-topology`                                                                             |
 | Project Planning | Label                     | CRUD    | `gitlab_group_label` of `group-gitlab-configuration`                                                                                  |
+| Project Planning | Work Item                 | CRUD    | `gitlab_project_milestone` of the repositories below `personal`                                                                       |
 
 1. Only `parent-group-governance` declares `inbound_job_token_scope_project_ids`. All other callers of `provisioner-gitlab-project` retain the default `[]`. `gitlab_project_job_token_scope` therefore provisions no resources for those callers.
 2. `platform-observability` grants Remote Mirror and Remote Mirror Public Key for the GitHub mirror of `provisioner-github-mirror`.
@@ -99,6 +103,7 @@ Action codes: `C` Create, `R` Read, `U` Update, `D` Delete, `L` Lock, `P` Protec
 4. Catalog Resource offers Create and Delete alone.
 5. A downstream token MUST NOT grant Group Read. `generic-agent-criteria-source` reads the public group `csning1998-lab/platform-engineering-lab` through `data.gitlab_group` without Group Read.
 6. A downstream project MUST be created initially through the governance identity, because a project-scoped token cannot exist before project creation. Branch Read and the User tab resources other than User therefore belong to `parent-group-governance` alone.
+7. The GitLab permission specification places the project milestone endpoints `/projects/:id/milestones` under the Work Item resource.
 
 ### Item E. Membership Scope
 
@@ -106,6 +111,7 @@ Action codes: `C` Create, `R` Read, `U` Update, `D` Delete, `L` Lock, `P` Protec
 2. The `parent-group-governance` token therefore reaches the state, variables, and remote mirrors of every repository in `csning1998-lab`.
 3. The chosen path accepts the group wide scope, since the governance identity creates every project and the `administrator` identity writes every repository token.
 4. The associated cost is a governance token whose reach exceeds the state of `parent-group-governance`. Separate tokens for the state backend and the `gitlab` provider would narrow the reach, at the cost of `vault-proxy-env` exporting two tokens per identity.
+5. The `personal` token selects the subgroup `csning1998-lab/personal` and serves every repository below the subgroup through one identity. A personal repository joins without a change to `workstation-topology.yaml` or this document. The associated cost is a shared token without isolation between personal repositories.
 
 ## Section 4. Procedures
 

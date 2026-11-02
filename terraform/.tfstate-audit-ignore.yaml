@@ -59,6 +59,19 @@ ignores:
         - data_json.openai_endpoint
       reason: The registry publishes the tenant, subscription, and account identifiers and the endpoint, without credential.
 
+  group-foundation:
+    - address: vault_kv_secret_v2.registry_platform_gitlab_group_top_level
+      paths:
+        - data_json.group_id
+        - data_json.full_path
+      reason: The registry publishes the identifier and path of the public top-level group, which carry no credential.
+
+  group-topology:
+    - address: vault_kv_secret_v2.registry_platform_gitlab_group_subgroups
+      paths:
+        - data_json.subgroup_ids
+      reason: The registry publishes the subgroup identifiers, which carry no credential.
+
   administration-gitlab-project:
     - address: module.github_mirror.gitlab_project_push_mirror.this
       path: url
