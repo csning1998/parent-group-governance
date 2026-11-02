@@ -130,6 +130,7 @@ operator_vault_proxy:
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
+        - "parent-group-governance/sonarqube/ci-analysis-bot"
         - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
         - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
       allowed_write_secret_paths: []
@@ -143,6 +144,21 @@ operator_vault_proxy:
       state_backend_path: "terraform-provider-sshclient/terraform/state-backend"
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
+        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+      allowed_write_secret_paths: []
+      allowed_read_registry_paths:
+        - "platform/ai-provider"
+        - "platform/gitlab-group"
+    credential-distributor-platform-observability:
+      listen_port: 8222
+      access_tier: "credential-distributor"
+      owner_code: "platform-observability"
+      state_backend_path: "platform-observability/terraform/state-backend"
+      allowed_read_secret_paths:
+        - "parent-group-governance/ai-provider-console/anthropic"
+        - "parent-group-governance/github/publication"
+        - "parent-group-governance/sonarqube/ci-analysis-bot"
         - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
         - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
       allowed_write_secret_paths: []
