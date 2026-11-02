@@ -200,24 +200,42 @@ resource "vault_policy" "operator_administrator" {
         "${local.operator_proxy.state_backend.vault_kv_mount}/delete/${local.governance_owner}/*"   = { capabilities = local.acl_capability.kv_version }
         "${local.operator_proxy.state_backend.vault_kv_mount}/destroy/${local.governance_owner}/*"  = { capabilities = local.acl_capability.kv_version }
       },
-      # The owner writes the GitLab token of each repository, which no tenant ACL or root token covers after revoke-root.
-      merge([for p in distinct(values(local.operator_state_backend_paths)) : {
-        "${local.operator_proxy.state_backend.vault_kv_mount}/data/${p}"     = { capabilities = local.acl_capability.kv_data }
-        "${local.operator_proxy.state_backend.vault_kv_mount}/metadata/${p}" = { capabilities = local.acl_capability.kv_metadata }
-      }]...),
-      merge([for mount in local.foundation_mount_paths : {
-        "sys/mounts/${mount}"      = { capabilities = local.acl_capability.manage_mount }
-        "sys/mounts/${mount}/tune" = { capabilities = local.acl_capability.manage_mount }
-        "${mount}/*"               = { capabilities = local.acl_capability.administer }
-      }]...),
+      # The administrator identity writes repository backend tokens and distributor credentials
+      # since tenant policies are scoped to the owner code of each tenant alone and the bootstrap root token is revoked.
+      merge(
+        [
+          for p in distinct(concat(
+            values(local.operator_state_backend_paths),
+            flatten(
+              [for identity in local.operator_credential_distributor_identities : identity.allowed_read_secret_paths]
+            ),
+            )) : {
+            "${local.operator_proxy.state_backend.vault_kv_mount}/data/${p}"     = { capabilities = local.acl_capability.kv_data }
+            "${local.operator_proxy.state_backend.vault_kv_mount}/metadata/${p}" = { capabilities = local.acl_capability.kv_metadata }
+          }
+        ]...
+      ),
+      merge(
+        [
+          for mount in local.foundation_mount_paths : {
+            "sys/mounts/${mount}"      = { capabilities = local.acl_capability.manage_mount }
+            "sys/mounts/${mount}/tune" = { capabilities = local.acl_capability.manage_mount }
+            "${mount}/*"               = { capabilities = local.acl_capability.administer }
+          }
+        ]...
+      ),
       # The Vault provider reads and tunes an auth method through sys/mounts/auth/<path>.
-      merge([for auth in local.foundation_auth_paths : {
-        "sys/auth/${auth}"             = { capabilities = local.acl_capability.manage_mount }
-        "sys/auth/${auth}/tune"        = { capabilities = local.acl_capability.manage_mount }
-        "sys/mounts/auth/${auth}"      = { capabilities = local.acl_capability.manage_mount }
-        "sys/mounts/auth/${auth}/tune" = { capabilities = local.acl_capability.manage_mount }
-        "auth/${auth}/*"               = { capabilities = local.acl_capability.administer }
-      }]...),
+      merge(
+        [
+          for auth in local.foundation_auth_paths : {
+            "sys/auth/${auth}"             = { capabilities = local.acl_capability.manage_mount }
+            "sys/auth/${auth}/tune"        = { capabilities = local.acl_capability.manage_mount }
+            "sys/mounts/auth/${auth}"      = { capabilities = local.acl_capability.manage_mount }
+            "sys/mounts/auth/${auth}/tune" = { capabilities = local.acl_capability.manage_mount }
+            "auth/${auth}/*"               = { capabilities = local.acl_capability.administer }
+          }
+        ]...
+      ),
       { for audit in local.foundation_audit_paths : "sys/audit/${audit}" => { capabilities = local.acl_capability.manage_mount } },
     )
   })

@@ -188,6 +188,7 @@ The administrator identity replaces the root token after the bootstrap for every
 3. The policy grants `manage_mount` and `administer` capabilities across `foundation_auth_paths` (`approle`, `operator-cert`, `gitlab-saas-ci-job-jwt-provider`).
 4. The policy grants `manage_mount` across `foundation_audit_paths` (`file`, `stdout`) and permits Raft snapshot reads on `sys/storage/raft/snapshot`.
 5. The policy grants CRUD on KV paths under `parent-group-governance/` on the state backend mount.
+6. The policy grants data and metadata writes on the `state_backend_path` of every identity and on every path in `allowed_read_secret_paths` of a credential-distributor identity, since tenant policies are scoped to the owner code of each tenant alone and the bootstrap root token is revoked.
 
 #### Item D.7 Credential Rotator Identity
 
