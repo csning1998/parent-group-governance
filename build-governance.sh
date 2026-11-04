@@ -59,6 +59,11 @@ else
     # The scanner receives copies of the unignored files, the git history, and the coverage reports through podman cp,
     # which bind-mounts no host path and skips ignored trees such as .terraform, node_modules, and Packer output.
     # The copies carry the labels of the container and leave the host files out of reach of the analyzer.
+    # The traps remove the scanner, whose stored configuration holds SONAR_TOKEN, on every exit path.
+    scanner=""
+    remove_scanner() { if [ -n "${scanner}" ]; then podman rm -f "${scanner}" >/dev/null 2>&1 || true; scanner=""; fi; }
+    trap 'rm -f "$coverage_rc"; remove_scanner' EXIT
+    trap 'remove_scanner; exit 130' INT TERM
     scanner=$(SONAR_TOKEN="${sonar_token}" podman create --network host \
         -e SONAR_HOST_URL="${sonar_host_url}" \
         -e SONAR_TOKEN \
@@ -70,12 +75,9 @@ else
         for report in coverage.xml tools/${cli_module}/coverage.out; do
             if [ -e "${report}" ]; then printf '%s\0' "${report}"; fi
         done
-    } | tar -c --null --ignore-failed-read -T - | podman cp - "${scanner}:/usr/src" \
-        || { podman rm -f "${scanner}" >/dev/null; exit 1; }
-    scan_status=0
-    podman start --attach "${scanner}" || scan_status=$?
-    podman rm "${scanner}" >/dev/null
-    [ "${scan_status}" -eq 0 ] || exit "${scan_status}"
+    } | tar -c --null --ignore-failed-read -T - | podman cp - "${scanner}:/usr/src"
+    podman start --attach "${scanner}"
+    remove_scanner
 fi
 
 # Binary compilation MUST produce statically linked, path-independent executables matching deployment images.
