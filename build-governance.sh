@@ -56,14 +56,21 @@ else
     sonar_token=$(eval "${proxy_env}" && vault kv get -mount=secret -field="${sonar_token_field}" "${sonar_token_path}")
     unset proxy_env
 
-    # The scanner receives copies of the analyzed trees without node_modules through podman cp, which bind-mounts no host path.
+    # The scanner receives copies of the unignored files, the git history, and the coverage reports through podman cp,
+    # which bind-mounts no host path and skips ignored trees such as .terraform, node_modules, and Packer output.
     # The copies carry the labels of the container and leave the host files out of reach of the analyzer.
     scanner=$(SONAR_TOKEN="${sonar_token}" podman create --network host \
         -e SONAR_HOST_URL="${sonar_host_url}" \
         -e SONAR_TOKEN \
         -e SONAR_SCANNER_OPTS="-Dsonar.projectKey=${sonar_project_key} -Dsonar.projectBaseDir=/usr/src -Dsonar.qualitygate.wait=true -Dsonar.sources=tools,terraform,ansible -Dsonar.exclusions=**/testdata/**,**/.terraform/**,**/*_test.go,**/tests/test_*.py -Dsonar.tests=tools,ansible -Dsonar.test.inclusions=**/*_test.go,**/tests/test_*.py -Dsonar.go.coverage.reportPaths=tools/${cli_module}/coverage.out -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.python.version=3.14" \
         "${scanner_image}")
-    tar -c --exclude=node_modules -- coverage.xml tools terraform ansible .git .gitignore | podman cp - "${scanner}:/usr/src" \
+    {
+        git ls-files -z --cached --others --exclude-standard -- tools terraform ansible .gitignore
+        printf '%s\0' .git
+        for report in coverage.xml tools/${cli_module}/coverage.out; do
+            if [ -e "${report}" ]; then printf '%s\0' "${report}"; fi
+        done
+    } | tar -c --null --ignore-failed-read -T - | podman cp - "${scanner}:/usr/src" \
         || { podman rm -f "${scanner}" >/dev/null; exit 1; }
     scan_status=0
     podman start --attach "${scanner}" || scan_status=$?
