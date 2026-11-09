@@ -18,6 +18,25 @@
     fail_msg: >-
       bastion_vault is undefined. The playbook MUST load workstation-topology.yaml of the repository root.
 
+# workstation-backup owns every boot trust object. The TPM binding of the disk encryption is meaningless
+# without Secure Boot, hence the trust root refuses the host instead of writing the firmware state.
+- name: "Section 0. Read the Secure Boot state"
+  ansible.builtin.command:
+    argv:
+      - mokutil
+      - --sb-state
+  check_mode: false
+  changed_when: false
+  register: workstation_libvirt_secure_boot_state
+
+- name: "Section 0. Require Secure Boot"
+  ansible.builtin.assert:
+    that:
+      - "'SecureBoot enabled' in workstation_libvirt_secure_boot_state['stdout']"
+    fail_msg: >-
+      The Bastion Vault host MUST boot with Secure Boot enabled. Converge the host with
+      playbooks/workstation_secure_boot.yaml of workstation-backup before this playbook.
+
 # The publish network requires a running virtnetworkd. A host which enables only
 # the socket unit never starts the daemon at boot, which skips libvirt autostart.
 - name: "Section A. Enable the libvirt network daemon after firewalld"

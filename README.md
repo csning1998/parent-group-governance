@@ -300,6 +300,8 @@ The policy `libvirt-to-host` carries priority -1 and target REJECT. The policy d
 
 The zone `trusted` MUST NOT bind an interface or a source. A binding in that zone accepts every port of the host and bypasses the policy and the zone `libvirt`. The role asserts the permanent zone `trusted` holds no binding.
 
+The host MUST boot with Secure Boot enabled. The role asserts the state before any task runs and writes no boot trust object, since `workstation-backup` owns the akmods signing key, the MOK list, and the Secure Boot requirement of the host. Without Secure Boot, a TPM binding to PCR 7 unseals for any boot medium. Secure Boot is therefore the precondition of the TPM binding of the disk encryption, and the trust root refuses a host without Secure Boot. Secure Boot alone does not protect a stolen host, since a live medium signed by the same certificate reproduces PCR 7. The PIN requirement of the TPM binding belongs to `workstation-backup`.
+
 The entrypoint of Item B exits after the polling attempts are exhausted. The restart policy `restart: always` then starts the container again. A missing prerequisite consequently produces a restart loop instead of a single failure.
 
 ```bash
