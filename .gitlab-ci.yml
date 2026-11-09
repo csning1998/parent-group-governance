@@ -37,3 +37,33 @@ include:
   - component: $CI_SERVER_FQDN/csning1998-lab/gitlab-ci-with-code-reviewer/auto-tag@1.8.2
     inputs:
       reviewer_image: $CI_REGISTRY/csning1998-lab/gitlab-ci-with-code-reviewer/reviewer:1.8.2
+
+test:go:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# Coverage paths stay relative to the repository root, which the scanner resolves against sonar.sources.
+test:python:
+  stage: test
+  image: docker.io/library/python:3.14-alpine
+  interruptible: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - pip install --no-cache-dir pytest pytest-cov
+    - printf '[run]\nrelative_files = True\n' > .coveragerc
+    - >-
+      pytest -q -p no:cacheprovider ansible/roles/workstation_vault_audit/tests
+      --cov=ansible/roles/workstation_vault_audit/files --cov-config=.coveragerc --cov-report=xml:coverage.xml
+  artifacts:
+    when: always
+    paths:
+      - coverage.xml
+    expire_in: 1 day
+
+security:sonarqube:
+  needs:
+    - job: test:go
+      optional: true
+    - job: test:python
+      optional: true
