@@ -67,10 +67,10 @@ else
     scanner=$(SONAR_TOKEN="${sonar_token}" podman create --network host \
         -e SONAR_HOST_URL="${sonar_host_url}" \
         -e SONAR_TOKEN \
-        -e SONAR_SCANNER_OPTS="-Dsonar.projectKey=${sonar_project_key} -Dsonar.projectBaseDir=/usr/src -Dsonar.qualitygate.wait=true -Dsonar.sources=tools,terraform,ansible -Dsonar.exclusions=**/testdata/**,**/.terraform/**,**/*_test.go,**/tests/test_*.py -Dsonar.tests=tools,ansible -Dsonar.test.inclusions=**/*_test.go,**/tests/test_*.py -Dsonar.go.coverage.reportPaths=tools/${cli_module}/coverage.out -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.python.version=3.14" \
+        -e SONAR_SCANNER_OPTS="-Dsonar.projectKey=${sonar_project_key} -Dsonar.projectBaseDir=/usr/src -Dsonar.qualitygate.wait=true" \
         "${scanner_image}")
     {
-        git ls-files -z --cached --others --exclude-standard -- tools terraform ansible .gitignore
+        git ls-files -z --cached --others --exclude-standard -- tools terraform ansible sonar-project.properties .gitignore
         printf '%s\0' .git
         for report in coverage.xml tools/${cli_module}/coverage.out; do
             if [ -e "${report}" ]; then printf '%s\0' "${report}"; fi
