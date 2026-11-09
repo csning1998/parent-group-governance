@@ -1,7 +1,6 @@
 ---
 # The policy carries priority -1 and target REJECT, hence the policy decides routed guest traffic
 # to the host before any rule of the zone libvirt-routed, and the Bastion Vault port lives here.
-# Asymmetric return paths rely on rp_filter=2 and ip_forward=1 from hypervisor_baseline.
 - name: "C1. Declare the policy for routed guest traffic to the host"
   ansible.builtin.template:
     src: libvirt-to-host.xml.j2

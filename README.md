@@ -300,6 +300,8 @@ The policy `libvirt-to-host` carries priority -1 and target REJECT. The policy d
 
 The zone `trusted` MUST NOT bind an interface or a source. A binding in that zone accepts every port of the host and bypasses the policy and the zone `libvirt`. The role asserts the permanent zone `trusted` holds no binding.
 
+The host MUST boot with Secure Boot enabled. The role asserts the state before any task runs and writes no boot trust object, since `workstation-backup` owns the akmods signing key, the MOK list, and the Secure Boot requirement of the host. Without Secure Boot, a TPM binding to PCR 7 unseals for any boot medium. Secure Boot is therefore the precondition of the TPM binding of the disk encryption, and the trust root refuses a host without Secure Boot. Secure Boot alone does not protect a stolen host, since a live medium signed by the same certificate reproduces PCR 7. The PIN requirement of the TPM binding belongs to `workstation-backup`.
+
 The entrypoint of Item B exits after the polling attempts are exhausted. The restart policy `restart: always` then starts the container again. A missing prerequisite consequently produces a restart loop instead of a single failure.
 
 ```bash
@@ -307,7 +309,7 @@ ansible-galaxy collection install -r ansible/requirements.yaml
 ./governance host apply-libvirt
 ```
 
-The CLI injects `workstation_libvirt_operator_user` from the operator account, because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The inventory `ansible/inventory/localhost.yaml` declares `workstation_libvirt_scraper_source_cidrs`, the observability scraper segments, and `workstation_libvirt_host_exporter_ports`, the node_exporter and the libvirt exporter which `hypervisor_baseline` of `platform-foundation` installs on the host. The scrape ports are the Bastion Vault metrics port and the declared host exporter ports. An empty segment list keeps every scrape port closed. The role asserts the injected value before any task runs. The firewalld rule relies on the sysctl parameters `rp_filter=2` and `ip_forward=1`, which the role `hypervisor_baseline` of `platform-foundation` declares.
+The CLI injects `workstation_libvirt_operator_user` from the operator account, because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The inventory `ansible/inventory/localhost.yaml` declares `workstation_libvirt_scraper_source_cidrs`, the observability scraper segments, and `workstation_libvirt_host_exporter_ports`, the ports of node_exporter and the libvirt exporter on the host. The scrape ports are the Bastion Vault metrics port and the declared host exporter ports. An empty segment list keeps every scrape port closed. The role asserts the injected value before any task runs.
 
 ### Item D. SonarQube Bootstrap
 
