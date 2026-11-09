@@ -309,7 +309,7 @@ ansible-galaxy collection install -r ansible/requirements.yaml
 ./governance host apply-libvirt
 ```
 
-The CLI injects `workstation_libvirt_operator_user` from the operator account, because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The inventory `ansible/inventory/localhost.yaml` declares `workstation_libvirt_scraper_source_cidrs`, the observability scraper segments, and `workstation_libvirt_host_exporter_ports`, the node_exporter and the libvirt exporter which `hypervisor_baseline` of `platform-foundation` installs on the host. The scrape ports are the Bastion Vault metrics port and the declared host exporter ports. An empty segment list keeps every scrape port closed. The role asserts the injected value before any task runs. The firewalld rule relies on the sysctl parameters `rp_filter=2` and `ip_forward=1`, which the role `hypervisor_baseline` of `platform-foundation` declares.
+The CLI injects `workstation_libvirt_operator_user` from the operator account, because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The inventory `ansible/inventory/localhost.yaml` declares `workstation_libvirt_scraper_source_cidrs`, the observability scraper segments, and `workstation_libvirt_host_exporter_ports`, the ports of node_exporter and the libvirt exporter on the host. The scrape ports are the Bastion Vault metrics port and the declared host exporter ports. An empty segment list keeps every scrape port closed. The role asserts the injected value before any task runs.
 
 ### Item D. SonarQube Bootstrap
 
