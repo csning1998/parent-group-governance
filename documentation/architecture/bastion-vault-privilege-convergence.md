@@ -287,7 +287,7 @@ This section addresses T6 from Section 2 Item C. Network allocation facts govern
 | `pod_network_cidr`     | Bastion KV            | `10.64.0.0/10`     | Pool of the pod network of each Kubernetes cluster, carved by `cidr_index` and `cidr_subnet_bits`                     |
 | `service_network_cidr` | Bastion KV            | `10.128.0.0/12`    | Pool of the service network of each Kubernetes cluster, carved by `cidr_index` and `cidr_subnet_bits`                 |
 
-The locals `cilium_hubble_extra_dns_domains` (`hubble-grpc.cilium.io`, `hubble-relay.cilium.io`) and `kubernetes_default_cluster_domain` (`cluster.local`) are code constants outside the fact object. The Hubble names are the fixed suffixes under which Cilium names Hubble mTLS peers. `cluster.local` is the permitted DNS scope of `pki-leaf-platform` for the Service names of in-cluster raft peers.
+The locals `cilium_hubble_extra_dns_domains` (`hubble-grpc.cilium.io`, `hubble-relay.cilium.io`) and `kubernetes_default_cluster_domain` (`cluster.local`) of `trust-pki-constrained.tf` are code constants outside the fact object. The Hubble names are the fixed suffixes under which Cilium names Hubble mTLS peers. `cluster.local` is the permitted DNS scope of `pki-leaf-platform` for the Service names of in-cluster raft peers.
 
 1. The instance values MUST reside in `secret/parent-group-governance/network/allocation`, which the root token writes during the bootstrap and the administrator identity writes afterwards.
 2. `network-allocation.example.json` documents the fields with example values. Git ignores the instance file `network-allocation.json`.

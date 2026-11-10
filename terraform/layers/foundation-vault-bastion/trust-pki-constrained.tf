@@ -1,4 +1,12 @@
 
+# Name Constraints admit these code constants beside the network allocation facts.
+locals {
+  # Cilium names the Hubble mTLS peers under these fixed suffixes outside the platform domain.
+  cilium_hubble_extra_dns_domains = ["hubble-grpc.cilium.io", "hubble-relay.cilium.io"]
+  # Raft peers of an in-cluster Vault join through the Service names under the cluster domain.
+  kubernetes_default_cluster_domain = "cluster.local"
+}
+
 # Each key names a PKI mount whose RFC 5280 Name Constraints bind the whole subtree, whatever a caller of sign-intermediate passes.
 # An assignable entry declares the policy which the owner may assign on the listed auth scopes, and {owner} expands to the owner.
 locals {

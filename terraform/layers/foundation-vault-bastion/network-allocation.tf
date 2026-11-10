@@ -35,13 +35,11 @@ locals {
     cidr_index_max     = try(tonumber(local.network_baseline_raw.cidr_index_max), 0)
   }
 
-  # Cilium names the Hubble mTLS peers under these fixed suffixes outside the platform domain.
-  cilium_hubble_extra_dns_domains = ["hubble-grpc.cilium.io", "hubble-relay.cilium.io"]
-  # Raft peers of an in-cluster Vault join through the Service names under the cluster domain.
-  kubernetes_default_cluster_domain = "cluster.local"
-
   stage_domains = [for stage in local.network_allocation.stages : "${stage}.${local.network_allocation.domain_suffix}"]
+}
 
+# service-registry.tf publishes the host segments, which derive from the network allocation facts.
+locals {
   # The third octet of each host segment lies outside the catalog numbering of platform-foundation.
   host_segment_indexes = {
     host_telemetry_scrape = 249
@@ -59,7 +57,10 @@ locals {
   host_telemetry_scrape_address    = local.host_segment_cidrs.host_telemetry_scrape != "" ? cidrhost(local.host_segment_cidrs.host_telemetry_scrape, local.host_number) : ""
   host_log_rendezvous_address      = local.host_segment_cidrs.host_log_rendezvous != "" ? cidrhost(local.host_segment_cidrs.host_log_rendezvous, var.host_log_rendezvous_offset) : ""
   host_log_rendezvous_server_names = [for base in local.stage_domains : "host-log-rendezvous.${base}"]
+}
 
+# The preconditions of terraform_data.network_allocation_validation evaluate the checks below.
+locals {
   dns_name_pattern  = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
   dns_label_pattern = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
 
