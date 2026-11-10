@@ -265,26 +265,43 @@ The registration in Item B binds `container_file_t` to a literal path pattern ra
 
 ### Item A. Service Inventory
 
-| Service         | Image                                  | Network                                  | Notes                                                                 |
-| --------------- | -------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------- |
-| `vault-server`  | `hashicorp/vault:2.2.0`                | Host namespace                           | Runs as `HOST_UID:HOST_GID` with `IPC_LOCK` and raft storage          |
-| `gitlab-runner` | `gitlab/gitlab-runner:v19.0.1`         | Host namespace                           | Declares `label=type:container_engine_t` and mounts the Podman socket |
-| `sonarqube`     | `sonarqube:26.7.0.124771-community`    | `sonarqube-internal`, `sonarqube-ci-net` | Published on `127.0.0.1:9000` alone                                   |
-| `sonarqube-db`  | `postgres:18-alpine3.24`               | `sonarqube-internal`                     | Credentials injected from `SONARQUBE_DB_PASSWORD`                     |
-| `commitlint`    | The reviewer image of the CI component | Default                                  | Short lived, invoked by `.githooks/commit-msg`                        |
-| `gitleaks`      | `zricethezav/gitleaks:v8.30.1`         | Default                                  | Short lived, invoked by `.githooks/pre-commit`                        |
+| Service            | Image                                       | Network                                  | Notes                                                                 |
+| ------------------ | ------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------- |
+| `vault-server`     | `hashicorp/vault:2.2.0`                     | Host namespace                           | Runs as `HOST_UID:HOST_GID` with `IPC_LOCK` and raft storage          |
+| `vault-terminator` | Built from `vault/terminator/Containerfile` | Host namespace                           | HAProxy TLS terminator of the publish address, Item B                 |
+| `gitlab-runner`    | `gitlab/gitlab-runner:v19.0.1`              | Host namespace                           | Declares `label=type:container_engine_t` and mounts the Podman socket |
+| `sonarqube`        | `sonarqube:26.7.0.124771-community`         | `sonarqube-internal`, `sonarqube-ci-net` | Published on `127.0.0.1:9000` alone                                   |
+| `sonarqube-db`     | `postgres:18-alpine3.24`                    | `sonarqube-internal`                     | Credentials injected from `SONARQUBE_DB_PASSWORD`                     |
+| `commitlint`       | The reviewer image of the CI component      | Default                                  | Short lived, invoked by `.githooks/commit-msg`                        |
+| `gitleaks`         | `zricethezav/gitleaks:v8.30.1`              | Default                                  | Short lived, invoked by `.githooks/pre-commit`                        |
 
 The bridge network `sonarqube-ci-net` carries a literal name, because the `[runners.docker]` section of the runner configuration references the same name as its `network_mode`. A CI job container therefore reaches SonarQube by service name without any published host port.
 
-### Item B. The Vault Listener Startup Guard
+### Item B. The Vault Listeners and the TLS Terminator
 
-The role `workstation_libvirt` renders `vault/vault.hcl` from `templates/vault.hcl.j2`, and Git ignores the rendered file. The role variables declare every listener address and port once, which the firewalld policy of Item C reuses. The first listener binds the loopback address with `workstation_libvirt_vault_port` for the local operator, Terraform, and the CLI. The second listener binds `workstation_libvirt_publish_network_address` with the same port for guest virtual machines connecting to the host over the hypervisor publish network. The third listener binds the publish address with `workstation_libvirt_vault_metrics_port` and `unauthenticated_metrics_access`, which serves `/v1/sys/metrics` to the observability scrapers without a token, while every other API path of the listener still requires a token. The container reads the file at start, hence a changed listener takes effect after the next restart of `vault-server`.
+The role `workstation_libvirt` renders `vault/vault.hcl`, `vault/vault.env`, `vault/terminator/haproxy.cfg`, and `vault/terminator/terminator.env` from `bastion_vault` of `workstation-topology.yaml`, and Git ignores the rendered files. Every Vault listener binds the loopback address, and the service `vault-terminator` owns the publish address.
 
-Vault exits when any declared TCP listener fails to bind. The host network namespace can present the address `172.16.0.1` later than the start of PID 1, which makes an unconditional start unreliable. The entrypoint therefore polls the host namespace for the address at 0.2 second intervals up to 150 attempts before executing the server.
+1. The listener on `api_port` serves the local operator, Terraform, the CLI, and the Vault Proxies with the ML-DSA-87 chain.
+2. The listener on `publish_backend_port` accepts PROXY protocol v2 with `proxy_protocol_behavior = "use_always"`. Vault trusts the PROXY header of every connection of the listener, hence the listener MUST bind loopback alone.
+3. The listener on `metrics_port` declares `unauthenticated_metrics_access`.
+4. Vault opens a cluster listener one port above every API listener, hence `metrics_port` plus one stays unassigned, and `publish_backend_port` is 8204.
 
-### Item C. Host Prerequisites of the Vault Container
+The terminator runs HAProxy 3.2 with OpenSSL 3.5 from the Ubuntu 26.04 packages. The Vault TCP listener exposes no TLS group parameter, hence the terminator enforces the key exchange.
 
-A host prerequisite is a host setting which the Vault container requires before the container starts. The role `workstation_libvirt` declares five host prerequisites.
+1. The frontend on `publish_address` and `api_port` accepts TLS 1.3 with the groups `MLKEM1024:SecP384r1MLKEM1024` alone and presents the EC P-384 publish certificate, since a guest verifier lacks ML-DSA support. A client which offers `X25519` or `X25519MLKEM768` alone receives alert 40.
+2. The frontend forwards in TCP mode to `publish_backend_port` with `send-proxy-v2`, verifies the ML-DSA-87 certificate of Vault, and keeps the guest source address visible to Vault. The source CIDR binding of the SPIRE Parent AppRole therefore stays effective.
+3. The frontend on `publish_address` and `metrics_port` admits `GET /v1/sys/metrics` alone and denies every other method and path.
+4. The terminator mounts `publish.pem`, `publish-key.pem`, and `ca-ml-dsa-87.pem` of `vault/tls` read-only, which keeps the CA private keys out of the container.
+5. The terminator shares the host with `vault-server`, since the PROXY protocol listener binds loopback. A Bastion Vault on a virtual machine or on a developer machine runs the same image and the same template beside Vault.
+6. The terminator retires when the Vault TCP listener accepts a TLS group restriction. Go supports `MLKEM1024` from 1.27, where the group MUST appear in `CurvePreferences`.
+
+Both containers read the rendered files at start, hence a changed listener takes effect after the next restart of both services. A reissue of `vault/tls` also takes effect after the restart of both services.
+
+HAProxy exits when a bind fails, and the host network namespace can present the publish address later than the start of the container. The entrypoint of `vault-terminator` therefore polls the host namespace for `TERMINATOR_PUBLISH_ADDRESS` at 0.2 second intervals up to 150 attempts before executing HAProxy. `init: true` runs an init process as PID 1, since HAProxy as PID 1 ignores SIGTERM and delays every stop by the full timeout.
+
+### Item C. Host Prerequisites of the Vault Containers
+
+A host prerequisite is a host setting which `vault-server` or `vault-terminator` requires before the container starts. The role `workstation_libvirt` declares five host prerequisites.
 
 1. The libvirt network `vault-bastion-publish` provides the address `172.16.0.1` on the bridge of the network.
 2. The unit `virtnetworkd.service` is enabled, and a drop-in starts the unit after firewalld reports the running state.
@@ -302,7 +319,7 @@ The zone `trusted` MUST NOT bind an interface or a source. A binding in that zon
 
 The host MUST boot with Secure Boot enabled. The role asserts the state before any task runs and writes no boot trust object, since `workstation-backup` owns the akmods signing key, the MOK list, and the Secure Boot requirement of the host. Without Secure Boot, a TPM binding to PCR 7 unseals for any boot medium. Secure Boot is therefore the precondition of the TPM binding of the disk encryption, and the trust root refuses a host without Secure Boot. Secure Boot alone does not protect a stolen host, since a live medium signed by the same certificate reproduces PCR 7. The PIN requirement of the TPM binding belongs to `workstation-backup`.
 
-The entrypoint of Item B exits after the polling attempts are exhausted. The restart policy `restart: always` then starts the container again. A missing prerequisite consequently produces a restart loop instead of a single failure.
+The entrypoint of `vault-terminator` in Item B exits after the polling attempts are exhausted. The restart policy `restart: always` then starts the container again. A missing prerequisite consequently produces a restart loop instead of a single failure.
 
 ```bash
 ansible-galaxy collection install -r ansible/requirements.yaml
