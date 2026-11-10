@@ -20,8 +20,19 @@ workstation_libvirt_publish_network:
 workstation_libvirt_vault:
   config_path: "{{ workstation_libvirt_vault_config_path | default('') }}"
 
+# The compose TLS terminator loads haproxy.cfg and terminator.env from vault/terminator.
+# certificate_dir sets the host TLS directory. tls_dir sets the mount point in the terminator container.
+workstation_libvirt_terminator:
+  config_dir: "{{ workstation_libvirt_vault.config_path | dirname }}/terminator"
+  certificate_dir: "{{ workstation_libvirt_vault.config_path | dirname }}/tls"
+  certificate_files:
+    - publish.pem
+    - publish-key.pem
+    - ca-ml-dsa-87.pem
+  tls_dir: "/etc/haproxy/tls"
+
 # The scrapers read the Bastion Vault metrics listener and the host exporters which the inventory declares.
-# A scraper reaches the host through the gateway of its own segment, hence the rules restrict the source alone.
+# A scraper reaches the host through its segment gateway. Firewall rules restrict the source address alone.
 # An empty scraper_source_cidrs keeps every scrape port closed.
 workstation_libvirt_exporter:
   scraper_source_cidrs: []

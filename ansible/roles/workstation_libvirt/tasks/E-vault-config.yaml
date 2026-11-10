@@ -8,7 +8,7 @@
       workstation_libvirt_vault.config_path must be the absolute path of vault/vault.hcl in the repository.
       The CLI injects this extra var.
 
-# The container reads the file at start, hence a changed listener takes effect after the next restart of vault-server.
+# The vault-server container reads this file at startup. Listener modifications take effect upon container restart.
 - name: "E2. Render the Bastion Vault configuration from the declared listeners"
   ansible.builtin.template:
     src: vault.hcl.j2
@@ -16,3 +16,47 @@
     owner: "{{ workstation_libvirt_operator_user }}"
     group: "{{ workstation_libvirt_operator_user }}"
     mode: "0644"
+
+# The CLI provisions the local CA before running this task. A missing certificate indicates execution outside host apply-all.
+- name: "E3. Stat the certificates which the TLS terminator mounts"
+  ansible.builtin.stat:
+    path: "{{ workstation_libvirt_terminator.certificate_dir }}/{{ item }}"
+  loop: "{{ workstation_libvirt_terminator.certificate_files }}"
+  register: workstation_libvirt_terminator_certificates
+
+- name: "E3. Require the certificates which the TLS terminator mounts"
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: >-
+      {{ item.item }} is missing in {{ workstation_libvirt_terminator.certificate_dir }}.
+      Run ./governance host apply-all, which issues the local CA before this playbook.
+    quiet: true
+  loop: "{{ workstation_libvirt_terminator_certificates.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# The vault-terminator container loads both files at startup. Configuration changes take effect upon container restart.
+- name: "E4. Render the TLS terminator configuration from the declared listeners"
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: "{{ workstation_libvirt_terminator.config_dir }}/haproxy.cfg"
+    owner: "{{ workstation_libvirt_operator_user }}"
+    group: "{{ workstation_libvirt_operator_user }}"
+    mode: "0644"
+
+# Injecting addresses through environment files avoids hardcoding listener addresses in compose.yml.
+- name: "E5. Render the container environment files from the declared listeners"
+  ansible.builtin.copy:
+    content: "{{ item.content }}\n"
+    dest: "{{ item.dest }}"
+    owner: "{{ workstation_libvirt_operator_user }}"
+    group: "{{ workstation_libvirt_operator_user }}"
+    mode: "0644"
+  loop:
+    - dest: "{{ workstation_libvirt_vault.config_path | dirname }}/vault.env"
+      content: "VAULT_ADDR=https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.api_port }}"
+    - dest: "{{ workstation_libvirt_terminator.config_dir }}/terminator.env"
+      content: "TERMINATOR_PUBLISH_ADDRESS={{ bastion_vault.publish_address }}"
+  loop_control:
+    label: "{{ item.dest | basename }}"
