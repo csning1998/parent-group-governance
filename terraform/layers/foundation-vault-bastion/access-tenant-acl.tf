@@ -39,7 +39,7 @@ locals {
       ]
       auth_role = [
         { path = "auth/${vault_auth_backend.approle.path}/role/${code}-*", capability = "manage", assign_scope = "approle" },
-        { path = "auth/${local.gitlab_saas_jwt_mount_path}/role/${code}-*", capability = "manage", assign_scope = "gitlab" },
+        { path = "auth/${vault_jwt_auth_backend.gitlab_saas.path}/role/${code}-*", capability = "manage", assign_scope = "gitlab" },
       ]
       pki = flatten([
         for mount in local.tenant_leaf_mounts[code] : [
