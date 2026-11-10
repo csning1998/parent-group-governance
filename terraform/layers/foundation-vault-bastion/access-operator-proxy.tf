@@ -4,8 +4,6 @@
 locals {
   operator_proxy = local.workstation.operator_vault_proxy
 
-  operator_access_tiers = ["credential-distributor", "consumer", "tenant", "administrator", "credential-rotator"]
-
   operator_credential_distributor_identities = {
     for name, identity in local.operator_proxy.identities : name => identity if identity.access_tier == "credential-distributor"
   }
@@ -26,10 +24,6 @@ locals {
   operator_state_backend_paths = {
     for name, identity in local.operator_proxy.identities : name => identity.state_backend_path if can(identity.state_backend_path)
   }
-  # A distributor or consumer instance name joins the tier and the owner code. The governance distributor keeps the
-  # bare tier name until every downstream repository runs with its own identity.
-  operator_owner_scoped_identities = merge(local.operator_credential_distributor_identities, local.operator_consumer_identities)
-  operator_path_pattern            = "^[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+(-[a-z0-9]+)*)*$"
 
   # The administrator identity manages every mount, auth method, and audit device which this layer declares.
   administrator_mount_paths = concat(
@@ -46,6 +40,16 @@ locals {
     { for name, policy in vault_policy.operator_credential_rotator : name => [policy.name] },
     { for name in keys(local.operator_tenant_identities) : name => [vault_policy.tenant_terraform_operator[name].name, vault_policy.registry_reader[name].name] },
   )
+}
+
+# The preconditions of terraform_data.operator_identities_validation evaluate the checks below.
+locals {
+  operator_access_tiers = ["credential-distributor", "consumer", "tenant", "administrator", "credential-rotator"]
+
+  # A distributor or consumer instance name joins the tier and the owner code. The governance distributor keeps the
+  # bare tier name until every downstream repository runs with its own identity.
+  operator_owner_scoped_identities = merge(local.operator_credential_distributor_identities, local.operator_consumer_identities)
+  operator_path_pattern            = "^[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+(-[a-z0-9]+)*)*$"
 }
 
 resource "terraform_data" "operator_identities_validation" {
