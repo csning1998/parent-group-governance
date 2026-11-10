@@ -184,9 +184,9 @@ The tenant registry lists platforms alone, and a repository of the group registe
 The administrator identity replaces the root token after the bootstrap for everyday `parent-group-governance` post-bootstrap operations.
 
 1. The policy `operator-administrator` manages every mount, auth method, audit device, and policy declared in `foundation-vault-bastion`.
-2. The policy grants `manage_mount` and `administer` capabilities across `foundation_mount_paths` (`pki-root`, `transit-unseal`, `registry`, and constrained intermediate mounts).
-3. The policy grants `manage_mount` and `administer` capabilities across `foundation_auth_paths` (`approle`, `operator-cert`, `gitlab-saas-ci-job-jwt-provider`).
-4. The policy grants `manage_mount` across `foundation_audit_paths` (`file`, `stdout`) and permits Raft snapshot reads on `sys/storage/raft/snapshot`.
+2. The policy grants `manage_mount` and `administer` capabilities across `administrator_mount_paths` (`pki-root`, `transit-unseal`, `registry`, and constrained intermediate mounts).
+3. The policy grants `manage_mount` and `administer` capabilities across `administrator_auth_paths` (`approle`, `operator-cert`, `gitlab-saas-ci-job-jwt-provider`).
+4. The policy grants `manage_mount` across `administrator_audit_paths` (`file`, `stdout`) and permits Raft snapshot reads on `sys/storage/raft/snapshot`.
 5. The policy grants CRUD on KV paths under `parent-group-governance/` on the state backend mount.
 6. The policy grants data and metadata writes on the `state_backend_path` of every identity and on every path in `allowed_read_secret_paths` of a credential-distributor identity, since tenant policies are scoped to the owner code of each tenant alone and the bootstrap root token is revoked.
 

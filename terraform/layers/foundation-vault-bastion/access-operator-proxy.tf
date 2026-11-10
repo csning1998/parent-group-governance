@@ -32,12 +32,12 @@ locals {
   operator_path_pattern            = "^[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+(-[a-z0-9]+)*)*$"
 
   # The administrator identity manages every mount, auth method, and audit device which this layer declares.
-  foundation_mount_paths = concat(
+  administrator_mount_paths = concat(
     [vault_mount.pki_root.path, vault_mount.transit_unseal.path, vault_mount.registry.path],
     [for mount in vault_mount.pki_constrained : mount.path],
   )
-  foundation_auth_paths  = [vault_auth_backend.approle.path, vault_auth_backend.operator_cert.path, vault_jwt_auth_backend.gitlab_saas.path]
-  foundation_audit_paths = [vault_audit.file.path, vault_audit.stdout.path]
+  administrator_auth_paths  = [vault_auth_backend.approle.path, vault_auth_backend.operator_cert.path, vault_jwt_auth_backend.gitlab_saas.path]
+  administrator_audit_paths = [vault_audit.file.path, vault_audit.stdout.path]
 
   operator_policy_names = merge(
     { for name, policy in vault_policy.operator_credential_distributor : name => [policy.name] },
@@ -217,7 +217,7 @@ resource "vault_policy" "operator_administrator" {
       ),
       merge(
         [
-          for mount in local.foundation_mount_paths : {
+          for mount in local.administrator_mount_paths : {
             "sys/mounts/${mount}"      = { capabilities = local.acl_capability.manage_mount }
             "sys/mounts/${mount}/tune" = { capabilities = local.acl_capability.manage_mount }
             "${mount}/*"               = { capabilities = local.acl_capability.administer }
@@ -227,7 +227,7 @@ resource "vault_policy" "operator_administrator" {
       # The Vault provider reads and tunes an auth method through sys/mounts/auth/<path>.
       merge(
         [
-          for auth in local.foundation_auth_paths : {
+          for auth in local.administrator_auth_paths : {
             "sys/auth/${auth}"             = { capabilities = local.acl_capability.manage_mount }
             "sys/auth/${auth}/tune"        = { capabilities = local.acl_capability.manage_mount }
             "sys/mounts/auth/${auth}"      = { capabilities = local.acl_capability.manage_mount }
@@ -236,7 +236,7 @@ resource "vault_policy" "operator_administrator" {
           }
         ]...
       ),
-      { for audit in local.foundation_audit_paths : "sys/audit/${audit}" => { capabilities = local.acl_capability.manage_mount } },
+      { for audit in local.administrator_audit_paths : "sys/audit/${audit}" => { capabilities = local.acl_capability.manage_mount } },
     )
   })
 }
