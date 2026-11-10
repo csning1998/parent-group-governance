@@ -16,6 +16,9 @@ import sys
 POLICY_PATH = re.compile(r"^sys/policies/acl/")
 ROLE_PATH = re.compile(r"^auth/[^/]+/(role|users|groups|certs)/")
 WRITE_OPERATIONS = {"create", "update", "delete"}
+# vault kv patch issues the operation patch on the data path of a KV v2 secret.
+KV_WRITE_OPERATIONS = WRITE_OPERATIONS | {"patch"}
+KV_V2_PREFIXES = "data|metadata|delete|undelete|destroy"
 
 
 def load_json(path, default):
@@ -97,6 +100,12 @@ def findings(entry, config):
         and operation in WRITE_OPERATIONS
     ):
         yield f"denied policy or role write: {where}"
+    for watched in config["watched_kv_paths"]:
+        watched_path = re.compile(
+            rf"^{re.escape(watched['mount'])}/({KV_V2_PREFIXES})/{re.escape(watched['path'])}$"
+        )
+        if watched_path.match(path) and operation in KV_WRITE_OPERATIONS:
+            yield f"watched KV path write: {where}"
 
 
 def alert(message):

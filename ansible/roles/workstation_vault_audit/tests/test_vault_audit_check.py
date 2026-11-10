@@ -23,8 +23,12 @@ check = load_check_module()
 CONFIG = {
     "transit_mount": "transit-unseal",
     "transit_source_cidrs": ["172.16.127.0/24"],
+    "watched_kv_paths": [
+        {"mount": "secret", "path": "parent-group-governance/network/allocation"}
+    ],
 }
 UNSEAL_PATH = "transit-unseal/decrypt/example-platform-vault-downstream"
+ALLOCATION_DATA_PATH = "secret/data/parent-group-governance/network/allocation"
 
 
 def build_response(
@@ -129,6 +133,48 @@ def build_response(
             CONFIG,
             [],
             id="denied policy read",
+        ),
+        pytest.param(
+            build_response(ALLOCATION_DATA_PATH, operation="patch"),
+            CONFIG,
+            ["watched KV path write"],
+            id="watched path patch",
+        ),
+        pytest.param(
+            build_response(ALLOCATION_DATA_PATH, operation="create"),
+            CONFIG,
+            ["watched KV path write"],
+            id="watched path put",
+        ),
+        pytest.param(
+            build_response(
+                "secret/metadata/parent-group-governance/network/allocation",
+                operation="delete",
+            ),
+            CONFIG,
+            ["watched KV path write"],
+            id="watched path metadata delete",
+        ),
+        pytest.param(
+            build_response(
+                "secret/destroy/parent-group-governance/network/allocation",
+                error="permission denied",
+            ),
+            CONFIG,
+            ["watched KV path write"],
+            id="denied watched path destroy",
+        ),
+        pytest.param(
+            build_response(ALLOCATION_DATA_PATH, operation="read"),
+            CONFIG,
+            [],
+            id="watched path read",
+        ),
+        pytest.param(
+            build_response(f"{ALLOCATION_DATA_PATH}-draft", operation="create"),
+            CONFIG,
+            [],
+            id="sibling path write",
         ),
     ],
 )
