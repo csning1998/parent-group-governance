@@ -84,6 +84,8 @@ services:
       - ./vault/tls/publish.pem:/etc/haproxy/tls/publish.pem:ro
       - ./vault/tls/publish-key.pem:/etc/haproxy/tls/publish-key.pem:ro
       - ./vault/tls/ca-ml-dsa-87.pem:/etc/haproxy/tls/ca-ml-dsa-87.pem:ro
+      - ./vault/tls/terminator-client.pem:/etc/haproxy/tls/terminator-client.pem:ro
+      - ./vault/tls/terminator-client-key.pem:/etc/haproxy/tls/terminator-client-key.pem:ro
     user: "${HOST_UID}:${HOST_GID}"
     network_mode: "host"
     userns_mode: keep-id

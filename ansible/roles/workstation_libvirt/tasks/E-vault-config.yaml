@@ -8,33 +8,36 @@
       workstation_libvirt_vault.config_path must be the absolute path of vault/vault.hcl in the repository.
       The CLI injects this extra var.
 
+# The CLI provisions the local CA before running this task. A missing certificate indicates execution outside host apply-all.
+# The check precedes E3, since vault.hcl names terminator-client.pem and Vault refuses to start without the file.
+- name: "E2. Stat the certificates which the TLS terminator mounts"
+  ansible.builtin.stat:
+    path: "{{ workstation_libvirt_terminator.certificate_dir }}/{{ item }}"
+  loop: "{{ workstation_libvirt_terminator.certificate_files }}"
+  register: workstation_libvirt_terminator_certificates
+
+# Podman creates an empty directory at a missing bind mount source, which a plain existence check accepts.
+- name: "E2. Require the certificates which the TLS terminator mounts"
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: >-
+      {{ item.item }} is missing or is not a regular file in {{ workstation_libvirt_terminator.certificate_dir }}.
+      Run ./governance host apply-all, which issues the local CA before this playbook.
+    quiet: true
+  loop: "{{ workstation_libvirt_terminator_certificates.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 # The vault-server container reads this file at startup. Listener modifications take effect upon container restart.
-- name: "E2. Render the Bastion Vault configuration from the declared listeners"
+- name: "E3. Render the Bastion Vault configuration from the declared listeners"
   ansible.builtin.template:
     src: vault.hcl.j2
     dest: "{{ workstation_libvirt_vault.config_path }}"
     owner: "{{ workstation_libvirt_operator_user }}"
     group: "{{ workstation_libvirt_operator_user }}"
     mode: "0644"
-
-# The CLI provisions the local CA before running this task. A missing certificate indicates execution outside host apply-all.
-- name: "E3. Stat the certificates which the TLS terminator mounts"
-  ansible.builtin.stat:
-    path: "{{ workstation_libvirt_terminator.certificate_dir }}/{{ item }}"
-  loop: "{{ workstation_libvirt_terminator.certificate_files }}"
-  register: workstation_libvirt_terminator_certificates
-
-- name: "E3. Require the certificates which the TLS terminator mounts"
-  ansible.builtin.assert:
-    that:
-      - item.stat.exists
-    fail_msg: >-
-      {{ item.item }} is missing in {{ workstation_libvirt_terminator.certificate_dir }}.
-      Run ./governance host apply-all, which issues the local CA before this playbook.
-    quiet: true
-  loop: "{{ workstation_libvirt_terminator_certificates.results }}"
-  loop_control:
-    label: "{{ item.item }}"
 
 # The vault-terminator container loads both files at startup. Configuration changes take effect upon container restart.
 - name: "E4. Render the TLS terminator configuration from the declared listeners"

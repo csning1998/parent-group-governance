@@ -13,6 +13,10 @@ defaults
 crt-store publish
     load crt "{{ workstation_libvirt_terminator.tls_dir }}/publish.pem" key "{{ workstation_libvirt_terminator.tls_dir }}/publish-key.pem" alias "listener"
 
+# The PROXY protocol listener of Vault accepts this self-signed client certificate alone.
+crt-store terminator
+    load crt "{{ workstation_libvirt_terminator.tls_dir }}/terminator-client.pem" key "{{ workstation_libvirt_terminator.tls_dir }}/terminator-client-key.pem" alias "client"
+
 # TCP mode forwards API traffic with PROXY protocol v2.
 # Preserving the client source address maintains token_bound_cidrs enforcement for the SPIRE Parent AppRole.
 frontend publish_api
@@ -23,7 +27,7 @@ frontend publish_api
 
 backend vault_api
     mode tcp
-    server vault {{ bastion_vault.loopback_address }}:{{ bastion_vault.publish_backend_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem" send-proxy-v2
+    server vault {{ bastion_vault.loopback_address }}:{{ bastion_vault.publish_backend_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem" crt "@terminator/client" send-proxy-v2
 
 frontend publish_metrics
     mode http

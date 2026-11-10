@@ -29,6 +29,8 @@ workstation_libvirt_terminator:
     - publish.pem
     - publish-key.pem
     - ca-ml-dsa-87.pem
+    - terminator-client.pem
+    - terminator-client-key.pem
   tls_dir: "/etc/haproxy/tls"
 
 # The scrapers read the Bastion Vault metrics listener and the host exporters which the inventory declares.

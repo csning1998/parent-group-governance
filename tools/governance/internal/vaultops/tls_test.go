@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -339,6 +340,24 @@ func TestEnsureTerminatorClientCertIssuesOnlyAMissingCertificate(t *testing.T) {
 	}
 	if caAfter := loadCert(t, filepath.Join(tlsDir, tlsNameECCA+".pem")); !caAfter.Equal(caBefore) {
 		t.Error("EnsureTerminatorClientCert replaced the EC P-384 CA")
+	}
+}
+
+// TestEnsureTerminatorClientCertRefusesADirectory asserts refusal when the certificate path resolves to a directory.
+// Podman creates an empty host directory when a bind mount source is missing.
+func TestEnsureTerminatorClientCertRefusesADirectory(t *testing.T) {
+	tlsDir := generateTestTLS(t)
+	certPath := filepath.Join(tlsDir, tlsNameTerminatorClient+".pem")
+	if err := os.Remove(certPath); err != nil {
+		t.Fatalf("remove the terminator client certificate: %v", err)
+	}
+	if err := os.Mkdir(certPath, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", certPath, err)
+	}
+
+	issued, err := EnsureTerminatorClientCert(tlsDir)
+	if issued || err == nil || !strings.Contains(err.Error(), "is not a regular file") {
+		t.Errorf("EnsureTerminatorClientCert = %v, %v, want a refusal naming a non-regular file", issued, err)
 	}
 }
 

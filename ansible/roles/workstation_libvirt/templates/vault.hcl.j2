@@ -22,13 +22,15 @@ listener "tcp" {
 }
 
 # The TLS terminator manages the publish address and forwards guest traffic using PROXY protocol v2.
-# This listener binds strictly to loopback, since Vault unconditionally trusts incoming PROXY headers.
+# The listener requires the terminator client certificate, since any local process can send a forged PROXY header to loopback.
 listener "tcp" {
-  address                 = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.publish_backend_port }}"
-  tls_disable             = false
-  tls_cert_file           = "/opt/vault/tls/loopback.pem"
-  tls_key_file            = "/opt/vault/tls/loopback-key.pem"
-  proxy_protocol_behavior = "use_always"
+  address                            = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.publish_backend_port }}"
+  tls_disable                        = false
+  tls_cert_file                      = "/opt/vault/tls/loopback.pem"
+  tls_key_file                       = "/opt/vault/tls/loopback-key.pem"
+  tls_require_and_verify_client_cert = true
+  tls_client_ca_file                 = "/opt/vault/tls/terminator-client.pem"
+  proxy_protocol_behavior            = "use_always"
 }
 
 # This listener enables tokenless Prometheus metrics scraping. The terminator exposes GET /v1/sys/metrics alone.

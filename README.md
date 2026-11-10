@@ -283,15 +283,16 @@ The role `workstation_libvirt` renders `vault/vault.hcl`, `vault/vault.env`, `va
 
 1. The listener on `api_port` serves the local operator, Terraform, the CLI, and the Vault Proxies with the ML-DSA-87 chain.
 2. The listener on `publish_backend_port` accepts PROXY protocol v2 with `proxy_protocol_behavior = "use_always"`. Vault trusts the PROXY header of every connection of the listener, hence the listener MUST bind loopback alone.
-3. The listener on `metrics_port` declares `unauthenticated_metrics_access`.
-4. Vault opens a cluster listener one port above every API listener, hence `metrics_port` plus one stays unassigned, and `publish_backend_port` is 8204.
+3. Every local process reaches loopback and can send a forged PROXY header. The listener on `publish_backend_port` therefore sets `tls_require_and_verify_client_cert`, and its `tls_client_ca_file` names the self-signed `terminator-client.pem` alone. A connection without that certificate fails the TLS handshake before Vault reads a request.
+4. The listener on `metrics_port` declares `unauthenticated_metrics_access`.
+5. Vault opens a cluster listener one port above every API listener, hence `metrics_port` plus one stays unassigned, and `publish_backend_port` is 8204.
 
 The terminator runs HAProxy 3.2 with OpenSSL 3.5 from the Ubuntu 26.04 packages. The Vault TCP listener exposes no TLS group parameter, hence the terminator enforces the key exchange.
 
 1. The frontend on `publish_address` and `api_port` accepts TLS 1.3 with the groups `MLKEM1024:SecP384r1MLKEM1024` alone and presents the EC P-384 publish certificate, since a guest verifier lacks ML-DSA support. A client which offers `X25519` or `X25519MLKEM768` alone receives alert 40.
-2. The frontend forwards in TCP mode to `publish_backend_port` with `send-proxy-v2`, verifies the ML-DSA-87 certificate of Vault, and keeps the guest source address visible to Vault. The source CIDR binding of the SPIRE Parent AppRole therefore stays effective.
+2. The frontend forwards in TCP mode to `publish_backend_port` with `send-proxy-v2`, verifies the ML-DSA-87 certificate of Vault, presents `terminator-client.pem`, and keeps the guest source address visible to Vault. The source CIDR binding of the SPIRE Parent AppRole therefore stays effective.
 3. The frontend on `publish_address` and `metrics_port` admits `GET /v1/sys/metrics` alone and denies every other method and path.
-4. The terminator mounts `publish.pem`, `publish-key.pem`, and `ca-ml-dsa-87.pem` of `vault/tls` read-only, which keeps the CA private keys out of the container.
+4. The terminator mounts `publish.pem`, `publish-key.pem`, `ca-ml-dsa-87.pem`, `terminator-client.pem`, and `terminator-client-key.pem` of `vault/tls` read-only, which keeps the CA private keys out of the container.
 5. The terminator shares the host with `vault-server`, since the PROXY protocol listener binds loopback. A Bastion Vault on a virtual machine or on a developer machine runs the same image and the same template beside Vault.
 6. The terminator retires when the Vault TCP listener accepts a TLS group restriction. Go supports `MLKEM1024` from 1.27, where the group MUST appear in `CurvePreferences`.
 

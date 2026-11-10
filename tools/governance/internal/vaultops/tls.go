@@ -84,12 +84,15 @@ func GenerateTLS(dir string, listeners Listeners) error {
 // EnsureTerminatorClientCert issues the terminator client certificate when the directory holds none, and reports
 // whether the call issued a certificate. The CAs and the listener certificates stay untouched.
 func EnsureTerminatorClientCert(dir string) (bool, error) {
-	_, err := os.Stat(filepath.Join(dir, tlsNameTerminatorClient+".pem"))
+	path := filepath.Join(dir, tlsNameTerminatorClient+".pem")
+	info, err := os.Stat(path)
 	switch {
-	case err == nil:
+	case err == nil && info.Mode().IsRegular():
 		return false, nil
+	case err == nil:
+		return false, fmt.Errorf("vaultops: %s is not a regular file; remove the path and rerun", path)
 	case !errors.Is(err, fs.ErrNotExist):
-		return false, fmt.Errorf("vaultops: stat %s certificate: %w", tlsNameTerminatorClient, err)
+		return false, fmt.Errorf("vaultops: stat %s: %w", path, err)
 	}
 	if err := issueTerminatorClientCert(dir); err != nil {
 		return false, err
