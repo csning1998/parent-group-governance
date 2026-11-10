@@ -65,8 +65,8 @@ resource "vault_pki_secret_backend_issuer" "root" {
   issuer_ref  = vault_pki_secret_backend_root_cert.root[each.key].issuer_id
   issuer_name = each.key
 
-  issuing_certificates    = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_root.path}/issuer/${each.key}/der"]
-  crl_distribution_points = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_root.path}/issuer/${each.key}/crl/der"]
+  issuing_certificates    = ["${local.vault_bastion_endpoint}/v1/${vault_mount.pki_root.path}/issuer/${each.key}/der"]
+  crl_distribution_points = ["${local.vault_bastion_endpoint}/v1/${vault_mount.pki_root.path}/issuer/${each.key}/crl/der"]
 }
 
 resource "vault_pki_secret_backend_config_issuers" "root" {

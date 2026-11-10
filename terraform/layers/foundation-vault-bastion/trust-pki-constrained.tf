@@ -189,8 +189,8 @@ resource "vault_pki_secret_backend_issuer" "pki_constrained" {
   issuer_ref  = vault_pki_secret_backend_intermediate_set_signed.pki_constrained_set[each.key].imported_issuers[0]
   issuer_name = each.value.algorithm
 
-  issuing_certificates    = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_constrained[each.value.mount].path}/issuer/${each.value.algorithm}/der"]
-  crl_distribution_points = ["${local.bastion_vault_endpoint}/v1/${vault_mount.pki_constrained[each.value.mount].path}/issuer/${each.value.algorithm}/crl/der"]
+  issuing_certificates    = ["${local.vault_bastion_endpoint}/v1/${vault_mount.pki_constrained[each.value.mount].path}/issuer/${each.value.algorithm}/der"]
+  crl_distribution_points = ["${local.vault_bastion_endpoint}/v1/${vault_mount.pki_constrained[each.value.mount].path}/issuer/${each.value.algorithm}/crl/der"]
 }
 
 resource "vault_pki_secret_backend_config_issuers" "pki_constrained_default" {
