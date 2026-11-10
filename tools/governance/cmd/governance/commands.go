@@ -58,7 +58,7 @@ func (a *app) newHostCmd() *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:     "apply-all",
 		Aliases: []string{"all"},
-		Short:   "[Host] Apply all workstation prerequisites: SELinux, libvirt, the local CA when absent, and the Vault Proxies",
+		Short:   "[Host] Apply all workstation prerequisites: SELinux, the local CA when absent, libvirt, and the Vault Proxies",
 		RunE:    func(cmd *cobra.Command, args []string) error { return a.runHostAll(cmd.Context()) },
 	})
 	cmd.AddCommand(&cobra.Command{

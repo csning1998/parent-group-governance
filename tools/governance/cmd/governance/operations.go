@@ -58,8 +58,8 @@ func (a *app) buildLibvirtPlaybook() (hostPlaybook, error) {
 	}, nil
 }
 
-// buildProxyConfig resolves the Vault Proxy configuration of the identity with role, which holds the login of the
-// identity, hence the CLI never reads a token.
+// buildProxyConfig resolves the Vault Proxy configuration for the requested role.
+// Because the local proxy manages identity credentials, the CLI does not handle raw tokens.
 func (a *app) buildProxyConfig(role topology.AccessRole) (vaultclient.Config, error) {
 	ep, err := a.topology.ResolveProxyEndpoint(a.home, role)
 	if err != nil {
@@ -100,11 +100,19 @@ func (a *app) enableVaultKV(ctx context.Context) error {
 }
 
 // ensureLocalCA generates the local CA when vault/tls holds none, since a new CA invalidates every issued certificate.
+// An existing CA keeps its certificates, and only a missing terminator client certificate is issued.
 func (a *app) ensureLocalCA(_ context.Context) error {
-	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err == nil {
-		return nil
+	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err != nil {
+		return a.issueVaultTLS()
 	}
-	return a.issueVaultTLS()
+	issued, err := vaultops.EnsureTerminatorClientCert(a.newVaultPaths().TLSDir())
+	if err != nil {
+		return err
+	}
+	if issued {
+		a.out.Print(ui.OK, "Vault TLS terminator client certificate generated.")
+	}
+	return nil
 }
 
 func (a *app) issueVaultTLS() error {
@@ -250,8 +258,8 @@ func (a *app) rotateCredential(ctx context.Context, key string) error {
 	return err
 }
 
-// runHostAll applies every workstation prerequisite in bootstrap order: SELinux, libvirt, the local CA when absent,
-// and the Vault Proxies, which the local CA signs. The operator enters the privilege escalation password once.
+// runHostAll applies workstation prerequisites in bootstrap order: SELinux, local CA generation,
+// libvirt configuration, and Vault Proxy deployment. The operator enters privilege escalation credentials once.
 func (a *app) runHostAll(ctx context.Context) error {
 	becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
 	if err != nil {
@@ -269,15 +277,15 @@ func (a *app) runHostAll(ctx context.Context) error {
 		return err
 	}
 
+	if err := a.ensureLocalCA(ctx); err != nil {
+		return err
+	}
+
 	libvirtPB, err := a.buildLibvirtPlaybook()
 	if err != nil {
 		return err
 	}
 	if err := a.executePlaybook(ctx, libvirtPB, becomePass); err != nil {
-		return err
-	}
-
-	if err := a.ensureLocalCA(ctx); err != nil {
 		return err
 	}
 

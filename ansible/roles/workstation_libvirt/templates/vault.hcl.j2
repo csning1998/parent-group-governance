@@ -13,7 +13,7 @@ storage "raft" {
 }
 
 # Loopback listener serves host-local administrative operations, bootstrap routines, and local CLI tooling.
-# Every client of the listener MUST verify ML-DSA-87, which requires Go 1.27 or OpenSSL 3.5.
+# Clients connecting to the loopback listener verify ML-DSA-87, requiring Go 1.27 or OpenSSL 3.5.
 listener "tcp" {
   address       = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.api_port }}"
   tls_disable   = false
@@ -21,21 +21,24 @@ listener "tcp" {
   tls_key_file  = "/opt/vault/tls/loopback-key.pem"
 }
 
-# Publish network listener serves guest virtual machines routed across the hypervisor bridge.
-# The listener MUST keep the EC P-384 chain while a guest verifier lacks ML-DSA support.
+# The TLS terminator manages the publish address and forwards guest traffic using PROXY protocol v2.
+# The listener requires the terminator client certificate, since any local process can send a forged PROXY header to loopback.
 listener "tcp" {
-  address       = "{{ bastion_vault.publish_address }}:{{ bastion_vault.api_port }}"
-  tls_disable   = false
-  tls_cert_file = "/opt/vault/tls/publish.pem"
-  tls_key_file  = "/opt/vault/tls/publish-key.pem"
+  address                            = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.publish_backend_port }}"
+  tls_disable                        = false
+  tls_cert_file                      = "/opt/vault/tls/loopback.pem"
+  tls_key_file                       = "/opt/vault/tls/loopback-key.pem"
+  tls_require_and_verify_client_cert = true
+  tls_client_ca_file                 = "/opt/vault/tls/terminator-client.pem"
+  proxy_protocol_behavior            = "use_always"
 }
 
-# Metrics listener permits tokenless Prometheus scraping, restricted by firewalld to authorized scraper CIDRs.
+# This listener enables tokenless Prometheus metrics scraping. The terminator exposes GET /v1/sys/metrics alone.
 listener "tcp" {
-  address       = "{{ bastion_vault.publish_address }}:{{ bastion_vault.metrics_port }}"
+  address       = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.metrics_port }}"
   tls_disable   = false
-  tls_cert_file = "/opt/vault/tls/publish.pem"
-  tls_key_file  = "/opt/vault/tls/publish-key.pem"
+  tls_cert_file = "/opt/vault/tls/loopback.pem"
+  tls_key_file  = "/opt/vault/tls/loopback-key.pem"
 
   telemetry {
     unauthenticated_metrics_access = true

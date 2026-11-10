@@ -134,6 +134,9 @@ func TestRunHostPlaybooks_StopsAtTheFirstFailure(t *testing.T) {
 	if got := f.playbooks(t); !slices.Equal(got, want) {
 		t.Errorf("playbooks = %q, want %q", got, want)
 	}
+	if _, err := os.Stat(filepath.Join(f.a.root, "vault", "tls", "ca-ml-dsa-87.pem")); err != nil {
+		t.Errorf("stat the CA certificate: %v, want the local CA before the libvirt playbook", err)
+	}
 }
 
 func newHostFixture(t *testing.T, becomeAnswer, failOn string) *hostFixture {

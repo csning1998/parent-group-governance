@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -128,6 +130,33 @@ func TestGenerateVaultTLSIssuesTheLocalCAOnConfirmation(t *testing.T) {
 	}
 	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err != nil {
 		t.Errorf("ML-DSA-87 CA stat error = %v, want the issued CA", err)
+	}
+}
+
+func TestEnsureLocalCAIssuesAMissingTerminatorClientCertificateUnderTheExistingCA(t *testing.T) {
+	a := newOperationsApp(t, "", true, administratorOnly())
+	tlsDir := a.newVaultPaths().TLSDir()
+	clientCert := filepath.Join(tlsDir, "terminator-client.pem")
+	caBefore, err := os.ReadFile(a.newVaultPaths().TransportRootMLDSA87CACertFile())
+	if err != nil {
+		t.Fatalf("read the ML-DSA-87 CA: %v", err)
+	}
+	if err := os.Remove(clientCert); err != nil {
+		t.Fatalf("remove the terminator client certificate: %v", err)
+	}
+
+	if err := a.ensureLocalCA(context.Background()); err != nil {
+		t.Fatalf("ensureLocalCA: %v", err)
+	}
+	if _, err := os.Stat(clientCert); err != nil {
+		t.Errorf("terminator client certificate stat error = %v, want the issued certificate", err)
+	}
+	caAfter, err := os.ReadFile(a.newVaultPaths().TransportRootMLDSA87CACertFile())
+	if err != nil {
+		t.Fatalf("read the ML-DSA-87 CA: %v", err)
+	}
+	if !bytes.Equal(caAfter, caBefore) {
+		t.Error("ensureLocalCA replaced the existing ML-DSA-87 CA")
 	}
 }
 

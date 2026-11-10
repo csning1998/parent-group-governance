@@ -31,6 +31,9 @@ vault/keys/
 vault/audit/
 # Rendered by the role workstation_libvirt from the declared listener addresses and ports.
 vault/vault.hcl
+vault/vault.env
+vault/terminator/haproxy.cfg
+vault/terminator/terminator.env
 tls/
 terraform/layers/foundation-vault-bastion/tls
 

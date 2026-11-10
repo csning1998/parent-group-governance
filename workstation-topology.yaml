@@ -9,6 +9,8 @@ bastion_vault:
   api_port: 8200
   cluster_port: 8201
   metrics_port: 8202
+  # Vault allocates a cluster listener one port above each API listener, reserving port 8203 for the metrics listener.
+  publish_backend_port: 8204
 
 # Access Plane: Local forwarding proxies mediating mTLS client authentication.
 operator_vault_proxy:

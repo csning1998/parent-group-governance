@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math/big"
 	"net"
 	"os"
@@ -24,6 +25,8 @@ const (
 	tlsNameECCA     = "ca-ec-p384"
 	tlsNameLoopback = "loopback"
 	tlsNamePublish  = "publish"
+	// The PROXY protocol listener trusts this self-signed certificate alone, which rejects every leaf of the local CAs.
+	tlsNameTerminatorClient = "terminator-client"
 )
 
 // Listeners holds the network IP addresses for Vault listener certificates.
@@ -38,7 +41,8 @@ type signingCA struct {
 	key  crypto.Signer
 }
 
-// GenerateTLS creates the two CAs and the two listener certificates under the target directory.
+// GenerateTLS creates the two CAs, the two listener certificates, and the terminator client certificate under the
+// target directory.
 // The publish chain MUST stay EC P-384 until every guest verifier accepts ML-DSA.
 func GenerateTLS(dir string, listeners Listeners) error {
 	if listeners.Loopback == nil || listeners.Publish == nil {
@@ -74,7 +78,43 @@ func GenerateTLS(dir string, listeners Listeners) error {
 	if err := issueListenerCert(dir, tlsNamePublish, publish, ecCA, generateECP384Key); err != nil {
 		return err
 	}
-	return nil
+	return issueTerminatorClientCert(dir)
+}
+
+// EnsureTerminatorClientCert issues the terminator client certificate when the directory holds none, and reports
+// whether the call issued a certificate. The CAs and the listener certificates stay untouched.
+func EnsureTerminatorClientCert(dir string) (bool, error) {
+	path := filepath.Join(dir, tlsNameTerminatorClient+".pem")
+	info, err := os.Stat(path)
+	switch {
+	case err == nil && info.Mode().IsRegular():
+		return false, nil
+	case err == nil:
+		return false, fmt.Errorf("vaultops: %s is not a regular file; remove the path and rerun", path)
+	case !errors.Is(err, fs.ErrNotExist):
+		return false, fmt.Errorf("vaultops: stat %s: %w", path, err)
+	}
+	if err := issueTerminatorClientCert(dir); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func issueTerminatorClientCert(dir string) error {
+	key, err := generateECP384Key()
+	if err != nil {
+		return fmt.Errorf("vaultops: generate %s key: %w", tlsNameTerminatorClient, err)
+	}
+	template := &x509.Certificate{
+		Subject:     pkix.Name{CommonName: "vault-terminator"},
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	der, err := createCertificate(tlsNameTerminatorClient, template, template, key.Public(), key)
+	if err != nil {
+		return err
+	}
+	return writeCertificatePair(dir, tlsNameTerminatorClient, der, key)
 }
 
 func generateMLDSA87Key() (crypto.Signer, error) {
