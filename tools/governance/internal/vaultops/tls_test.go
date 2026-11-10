@@ -210,6 +210,138 @@ func TestGenerateTLSServesTheLoopbackListenerWithMLDSA87(t *testing.T) {
 	}
 }
 
+func TestGenerateTLSIssuesASelfSignedTerminatorClientCertificate(t *testing.T) {
+	tlsDir := generateTestTLS(t)
+	cert := loadCert(t, filepath.Join(tlsDir, tlsNameTerminatorClient+".pem"))
+
+	if cert.IsCA {
+		t.Error("IsCA = true, want a leaf certificate")
+	}
+	if cert.SignatureAlgorithm != x509.ECDSAWithSHA384 {
+		t.Errorf("signature algorithm = %v, want %v", cert.SignatureAlgorithm, x509.ECDSAWithSHA384)
+	}
+	if err := cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature); err != nil {
+		t.Errorf("certificate is not self-signed: %v", err)
+	}
+	if !slices.Equal(cert.ExtKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}) {
+		t.Errorf("extended key usage = %v, want ClientAuth alone", cert.ExtKeyUsage)
+	}
+	if cert.KeyUsage != x509.KeyUsageDigitalSignature {
+		t.Errorf("key usage = %v, want DigitalSignature alone", cert.KeyUsage)
+	}
+	if len(cert.IPAddresses) != 0 || len(cert.DNSNames) != 0 {
+		t.Errorf("SANs = %v %v, want none", cert.IPAddresses, cert.DNSNames)
+	}
+	if _, ok := loadPKCS8Key(t, filepath.Join(tlsDir, tlsNameTerminatorClient+"-key.pem")).(*ecdsa.PrivateKey); !ok {
+		t.Error("terminator client key is not ECDSA")
+	}
+	assertMode(t, filepath.Join(tlsDir, tlsNameTerminatorClient+"-key.pem"), 0o600)
+	assertMode(t, filepath.Join(tlsDir, tlsNameTerminatorClient+".pem"), 0o644)
+	assertCertClockSkewTolerant(t, tlsNameTerminatorClient, cert)
+}
+
+// TestTerminatorClientCertificateAloneAuthenticatesToTheProxyListener mirrors the PROXY protocol listener, which
+// names the terminator client certificate as its tls_client_ca_file.
+func TestTerminatorClientCertificateAloneAuthenticatesToTheProxyListener(t *testing.T) {
+	tlsDir := generateTestTLS(t)
+	server, err := tls.LoadX509KeyPair(filepath.Join(tlsDir, tlsNamePublish+".pem"), filepath.Join(tlsDir, tlsNamePublish+"-key.pem"))
+	if err != nil {
+		t.Fatalf("load the server pair: %v", err)
+	}
+	clientCAs := x509.NewCertPool()
+	clientCAs.AddCert(loadCert(t, filepath.Join(tlsDir, tlsNameTerminatorClient+".pem")))
+	roots := x509.NewCertPool()
+	roots.AddCert(loadCert(t, filepath.Join(tlsDir, tlsNameECCA+".pem")))
+
+	cases := []struct {
+		name         string
+		client       string
+		wantAccepted bool
+	}{
+		{name: "terminator client certificate", client: tlsNameTerminatorClient, wantAccepted: true},
+		{name: "publish certificate of the trusted local CA", client: tlsNamePublish},
+		{name: "no client certificate"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var certs []tls.Certificate
+			if c.client != "" {
+				pair, err := tls.LoadX509KeyPair(filepath.Join(tlsDir, c.client+".pem"), filepath.Join(tlsDir, c.client+"-key.pem"))
+				if err != nil {
+					t.Fatalf("load the %s pair: %v", c.client, err)
+				}
+				certs = []tls.Certificate{pair}
+			}
+			err := handshakeWithClientAuth(t, &tls.Config{
+				Certificates: []tls.Certificate{server},
+				ClientAuth:   tls.RequireAndVerifyClientCert,
+				ClientCAs:    clientCAs,
+				MinVersion:   tls.VersionTLS13,
+			}, &tls.Config{
+				Certificates: certs,
+				RootCAs:      roots,
+				ServerName:   testListeners.Publish.String(),
+				MinVersion:   tls.VersionTLS13,
+			})
+			if (err == nil) != c.wantAccepted {
+				t.Errorf("server handshake error = %v, want accepted %v", err, c.wantAccepted)
+			}
+		})
+	}
+}
+
+// handshakeWithClientAuth returns the server side result, since TLS 1.3 reports a rejected client certificate
+// to the client only on the first read.
+func handshakeWithClientAuth(t *testing.T, serverConfig, clientConfig *tls.Config) error {
+	t.Helper()
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", serverConfig)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() /* WHY: The listener closes after the test reads the result. */ })
+	done := make(chan error, 1)
+	go func() {
+		conn, acceptErr := ln.Accept()
+		if acceptErr != nil {
+			done <- acceptErr
+			return
+		}
+		defer func() { _ = conn.Close() /* WHY: The handshake result is already sent. */ }()
+		done <- conn.(*tls.Conn).Handshake()
+	}()
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	conn, err := tls.DialWithDialer(dialer, "tcp", ln.Addr().String(), clientConfig)
+	if err == nil {
+		defer func() { _ = conn.Close() /* WHY: The server result decides the case. */ }()
+	}
+	return <-done
+}
+
+func TestEnsureTerminatorClientCertIssuesOnlyAMissingCertificate(t *testing.T) {
+	tlsDir := generateTestTLS(t)
+	caBefore := loadCert(t, filepath.Join(tlsDir, tlsNameECCA+".pem"))
+	if err := os.Remove(filepath.Join(tlsDir, tlsNameTerminatorClient+".pem")); err != nil {
+		t.Fatalf("remove the terminator client certificate: %v", err)
+	}
+
+	issued, err := EnsureTerminatorClientCert(tlsDir)
+	if err != nil || !issued {
+		t.Fatalf("EnsureTerminatorClientCert = %v, %v, want an issued certificate", issued, err)
+	}
+	first := loadCert(t, filepath.Join(tlsDir, tlsNameTerminatorClient+".pem"))
+
+	issued, err = EnsureTerminatorClientCert(tlsDir)
+	if err != nil || issued {
+		t.Fatalf("second EnsureTerminatorClientCert = %v, %v, want no new certificate", issued, err)
+	}
+	if second := loadCert(t, filepath.Join(tlsDir, tlsNameTerminatorClient+".pem")); !second.Equal(first) {
+		t.Error("the second call replaced the existing terminator client certificate")
+	}
+	if caAfter := loadCert(t, filepath.Join(tlsDir, tlsNameECCA+".pem")); !caAfter.Equal(caBefore) {
+		t.Error("EnsureTerminatorClientCert replaced the EC P-384 CA")
+	}
+}
+
 func TestGenerateTLSLoadsThePublishListenerPair(t *testing.T) {
 	tlsDir := generateTestTLS(t)
 

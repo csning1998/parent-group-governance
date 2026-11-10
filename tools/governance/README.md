@@ -642,7 +642,7 @@ sequenceDiagram
     participant Vault as Bastion Vault
 
     Op->>VaultOps: GenerateTLS
-    VaultOps->>Disk: 寫入兩個 CA、兩張 listener 憑證及四把私鑰
+    VaultOps->>Disk: 寫入兩個 CA、兩張 listener 憑證、終結點客戶端憑證及五把私鑰
 
     Op->>VaultOps: Init
     VaultOps->>Vault: sys/init 要求 5 把金鑰門檻 3
@@ -701,14 +701,15 @@ func (a *app) newBastionVaultListeners() vaultops.Listeners {
 
 ### Item B. TLS 憑證的產生
 
-`GenerateTLS` 產生兩個自簽的憑證授權單位（CA）與兩張 listener 憑證，全部放在 `vault/tls/` 底下：
+`GenerateTLS` 產生兩個自簽的憑證授權單位（CA）、兩張 listener 憑證與一張 TLS 終結點的客戶端憑證，全部放在 `vault/tls/` 底下：
 
-| 檔案                                       | 金鑰      | 簽發者         | 用途                                                           |
-| ------------------------------------------ | --------- | -------------- | -------------------------------------------------------------- |
-| `ca-ml-dsa-87.pem`、`ca-ml-dsa-87-key.pem` | ML-DSA-87 | 自簽           | loopback listener、每個 Vault Proxy 的 client 與 listener 憑證 |
-| `ca-ec-p384.pem`、`ca-ec-p384-key.pem`     | EC P-384  | 自簽           | publish listener 與 metrics listener                           |
-| `loopback.pem`、`loopback-key.pem`         | ML-DSA-87 | `ca-ml-dsa-87` | loopback listener                                              |
-| `publish.pem`、`publish-key.pem`           | EC P-384  | `ca-ec-p384`   | publish listener 與 metrics listener                           |
+| 檔案                                                 | 金鑰      | 簽發者         | 用途                                                           |
+| ---------------------------------------------------- | --------- | -------------- | -------------------------------------------------------------- |
+| `ca-ml-dsa-87.pem`、`ca-ml-dsa-87-key.pem`           | ML-DSA-87 | 自簽           | loopback listener、每個 Vault Proxy 的 client 與 listener 憑證 |
+| `ca-ec-p384.pem`、`ca-ec-p384-key.pem`               | EC P-384  | 自簽           | publish listener 與 metrics listener                           |
+| `loopback.pem`、`loopback-key.pem`                   | ML-DSA-87 | `ca-ml-dsa-87` | loopback listener                                              |
+| `publish.pem`、`publish-key.pem`                     | EC P-384  | `ca-ec-p384`   | publish listener 與 metrics listener                           |
+| `terminator-client.pem`、`terminator-client-key.pem` | EC P-384  | 自簽           | TLS 終結點連線 PROXY protocol listener 時出示的客戶端憑證      |
 
 publish 這條鏈維持 EC P-384，因為 guest 上的 SPIRE 1.15.4 以 Go 1.26 編譯，無法驗證 ML-DSA 鏈，取捨見 `planning/platform-pki-mechanism.md` Section 3 Item A。第一個動作是把整個目錄清空：
 
@@ -721,7 +722,7 @@ if err := os.MkdirAll(dir, 0o755); err != nil {
 }
 ```
 
-清空而不是逐一覆寫，是因為這八個檔案必須來自同一次產生。CA 憑證是客戶端的信任錨點，listener 憑證是伺服器出示的憑證，如果只覆寫其中一部分，客戶端會拿新的 CA 去驗證舊的伺服器憑證，握手一定失敗，而錯誤訊息只會說憑證無法驗證，不會指出真正的原因是兩者版次不同。這也是選單上這個項目標註會摧毀既有檔案、並且在執行前要求輸入確認的理由。
+清空而不是逐一覆寫，是因為這十個檔案必須來自同一次產生。CA 憑證是客戶端的信任錨點，listener 憑證是伺服器出示的憑證，如果只覆寫其中一部分，客戶端會拿新的 CA 去驗證舊的伺服器憑證，握手一定失敗，而錯誤訊息只會說憑證無法驗證，不會指出真正的原因是兩者版次不同。這也是選單上這個項目標註會摧毀既有檔案、並且在執行前要求輸入確認的理由。
 
 兩個 CA 由同一個 `issueSelfSignedRootCA` 產生，差別只在金鑰產生函數與 `CommonName`（`Vault Transport Root CA ML-DSA-87` 與 `Vault Transport Root CA EC P-384`）。兩個 CA 的主體名稱不同，客戶端把兩個 CA 放進同一個信任庫時，建鏈不會混淆：
 
@@ -753,6 +754,10 @@ publish := &x509.Certificate{
 `issueListenerCert` 為兩張憑證補上 `KeyUsage: DigitalSignature` 與 `ExtKeyUsage: ServerAuth`。ML-DSA 與 ECDSA 都只做簽章，不做金鑰加密。
 
 每張憑證只列出自己 listener 的名稱：容器內部與主機上的 CLI、Terraform、Vault Proxy 走 `localhost` 或 `loopback_address`，虛擬機走 `publish_address`。現行的 TLS 驗證只看主體替代名稱而不再參考 `CommonName`，因此 loopback 憑證無法冒充 publish listener，反之亦然。兩個 IP 都來自 `workstation-topology.yaml`，與 `vault.hcl` 的 listener 同源，所以不需要另外維護。
+
+終結點的客戶端憑證由 `issueTerminatorClientCert` 自簽，`ExtKeyUsage` 只有 `ClientAuth`，沒有主體替代名稱。Vault 讀取 PROXY 標頭的時間點在 TLS 握手之前，主機上任何程序都能連到 loopback 並送出偽造的來源位址。PROXY protocol listener 因此以 `tls_require_and_verify_client_cert` 要求客戶端憑證，`tls_client_ca_file` 只指向這張自簽憑證，本機 CA 簽發的其他憑證都無法通過。金鑰採 EC P-384，Vault 驗證這張憑證時不依賴 ML-DSA 的支援。
+
+`EnsureTerminatorClientCert` 只在這張憑證不存在時簽發，不清空目錄，兩個 CA 與 listener 憑證維持原樣。`ensureLocalCA` 在 CA 已存在時呼叫它，讓既有的 `vault/tls` 不必整組重新簽發就能補上這張憑證。
 
 序號取自密碼學亂數而不是遞增計數：
 
@@ -2056,8 +2061,8 @@ if becomePass == "" {
 `runHostAll` 則依據前置引導的先後順序，一鍵串聯全部環境配置：
 
 1. 套用 SELinux 政策與檔案上下文（`buildSELinuxPlaybook`）。
-2. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca-ml-dsa-87.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA 與兩張 listener 憑證。
-3. 配置 Libvirt 虛擬網路，並產生 Bastion Vault 與 TLS 終結點的設定檔（`buildLibvirtPlaybook`）。這一步會斷言終結點掛載的 `publish.pem`、`publish-key.pem` 與 `ca-ml-dsa-87.pem` 已存在，所以排在本機憑證中心之後。
+2. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca-ml-dsa-87.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA、兩張 listener 憑證與終結點的客戶端憑證。CA 已存在時，只以 `vaultops.EnsureTerminatorClientCert` 補上缺少的終結點客戶端憑證。
+3. 配置 Libvirt 虛擬網路，並產生 Bastion Vault 與 TLS 終結點的設定檔（`buildLibvirtPlaybook`）。這一步會斷言終結點掛載的 `publish.pem`、`publish-key.pem`、`ca-ml-dsa-87.pem`、`terminator-client.pem` 與 `terminator-client-key.pem` 已存在，所以排在本機憑證中心之後。
 4. 部署本機 Vault Proxies（`buildVaultProxyPlaybook`），Proxy 的客戶端憑證由本機 CA 簽發。
 
 #### 3. 身分代理與安全輪替（`buildProxyConfig`、`newRotationClient`、`revokeRootToken`）

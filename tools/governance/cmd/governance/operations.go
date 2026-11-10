@@ -100,11 +100,19 @@ func (a *app) enableVaultKV(ctx context.Context) error {
 }
 
 // ensureLocalCA generates the local CA when vault/tls holds none, since a new CA invalidates every issued certificate.
+// An existing CA keeps its certificates, and only a missing terminator client certificate is issued.
 func (a *app) ensureLocalCA(_ context.Context) error {
-	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err == nil {
-		return nil
+	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err != nil {
+		return a.issueVaultTLS()
 	}
-	return a.issueVaultTLS()
+	issued, err := vaultops.EnsureTerminatorClientCert(a.newVaultPaths().TLSDir())
+	if err != nil {
+		return err
+	}
+	if issued {
+		a.out.Print(ui.OK, "Vault TLS terminator client certificate generated.")
+	}
+	return nil
 }
 
 func (a *app) issueVaultTLS() error {
