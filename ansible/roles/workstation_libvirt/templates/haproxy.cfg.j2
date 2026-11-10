@@ -1,0 +1,37 @@
+# Rendered by Ansible role workstation_libvirt from workstation-topology.yaml listeners.
+# The terminator enforces ML-KEM-1024 key exchange on the publish address, providing controls unavailable in Vault listeners.
+global
+    log stdout format raw local0
+
+defaults
+    log global
+    timeout connect 5s
+    timeout client 300s
+    timeout server 300s
+
+# The publish certificate chain uses EC P-384 until guest verifiers support ML-DSA.
+crt-store publish
+    load crt "{{ workstation_libvirt_terminator.tls_dir }}/publish.pem" key "{{ workstation_libvirt_terminator.tls_dir }}/publish-key.pem" alias "listener"
+
+# TCP mode forwards API traffic with PROXY protocol v2.
+# Preserving the client source address maintains token_bound_cidrs enforcement for the SPIRE Parent AppRole.
+frontend publish_api
+    mode tcp
+    option tcplog
+    bind {{ bastion_vault.publish_address }}:{{ bastion_vault.api_port }} ssl crt "@publish/listener" ssl-min-ver TLSv1.3 curves MLKEM1024:SecP384r1MLKEM1024
+    default_backend vault_api
+
+backend vault_api
+    mode tcp
+    server vault {{ bastion_vault.loopback_address }}:{{ bastion_vault.publish_backend_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem" send-proxy-v2
+
+frontend publish_metrics
+    mode http
+    option httplog
+    bind {{ bastion_vault.publish_address }}:{{ bastion_vault.metrics_port }} ssl crt "@publish/listener" ssl-min-ver TLSv1.3 curves MLKEM1024:SecP384r1MLKEM1024
+    http-request deny unless METH_GET { path /v1/sys/metrics }
+    default_backend vault_metrics
+
+backend vault_metrics
+    mode http
+    server vault {{ bastion_vault.loopback_address }}:{{ bastion_vault.metrics_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem"

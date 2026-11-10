@@ -1,0 +1,7 @@
+# Ubuntu 26.04 provides HAProxy 3.2 with OpenSSL 3.5 for ML-KEM-1024 group support.
+FROM docker.io/library/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+
+# The entrypoint requires iproute2 to poll for the publish address before HAProxy binds.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends haproxy iproute2 \
+    && rm -rf /var/lib/apt/lists/*

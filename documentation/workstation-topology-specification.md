@@ -35,7 +35,7 @@ The `bastion_vault` map configures the network listener endpoints bound by the l
 - Type: `string` (IPv4 address literal)
 - Default: `"172.16.0.1"`
 - Constraint: The address MUST match the host gateway IP address assigned to the libvirt isolated bridge network (`workstation-isolated`).
-- Semantics: Dedicated interface for guest virtual machines provisioned on the isolated bridge network to communicate with Bastion Vault APIs.
+- Semantics: Dedicated interface for guest virtual machines provisioned on the isolated bridge network to communicate with Bastion Vault APIs. The TLS terminator `vault-terminator` binds the address, and no Vault listener binds the address.
 
 #### `bastion_vault.api_port`
 
@@ -56,7 +56,14 @@ The `bastion_vault` map configures the network listener endpoints bound by the l
 - Type: `integer` (TCP port number)
 - Default: `8202`
 - Constraint: The port MUST be a valid, unprivileged TCP port (1024-65535).
-- Semantics: TCP port exposing Prometheus telemetry metrics without authentication.
+- Semantics: TCP port exposing Prometheus telemetry metrics without authentication. Vault binds the port on the loopback address, and the TLS terminator binds the port on the publish address and admits `GET /v1/sys/metrics` alone.
+
+#### `bastion_vault.publish_backend_port`
+
+- Type: `integer` (TCP port number)
+- Default: `8204`
+- Constraint: The port MUST be a valid, unprivileged TCP port (1024-65535). The port MUST differ from `metrics_port` plus one, since Vault opens a cluster listener one port above every API listener.
+- Semantics: Loopback TCP port of the Vault listener which accepts PROXY protocol v2 from the TLS terminator.
 
 ### Item B. Access Plane: `operator_vault_proxy`
 
@@ -151,16 +158,21 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 
 ### Item A. Infrastructure Plane Consumers
 
-| Field              | Consuming Component                | Source File Path                                                     | Usage Description                                  |
-| ------------------ | ---------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------- |
-| `loopback_address` | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `cluster_addr` and loopback listener.    |
-| `publish_address`  | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `api_addr` and isolated bridge listener. |
-| `publish_address`  | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/libvirt-to-host.xml.j2` | Renders firewalld zone rich rule for VM bridge.    |
-| `api_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures TCP port on HTTPS listeners.            |
-| `api_port`         | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.bastion_vault_endpoint`.          |
-| `api_port`         | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Resolves `BastionVault.Endpoint` string.           |
-| `cluster_port`     | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures Raft cluster synchronization TCP port.  |
-| `metrics_port`     | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures unauthenticated telemetry TCP port.     |
+| Field                  | Consuming Component                | Source File Path                                                     | Usage Description                                 |
+| ---------------------- | ---------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
+| `loopback_address`     | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `cluster_addr` and loopback listener.   |
+| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `api_addr`.                             |
+| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/libvirt-to-host.xml.j2` | Renders firewalld zone rich rule for VM bridge.   |
+| `api_port`             | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures TCP port on HTTPS listeners.           |
+| `api_port`             | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.bastion_vault_endpoint`.         |
+| `api_port`             | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Resolves `BastionVault.Endpoint` string.          |
+| `cluster_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures Raft cluster synchronization TCP port. |
+| `metrics_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures unauthenticated telemetry TCP port.    |
+| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/haproxy.cfg.j2`         | Binds the terminator frontends.                   |
+| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `TERMINATOR_PUBLISH_ADDRESS`.             |
+| `loopback_address`     | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `VAULT_ADDR` of `vault-server`.           |
+| `publish_backend_port` | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures the PROXY protocol listener.           |
+| `publish_backend_port` | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/haproxy.cfg.j2`         | Targets the terminator API backend.               |
 
 ### Item B. Access Plane Consumers
 
