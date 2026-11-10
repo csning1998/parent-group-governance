@@ -51,7 +51,7 @@ locals {
   }
 
   # The host keeps the host number of its publish address on every host segment.
-  host_number = tonumber(split(".", local.workstation.bastion_vault.publish_address)[3])
+  host_number = tonumber(split(".", local.workstation.vault_bastion.publish_address)[3])
 
   host_telemetry_scrape_address    = local.host_segment_cidrs.host_telemetry_scrape != "" ? cidrhost(local.host_segment_cidrs.host_telemetry_scrape, local.host_number) : ""
   host_log_rendezvous_address      = local.host_segment_cidrs.host_log_rendezvous != "" ? cidrhost(local.host_segment_cidrs.host_log_rendezvous, var.host_log_rendezvous_offset) : ""
@@ -69,7 +69,7 @@ locals {
 
   # The publish listener of workstation-topology.yaml lies inside the Bastion publish network of the network allocation facts.
   topology_publish_inside_network = can(cidrnetmask(local.network_allocation.bastion_publish_cidr)) ? (
-    cidrhost("${local.workstation.bastion_vault.publish_address}/${split("/", local.network_allocation.bastion_publish_cidr)[1]}", 0) == cidrhost(local.network_allocation.bastion_publish_cidr, 0)
+    cidrhost("${local.workstation.vault_bastion.publish_address}/${split("/", local.network_allocation.bastion_publish_cidr)[1]}", 0) == cidrhost(local.network_allocation.bastion_publish_cidr, 0)
   ) : false
 
   network_allocation_valid = alltrue([
@@ -115,11 +115,11 @@ resource "terraform_data" "network_allocation_validation" {
     }
     precondition {
       condition     = local.topology_publish_inside_network
-      error_message = "bastion_vault.publish_address of workstation-topology.yaml MUST lie inside bastion_publish_cidr of secret/parent-group-governance/network/allocation."
+      error_message = "vault_bastion.publish_address of workstation-topology.yaml MUST lie inside bastion_publish_cidr of secret/parent-group-governance/network/allocation."
     }
     precondition {
       condition     = var.host_log_rendezvous_offset != local.host_number
-      error_message = "host_log_rendezvous_offset MUST differ from the host number of bastion_vault.publish_address in workstation-topology.yaml."
+      error_message = "host_log_rendezvous_offset MUST differ from the host number of vault_bastion.publish_address in workstation-topology.yaml."
     }
   }
 }

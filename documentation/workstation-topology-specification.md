@@ -13,52 +13,52 @@ This specification defines the declarative configuration model for `workstation-
 
 The topology file is organized into three distinct planes:
 
-1. **Infrastructure Plane (`bastion_vault`)**: Configures daemon-level network listener interfaces and port bindings for the local Bastion Vault service.
+1. **Infrastructure Plane (`vault_bastion`)**: Configures daemon-level network listener interfaces and port bindings for the local Bastion Vault service.
 2. **Access Plane (`operator_vault_proxy`)**: Configures local forwarding proxies mediating operator connections via mTLS client certificates, abstracting Vault token lifecycle management away from human operators and automation callers.
 3. **Credential Lifecycle Plane (`service_admin_passwords`)**: Declares the registry of infrastructure service administrative accounts whose passwords undergo automated rotation by the Go governance CLI.
 
 ## Section 3. Schema and Field Reference
 
-### Item A. Infrastructure Plane: `bastion_vault`
+### Item A. Infrastructure Plane: `vault_bastion`
 
-The `bastion_vault` map configures the network listener endpoints bound by the local Bastion Vault instance.
+The `vault_bastion` map configures the network listener endpoints bound by the local Bastion Vault instance.
 
-#### `bastion_vault.loopback_address`
+#### `vault_bastion.loopback_address`
 
 - Type: `string` (IPv4 address literal)
 - Default: `"127.0.0.1"`
 - Constraint: The address MUST be an IPv4 loopback address bound exclusively to host-local loopback interfaces.
 - Semantics: Dedicated interface for local operator CLI interactions and local Vault Proxy egress traffic. Host firewall rules MUST NOT expose this address to external or virtual networks.
 
-#### `bastion_vault.publish_address`
+#### `vault_bastion.publish_address`
 
 - Type: `string` (IPv4 address literal)
 - Default: `"172.16.0.1"`
 - Constraint: The address MUST match the host gateway IP address assigned to the libvirt isolated bridge network (`workstation-isolated`).
 - Semantics: Dedicated interface for guest virtual machines provisioned on the isolated bridge network to communicate with Bastion Vault APIs. The TLS terminator `vault-terminator` binds the address, and no Vault listener binds the address.
 
-#### `bastion_vault.api_port`
+#### `vault_bastion.api_port`
 
 - Type: `integer` (TCP port number)
 - Default: `8200`
 - Constraint: The port MUST be a valid, unprivileged TCP port (1024-65535).
 - Semantics: Primary HTTPS listener port serving Vault client API requests.
 
-#### `bastion_vault.cluster_port`
+#### `vault_bastion.cluster_port`
 
 - Type: `integer` (TCP port number)
 - Default: `8201`
 - Constraint: The port MUST be a valid, unprivileged TCP port (1024-65535).
 - Semantics: TCP port dedicated to Raft storage backend server-to-server cluster synchronization and request forwarding.
 
-#### `bastion_vault.metrics_port`
+#### `vault_bastion.metrics_port`
 
 - Type: `integer` (TCP port number)
 - Default: `8202`
 - Constraint: The port MUST be a valid, unprivileged TCP port (1024-65535).
 - Semantics: TCP port exposing Prometheus telemetry metrics without authentication. Vault binds the port on the loopback address, and the TLS terminator binds the port on the publish address and admits `GET /v1/sys/metrics` alone.
 
-#### `bastion_vault.publish_backend_port`
+#### `vault_bastion.publish_backend_port`
 
 - Type: `integer` (TCP port number)
 - Default: `8204`
@@ -164,7 +164,7 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `api_addr`.                             |
 | `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/libvirt-to-host.xml.j2` | Renders firewalld zone rich rule for VM bridge.   |
 | `api_port`             | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures TCP port on HTTPS listeners.           |
-| `api_port`             | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.bastion_vault_endpoint`.         |
+| `api_port`             | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.vault_bastion_endpoint`.         |
 | `api_port`             | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Resolves `BastionVault.Endpoint` string.          |
 | `cluster_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures Raft cluster synchronization TCP port. |
 | `metrics_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures unauthenticated telemetry TCP port.    |
@@ -186,7 +186,7 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `placeholder_token` | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                        | Sets `ProxyEndpoint.Token` value.                       |
 | `state_backend`     | Ansible workstation_vault_proxy    | `ansible/roles/workstation_vault_proxy/templates/vault-proxy-env.sh.j2` | Queries Bastion Vault to export `TF_HTTP_*` variables.  |
 | `identities`        | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/access-operator-proxy.tf`    | Declares policies and roles per identity.               |
-| `identities`        | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/outputs.tf`                  | Exports `bastion_vault_tenant.operator_role`.           |
+| `identities`        | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/outputs.tf`                  | Exports `vault_bastion_tenant.operator_role`.           |
 | `identities`        | Ansible workstation_vault_proxy    | `ansible/roles/workstation_vault_proxy/tasks/D-service.yaml`            | Deploys systemd unit `vault-proxy@<identity>.service`.  |
 | `identities`        | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                        | Resolves proxy port and checks identity tiers.          |
 | `identities`        | Go CLI operations                  | `tools/governance/cmd/governance/operations.go`                         | References proxy identities for operational flows.      |

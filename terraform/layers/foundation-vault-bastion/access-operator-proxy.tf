@@ -262,10 +262,10 @@ resource "vault_cert_auth_backend_role" "operator" {
   provider             = vault.bastion
   backend              = vault_auth_backend.operator_cert.path
   name                 = "operator-${each.key}"
-  certificate          = data.local_file.bastion_vault_operator_ca.content
+  certificate          = data.local_file.vault_bastion_operator_ca.content
   allowed_common_names = ["operator-${each.key}"]
   token_policies       = local.operator_policy_names[each.key]
   token_ttl            = 60 * 60
   token_max_ttl        = 60 * 60 * 4
-  token_bound_cidrs    = ["${local.workstation.bastion_vault.loopback_address}/32"]
+  token_bound_cidrs    = ["${local.workstation.vault_bastion.loopback_address}/32"]
 }

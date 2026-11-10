@@ -11,7 +11,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 )
 
-const topologyMinimum = `bastion_vault:
+const topologyMinimum = `vault_bastion:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
   api_port: 8200

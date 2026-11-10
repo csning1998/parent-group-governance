@@ -22,20 +22,20 @@ crt-store terminator
 frontend publish_api
     mode tcp
     option tcplog
-    bind {{ bastion_vault.publish_address }}:{{ bastion_vault.api_port }} ssl crt "@publish/listener" ssl-min-ver TLSv1.3 curves MLKEM1024:SecP384r1MLKEM1024
+    bind {{ vault_bastion.publish_address }}:{{ vault_bastion.api_port }} ssl crt "@publish/listener" ssl-min-ver TLSv1.3 curves MLKEM1024:SecP384r1MLKEM1024
     default_backend vault_api
 
 backend vault_api
     mode tcp
-    server vault {{ bastion_vault.loopback_address }}:{{ bastion_vault.publish_backend_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem" crt "@terminator/client" send-proxy-v2
+    server vault {{ vault_bastion.loopback_address }}:{{ vault_bastion.publish_backend_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem" crt "@terminator/client" send-proxy-v2
 
 frontend publish_metrics
     mode http
     option httplog
-    bind {{ bastion_vault.publish_address }}:{{ bastion_vault.metrics_port }} ssl crt "@publish/listener" ssl-min-ver TLSv1.3 curves MLKEM1024:SecP384r1MLKEM1024
+    bind {{ vault_bastion.publish_address }}:{{ vault_bastion.metrics_port }} ssl crt "@publish/listener" ssl-min-ver TLSv1.3 curves MLKEM1024:SecP384r1MLKEM1024
     http-request deny unless METH_GET { path /v1/sys/metrics }
     default_backend vault_metrics
 
 backend vault_metrics
     mode http
-    server vault {{ bastion_vault.loopback_address }}:{{ bastion_vault.metrics_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem"
+    server vault {{ vault_bastion.loopback_address }}:{{ vault_bastion.metrics_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem"

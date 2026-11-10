@@ -58,8 +58,8 @@
     mode: "0644"
   loop:
     - dest: "{{ workstation_libvirt_vault.config_path | dirname }}/vault.env"
-      content: "VAULT_ADDR=https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.api_port }}"
+      content: "VAULT_ADDR=https://{{ vault_bastion.loopback_address }}:{{ vault_bastion.api_port }}"
     - dest: "{{ workstation_libvirt_terminator.config_dir }}/terminator.env"
-      content: "TERMINATOR_PUBLISH_ADDRESS={{ bastion_vault.publish_address }}"
+      content: "TERMINATOR_PUBLISH_ADDRESS={{ vault_bastion.publish_address }}"
   loop_control:
     label: "{{ item.dest | basename }}"

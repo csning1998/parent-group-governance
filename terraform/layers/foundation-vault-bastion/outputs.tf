@@ -1,14 +1,14 @@
 
 # Every output is a category object of the Bastion Vault. A consumer reads one attribute of an object.
-output "bastion_vault" {
+output "vault_bastion" {
   description = "Connection facts of the Bastion Vault instance."
   value = {
-    endpoint             = local.bastion_vault_endpoint
-    listener_ca_cert_pem = local.bastion_vault_listener_ca_bundle_pem
+    endpoint             = local.vault_bastion_endpoint
+    listener_ca_cert_pem = local.vault_bastion_listener_ca_bundle_pem
   }
 }
 
-output "bastion_vault_pki" {
+output "vault_bastion_pki" {
   description = "Certificate chain and mount path of the Bastion Vault PKI hierarchy."
   value = {
     root_certs = {
@@ -27,7 +27,7 @@ output "bastion_vault_pki" {
   }
 }
 
-output "bastion_vault_auth" {
+output "vault_bastion_auth" {
   description = "Mount paths of the auth backends of the Bastion Vault."
   value = {
     approle_mount_path                         = vault_auth_backend.approle.path
@@ -35,7 +35,7 @@ output "bastion_vault_auth" {
   }
 }
 
-output "bastion_vault_tenant" {
+output "vault_bastion_tenant" {
   description = "Owner codes of the tenants registered on the Bastion Vault, and the cert role through which the operator Vault Proxy of each tenant logs in, keyed by owner code."
   value = {
     owner_codes   = keys(local.tenants)
@@ -43,7 +43,7 @@ output "bastion_vault_tenant" {
   }
 }
 
-output "bastion_vault_registry" {
+output "vault_bastion_registry" {
   description = "Mount of the registry which publishes tenant facts, and the read-only policy of each tenant, keyed by owner code. A tenant role references the policy and cannot rewrite the policy."
   value = {
     mount_path      = vault_mount.registry.path
@@ -51,7 +51,7 @@ output "bastion_vault_registry" {
   }
 }
 
-output "bastion_vault_transit_unseal" {
+output "vault_bastion_transit_unseal" {
   description = "Transit mount, and the key and the policy of every auto-unsealing Vault cluster, keyed by consumer. A tenant role references the policy and cannot rewrite the policy."
   value = {
     mount_path = vault_mount.transit_unseal.path

@@ -65,7 +65,7 @@ type ProxyEndpoint struct {
 
 // VaultTopology represents the Bastion Vault and operator proxy network endpoints declared in workstation-topology.yaml.
 type VaultTopology struct {
-	BastionVault       BastionVault       `yaml:"bastion_vault"`        // Bastion Vault network listener bindings
+	BastionVault       BastionVault       `yaml:"vault_bastion"`        // Bastion Vault network listener bindings
 	OperatorVaultProxy OperatorVaultProxy `yaml:"operator_vault_proxy"` // local operator mTLS proxies configuration
 }
 
@@ -106,10 +106,10 @@ func Load(path string) (VaultTopology, error) {
 	}
 	b := v.BastionVault
 	if net.ParseIP(b.LoopbackAddress) == nil || net.ParseIP(b.PublishAddress) == nil {
-		return VaultTopology{}, fmt.Errorf("topology: %s: bastion_vault MUST declare loopback_address and publish_address as IP addresses", path)
+		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion MUST declare loopback_address and publish_address as IP addresses", path)
 	}
 	if b.APIPort < 1 || b.APIPort > 65535 {
-		return VaultTopology{}, fmt.Errorf("topology: %s: bastion_vault.api_port %d is outside 1 to 65535", path, b.APIPort)
+		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion.api_port %d is outside 1 to 65535", path, b.APIPort)
 	}
 	return v, nil
 }

@@ -17,7 +17,7 @@ func writeTopology(t *testing.T, content string) string {
 }
 
 func TestLoad_DerivesEndpoint(t *testing.T) {
-	path := writeTopology(t, `bastion_vault:
+	path := writeTopology(t, `vault_bastion:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
   api_port: 8200
@@ -35,10 +35,10 @@ operator_vault_proxy:
 
 func TestLoad_RejectsIncompleteBastionVault(t *testing.T) {
 	cases := map[string]string{
-		"no publish address": "bastion_vault:\n  loopback_address: \"127.0.0.1\"\n  api_port: 8200\n",
-		"hostname":           "bastion_vault:\n  loopback_address: \"localhost\"\n  publish_address: \"172.16.0.1\"\n  api_port: 8200\n",
-		"no api port":        "bastion_vault:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n",
-		"port out of range":  "bastion_vault:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n  api_port: 70000\n",
+		"no publish address": "vault_bastion:\n  loopback_address: \"127.0.0.1\"\n  api_port: 8200\n",
+		"hostname":           "vault_bastion:\n  loopback_address: \"localhost\"\n  publish_address: \"172.16.0.1\"\n  api_port: 8200\n",
+		"no api port":        "vault_bastion:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n",
+		"port out of range":  "vault_bastion:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n  api_port: 70000\n",
 	}
 	for name, content := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -58,14 +58,14 @@ func TestLoad_FailsWithoutFile(t *testing.T) {
 }
 
 func TestLoad_RejectsMalformedYAML(t *testing.T) {
-	_, err := Load(writeTopology(t, "bastion_vault: [unterminated\n"))
+	_, err := Load(writeTopology(t, "vault_bastion: [unterminated\n"))
 	if err == nil {
 		t.Error("Load error = nil, want a parse failure")
 	}
 }
 
 func TestResolveProxyEndpoint_LocatesTheIdentityOfAnAccess(t *testing.T) {
-	path := writeTopology(t, `bastion_vault:
+	path := writeTopology(t, `vault_bastion:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
   api_port: 8200
