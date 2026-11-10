@@ -2056,9 +2056,9 @@ if becomePass == "" {
 `runHostAll` 則依據前置引導的先後順序，一鍵串聯全部環境配置：
 
 1. 套用 SELinux 政策與檔案上下文（`buildSELinuxPlaybook`）。
-2. 配置 Libvirt 虛擬網路與 Bastion Vault 儲存目錄（`buildLibvirtPlaybook`）。
-3. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca-ml-dsa-87.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA，確保後續 Vault Proxy 能取得正確簽署的伺服器與客戶端憑證。
-4. 部署本機 Vault Proxies（`buildVaultProxyPlaybook`）。
+2. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca-ml-dsa-87.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA 與兩張 listener 憑證。
+3. 配置 Libvirt 虛擬網路，並產生 Bastion Vault 與 TLS 終結點的設定檔（`buildLibvirtPlaybook`）。這一步會斷言終結點掛載的 `publish.pem`、`publish-key.pem` 與 `ca-ml-dsa-87.pem` 已存在，所以排在本機憑證中心之後。
+4. 部署本機 Vault Proxies（`buildVaultProxyPlaybook`），Proxy 的客戶端憑證由本機 CA 簽發。
 
 #### 3. 身分代理與安全輪替（`buildProxyConfig`、`newRotationClient`、`revokeRootToken`）
 
