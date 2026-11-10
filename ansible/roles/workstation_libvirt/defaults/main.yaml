@@ -4,9 +4,8 @@
 # cannot supply the operator name. A hardcoded account name is forbidden.
 workstation_libvirt_operator_user: ""
 
-# Bastion Vault guest-reachability segment. Lives outside service_catalog:
-# cidr_index must exceed cidr_nat_offset (124), leaving octet 0 of
-# 172.16.0.0/24 outside the expressible range of the catalog.
+# The Bastion Vault guest-reachability segment lies outside service_catalog, since cidr_index must exceed
+# cidr_nat_offset (124) and octet 0 of 172.16.0.0/24 lies outside the expressible range of the catalog.
 # The bridge address is bastion_vault.publish_address of workstation-topology.yaml.
 workstation_libvirt_publish_network:
   name: "vault-bastion-publish"
