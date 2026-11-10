@@ -51,7 +51,7 @@
 - `internal/vaultops` 主要管理 Bastion Vault 本身的生命週期，包含產生 TLS 憑證、初始化、解封印、啟用 KV 引擎，以及 root token 的撤銷與緊急產生。詳見 _Section 4_
 - `internal/ui` 是終端機格式化輸出與互動輸入，包含層級化紀錄、選單、確認提示、密碼遮蔽輸入。詳見 _Section 9_
 - `internal/ansibleops` 透過薄封裝的 `go-ansible` 執行 playbook 並注入 `ANSIBLE_CONFIG`。詳見 _Section 9_
-- `internal/topology` 負責解析 `workstation-topology.yaml` 的 `bastion_vault`，產出 `VaultTopology` 物件，提供 Bastion Vault 的 API 端點位址（`APIEndpoint()`）與 listener 憑證的 IP。詳見 _Section 2 Item E_
+- `internal/topology` 負責解析 `workstation-topology.yaml` 的 `vault_bastion`，產出 `VaultTopology` 物件，提供 Bastion Vault 的 API 端點位址（`APIEndpoint()`）與 listener 憑證的 IP。詳見 _Section 2 Item E_
 - `internal/vaultenv` 專門清除程序環境中殘留的 Vault API 環境變數（如 `VAULT_ADDR`、`VAULT_CACERT`、`VAULT_TOKEN` 等共 21 個變數），確保客戶端僅遵循明確指定的組態。詳見 _Section 2_
 - `pkg/credentials` 負責解析 `workstation-topology.yaml` 的 `service_admin_passwords`，轉換為一組可執行的 `Credential`。詳見 _Section 3_
 - `pkg/secretgen` 會依照呼叫端指定的字元類別產生隨機密碼，保證每個要求的類別至少出現一次。詳見 _Section 6_
@@ -419,7 +419,7 @@ if err != nil {
 a.topology = topo
 ```
 
-`topology.Load` 回傳 `topology.VaultTopology`，要求 `bastion_vault` 同時宣告 `loopback_address`、`publish_address` 兩個 IP 與一個合法的 `port`，缺任何一項就讓工具在啟動時中止。`APIEndpoint()` 組出 `https://<loopback_address>:<port>`，命令層的 `newBastionVaultListeners` 再把兩個 IP 組成 `vaultops.Listeners`，分別交給 loopback 與 publish 的 listener 憑證。同一份檔案也是 Ansible 渲染 `vault.hcl` 與防火牆規則、Terraform 建立 cert role 的來源，所以位址只在一處宣告。
+`topology.Load` 回傳 `topology.VaultTopology`，要求 `vault_bastion` 同時宣告 `loopback_address`、`publish_address` 兩個 IP 與一個合法的 `port`，缺任何一項就讓工具在啟動時中止。`APIEndpoint()` 組出 `https://<loopback_address>:<port>`，命令層的 `newBastionVaultListeners` 再把兩個 IP 組成 `vaultops.Listeners`，分別交給 loopback 與 publish 的 listener 憑證。同一份檔案也是 Ansible 渲染 `vault.hcl` 與防火牆規則、Terraform 建立 cert role 的來源，所以位址只在一處宣告。
 
 這個設計取代了舊的三段式退回鏈：`credentials.yaml` 的 `vault.address`、`.env` 的 `BASTION_VAULT_ADDR`、`vaultops` 寫死的預設值。三處各自持有同一個位址字面值，修改時必須同步，漏改的那一處只會在執行到那條路徑時才失敗。現在只有命令層讀取 `topology.BastionVault`，再以 `vaultclient.Config` 與 `vaultops.Listeners` 注入 `vaultops`，沒有任何預設值可以退回。
 
@@ -427,7 +427,7 @@ a.topology = topo
 
 ### Item A. `service_admin_passwords` 宣告與 `Config`
 
-`workstation-topology.yaml` 的 `service_admin_passwords` 宣告所有開發者在 Host 機容器上要做密碼輪替的服務管理員密碼，每一筆是 list 的一個元素。Bastion Vault 的位址由同一份檔案的 `bastion_vault` 決定，見 _Section 2 Item E_。可以設定的欄位如下：
+`workstation-topology.yaml` 的 `service_admin_passwords` 宣告所有開發者在 Host 機容器上要做密碼輪替的服務管理員密碼，每一筆是 list 的一個元素。Bastion Vault 的位址由同一份檔案的 `vault_bastion` 決定，見 _Section 2 Item E_。可以設定的欄位如下：
 
 - `service_admin_passwords`
     - `key`：憑證的唯一識別名稱，會把連字號轉換成底線，作為 Vault 的欄位名稱

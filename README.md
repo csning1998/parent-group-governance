@@ -279,7 +279,7 @@ The bridge network `sonarqube-ci-net` carries a literal name, because the `[runn
 
 ### Item B. The Vault Listeners and the TLS Terminator
 
-The role `workstation_libvirt` renders `vault/vault.hcl`, `vault/vault.env`, `vault/terminator/haproxy.cfg`, and `vault/terminator/terminator.env` from `bastion_vault` of `workstation-topology.yaml`, and Git ignores the rendered files. Every Vault listener binds the loopback address, and the service `vault-terminator` owns the publish address.
+The role `workstation_libvirt` renders `vault/vault.hcl`, `vault/vault.env`, `vault/terminator/haproxy.cfg`, and `vault/terminator/terminator.env` from `vault_bastion` of `workstation-topology.yaml`, and Git ignores the rendered files. Every Vault listener binds the loopback address, and the service `vault-terminator` owns the publish address.
 
 1. The listener on `api_port` serves the local operator, Terraform, the CLI, and the Vault Proxies with the ML-DSA-87 chain.
 2. The listener on `publish_backend_port` accepts PROXY protocol v2 with `proxy_protocol_behavior = "use_always"`. Vault trusts the PROXY header of every connection of the listener, hence the listener MUST bind loopback alone.
@@ -387,7 +387,7 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 | `[Credentials] Reconcile Service Admin Passwords with the Live Service`    | `credentials reconcile <credential-key>` | Pushes the value held by Vault out to a drifted live service               |
 | `[Terraform] Audit State Secrets`                                          | `terraform audit-state [--history]`      | Lists state locations holding a secret, see tools/governance Section 11    |
 
-Each key listed under `service_admin_passwords` of `workstation-topology.yaml` becomes one subcommand under `credentials rotate`, and one more under `credentials reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already holds a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears. The CLI reads the Bastion Vault endpoint and the listener addresses of the TLS material from `bastion_vault` of the same file.
+Each key listed under `service_admin_passwords` of `workstation-topology.yaml` becomes one subcommand under `credentials rotate`, and one more under `credentials reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already holds a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears. The CLI reads the Bastion Vault endpoint and the listener addresses of the TLS material from `vault_bastion` of the same file.
 
 ### Item C. Environment File Lifecycle
 

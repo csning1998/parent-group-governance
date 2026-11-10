@@ -290,10 +290,10 @@ The locals `cilium_hubble_extra_dns_domains` (`hubble-grpc.cilium.io`, `hubble-r
 1. The instance values MUST reside in `secret/parent-group-governance/network/allocation`, which the root token writes during the bootstrap and the administrator identity writes afterwards.
 2. `network-allocation.example.json` documents the fields with example values. Git ignores the instance file `network-allocation.json`.
 3. tfvars, `-var`, and `TF_VAR_` MUST NOT be able to override network allocation facts.
-4. `terraform_data.network_allocation_validation` carries a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, when `network_cidr` is not a `/16`, or when `bastion_publish_cidr` differs from segment 0 of `network_cidr`. A further precondition stops the plan when `host_log_rendezvous_offset` equals the host number of `bastion_vault.publish_address`.
+4. `terraform_data.network_allocation_validation` carries a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, when `network_cidr` is not a `/16`, or when `bastion_publish_cidr` differs from segment 0 of `network_cidr`. A further precondition stops the plan when `host_log_rendezvous_offset` equals the host number of `vault_bastion.publish_address`.
 5. A `check` block is not used for the validation, because a failed `check` assertion only produces a warning (refer to the [Terraform check block documentation](https://developer.hashicorp.com/terraform/language/block/check)).
 6. KV v2 keeps every version of the path. A change of the instance values replaces the constrained intermediate certificates in the next plan, which exposes the change during review of the plan.
-7. `bastion_vault.publish_address` of `workstation-topology.yaml` declares the Bastion publish address, and a precondition of `terraform_data.network_allocation_validation` stops the plan when the address lies outside `bastion_publish_cidr`.
+7. `vault_bastion.publish_address` of `workstation-topology.yaml` declares the Bastion publish address, and a precondition of `terraform_data.network_allocation_validation` stops the plan when the address lies outside `bastion_publish_cidr`.
 
 ### Item B. Intermediate CAs Restricted by Name Constraints
 
@@ -421,7 +421,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 
 | Package or role                        | File                                           | Responsibility                                                                                                        |
 | -------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `internal/topology`                    | `topology.go`                                  | Loads `bastion_vault` of `workstation-topology.yaml`, the Bastion endpoint and the listener certificate addresses     |
+| `internal/topology`                    | `topology.go`                                  | Loads `vault_bastion` of `workstation-topology.yaml`, the Bastion endpoint and the listener certificate addresses     |
 | `internal/vaultops`                    | `operator.go`, `paths.go`, `root.go`, `tls.go` | Vault lifecycle and the local CA, with the endpoint and the listener addresses of the topology alone                  |
 | `pkg/secretrotate`                     | `factory_default.go`                           | `AwaitFactoryDefault`, which `vault init` uses to verify that each service still accepts its factory default          |
 | `cmd/governance`                       | `operations.go`, `commands.go`, `menu.go`      | `host apply-all` and the first menu item, which run SELinux, libvirt, the local CA when absent, and the Vault Proxies |
@@ -444,7 +444,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 
 | File                                                                    | Tests                      | Coverage                                                                                                  |
 | ----------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `internal/topology/topology_test.go`                                    | `TestLoad_*`               | Endpoint and listener addresses of the topology, rejection of an incomplete `bastion_vault`, missing file |
+| `internal/topology/topology_test.go`                                    | `TestLoad_*`               | Endpoint and listener addresses of the topology, rejection of an incomplete `vault_bastion`, missing file |
 | `internal/vaultops/tls_test.go`                                         | `TestGenerateTLS*`         | Chain validity, subject alternative names of the topology, refusal without listener addresses, key types  |
 | `pkg/secretrotate/factory_default_test.go`                              | `TestAwaitFactoryDefault*` | Waiting for the service, the retained state verdict, and a credential without a factory default           |
 | `cmd/governance/menu_test.go`                                           | `TestBuildMenuOptions_*`   | Apply All first, Quit last, each host step alone, and the service admin password labels                   |
