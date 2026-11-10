@@ -20,8 +20,9 @@ locals {
     service_network_cidr = lookup(local.network_allocation_raw, "service_network_cidr", "")
   }
 
-  # Every repository which creates a libvirt network on the shared host reads the same baseline from the registry.
-  # A missing or malformed field resolves to an invalid value, hence the precondition below names the field.
+  # Every repository managing libvirt networks on the shared host consumes this registry baseline.
+  # Using try converts missing or malformed attributes into sentinel values, preventing mid-evaluation attribute failures.
+  # The baseline precondition below then catches the invalid values and reports the KV path alongside the expected schema.
   network_baseline_raw = try(jsondecode(lookup(local.network_allocation_raw, "network_baseline", "{}")), {})
   network_baseline = {
     host_vip_offset    = try(tonumber(local.network_baseline_raw.host_vip_offset), -1)
