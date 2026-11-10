@@ -14,3 +14,11 @@ data "local_file" "bastion_vault_operator_ca" {
 data "local_file" "bastion_vault_publish_ca" {
   filename = "${path.root}/../../../vault/tls/ca-ec-p384.pem"
 }
+
+# Consumers trust both Transport Root CAs. The publish listener can switch to ML-DSA without a consumer redeployment.
+# Each certificate ends with one newline. A file without a trailing newline merges two PEM blocks and drops both anchors.
+locals {
+  bastion_vault_listener_ca_bundle_pem = join("", [
+    for pem in [data.local_file.bastion_vault_publish_ca.content, data.local_file.bastion_vault_operator_ca.content] : "${trimspace(pem)}\n"
+  ])
+}
