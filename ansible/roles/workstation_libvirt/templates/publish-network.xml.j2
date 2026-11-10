@@ -2,5 +2,5 @@
   <name>{{ workstation_libvirt_publish_network.name }}</name>
   <forward mode="route"/>
   <bridge stp="on" delay="0"/>
-  <ip address="{{ bastion_vault.publish_address }}" netmask="{{ workstation_libvirt_publish_network.netmask }}"/>
+  <ip address="{{ vault_bastion.publish_address }}" netmask="{{ workstation_libvirt_publish_network.netmask }}"/>
 </network>

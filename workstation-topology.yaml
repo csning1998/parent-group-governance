@@ -3,7 +3,7 @@
 # Specification and engineering references: documentation/workstation-topology-specification.md
 
 # Infrastructure Plane: Network listener bindings for Bastion Vault.
-bastion_vault:
+vault_bastion:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
   api_port: 8200

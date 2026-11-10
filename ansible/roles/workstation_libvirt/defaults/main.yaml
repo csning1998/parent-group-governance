@@ -6,7 +6,7 @@ workstation_libvirt_operator_user: ""
 
 # The Bastion Vault guest-reachability segment lies outside service_catalog, since cidr_index must exceed
 # cidr_nat_offset (124) and octet 0 of 172.16.0.0/24 lies outside the expressible range of the catalog.
-# The bridge address is bastion_vault.publish_address of workstation-topology.yaml.
+# The bridge address is vault_bastion.publish_address of workstation-topology.yaml.
 workstation_libvirt_publish_network:
   name: "vault-bastion-publish"
   netmask: "255.255.255.0"
@@ -14,7 +14,7 @@ workstation_libvirt_publish_network:
   # segment reach Bastion Vault through the routed publish network.
   source_cidr: "172.16.0.0/12"
 
-# vault.hcl.j2 renders the listeners of bastion_vault in workstation-topology.yaml, which the playbook loads.
+# vault.hcl.j2 renders the listeners of vault_bastion in workstation-topology.yaml, which the playbook loads.
 # The CLI injects workstation_libvirt_vault_config_path.
 workstation_libvirt_vault:
   config_path: "{{ workstation_libvirt_vault_config_path | default('') }}"
@@ -40,7 +40,7 @@ workstation_libvirt_exporter:
   host_exporter_ports: []
 
 workstation_libvirt_scrape_ports: >-
-  {{ [bastion_vault.metrics_port] + (workstation_libvirt_exporter.host_exporter_ports | default([])) }}
+  {{ [vault_bastion.metrics_port] + (workstation_libvirt_exporter.host_exporter_ports | default([])) }}
 
 # Seconds which virtnetworkd waits at start for firewalld to report the running state.
 workstation_libvirt_firewalld_ready_timeout: 120

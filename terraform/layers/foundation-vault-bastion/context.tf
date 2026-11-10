@@ -2,7 +2,7 @@
 # The workstation topology and the local CAs of the repository, which this layer reads as files.
 locals {
   workstation            = yamldecode(file("${path.root}/../../../workstation-topology.yaml"))
-  bastion_vault_endpoint = "https://${local.workstation.bastion_vault.publish_address}:${local.workstation.bastion_vault.api_port}"
+  bastion_vault_endpoint = "https://${local.workstation.vault_bastion.publish_address}:${local.workstation.vault_bastion.api_port}"
 }
 
 # The ML-DSA-87 Transport Root CA signs the loopback listener and every operator client certificate.

@@ -1,7 +1,7 @@
 # Rendered by Ansible role workstation_libvirt using listeners defined in workstation-topology.yaml.
 ui            = true
-api_addr      = "https://{{ bastion_vault.publish_address }}:{{ bastion_vault.api_port }}"
-cluster_addr  = "https://{{ bastion_vault.loopback_address }}:{{ bastion_vault.cluster_port }}"
+api_addr      = "https://{{ vault_bastion.publish_address }}:{{ vault_bastion.api_port }}"
+cluster_addr  = "https://{{ vault_bastion.loopback_address }}:{{ vault_bastion.cluster_port }}"
 disable_mlock = false
 
 # Unauthenticated generate-root permits break-glass recovery with unseal key quorum after root token revocation.
@@ -15,7 +15,7 @@ storage "raft" {
 # Loopback listener serves host-local administrative operations, bootstrap routines, and local CLI tooling.
 # Clients connecting to the loopback listener verify ML-DSA-87, requiring Go 1.27 or OpenSSL 3.5.
 listener "tcp" {
-  address       = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.api_port }}"
+  address       = "{{ vault_bastion.loopback_address }}:{{ vault_bastion.api_port }}"
   tls_disable   = false
   tls_cert_file = "/opt/vault/tls/loopback.pem"
   tls_key_file  = "/opt/vault/tls/loopback-key.pem"
@@ -24,7 +24,7 @@ listener "tcp" {
 # The TLS terminator manages the publish address and forwards guest traffic using PROXY protocol v2.
 # The listener requires the terminator client certificate, since any local process can send a forged PROXY header to loopback.
 listener "tcp" {
-  address                            = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.publish_backend_port }}"
+  address                            = "{{ vault_bastion.loopback_address }}:{{ vault_bastion.publish_backend_port }}"
   tls_disable                        = false
   tls_cert_file                      = "/opt/vault/tls/loopback.pem"
   tls_key_file                       = "/opt/vault/tls/loopback-key.pem"
@@ -35,7 +35,7 @@ listener "tcp" {
 
 # This listener enables tokenless Prometheus metrics scraping. The terminator exposes GET /v1/sys/metrics alone.
 listener "tcp" {
-  address       = "{{ bastion_vault.loopback_address }}:{{ bastion_vault.metrics_port }}"
+  address       = "{{ vault_bastion.loopback_address }}:{{ vault_bastion.metrics_port }}"
   tls_disable   = false
   tls_cert_file = "/opt/vault/tls/loopback.pem"
   tls_key_file  = "/opt/vault/tls/loopback-key.pem"

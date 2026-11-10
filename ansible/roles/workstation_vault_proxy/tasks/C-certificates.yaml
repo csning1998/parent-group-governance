@@ -10,7 +10,7 @@
         extended_key_usage: [clientAuth]
       - name: listener
         common_name: "vault-proxy-{{ _workstation_vault_proxy_identity.key }}"
-        subject_alt_name: ["IP:{{ bastion_vault.loopback_address }}"]
+        subject_alt_name: ["IP:{{ vault_bastion.loopback_address }}"]
         extended_key_usage: [serverAuth]
     _workstation_vault_proxy_identity_dir: >-
       {{ _workstation_vault_proxy_base_dir }}/{{ _workstation_vault_proxy_identity.key }}

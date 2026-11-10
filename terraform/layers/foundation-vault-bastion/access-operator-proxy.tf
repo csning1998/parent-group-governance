@@ -267,5 +267,5 @@ resource "vault_cert_auth_backend_role" "operator" {
   token_policies       = local.operator_policy_names[each.key]
   token_ttl            = 60 * 60
   token_max_ttl        = 60 * 60 * 4
-  token_bound_cidrs    = ["${local.workstation.bastion_vault.loopback_address}/32"]
+  token_bound_cidrs    = ["${local.workstation.vault_bastion.loopback_address}/32"]
 }

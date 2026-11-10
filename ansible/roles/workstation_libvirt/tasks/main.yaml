@@ -12,11 +12,11 @@
 - name: "Section 0. Require the workstation topology"
   ansible.builtin.assert:
     that:
-      - bastion_vault is mapping
-      - bastion_vault.publish_address is string
-      - bastion_vault.api_port is integer
+      - vault_bastion is mapping
+      - vault_bastion.publish_address is string
+      - vault_bastion.api_port is integer
     fail_msg: >-
-      bastion_vault is undefined. The playbook MUST load workstation-topology.yaml of the repository root.
+      vault_bastion is undefined. The playbook MUST load workstation-topology.yaml of the repository root.
 
 # workstation-backup owns every boot trust object. The TPM binding of the disk encryption is meaningless
 # without Secure Boot, hence the trust root refuses the host instead of writing the firmware state.

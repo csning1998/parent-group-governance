@@ -6,7 +6,7 @@
       - workstation_vault_proxy_operator_user | length > 0
       - workstation_vault_proxy_operator_user != "root"
       - workstation_vault_proxy_ca_dir is match('^/.+/vault/tls$')
-      - bastion_vault is mapping
+      - vault_bastion is mapping
       - operator_vault_proxy is mapping
       - operator_vault_proxy.identities is mapping
     fail_msg: >-
