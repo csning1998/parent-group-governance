@@ -400,7 +400,7 @@ Every subcommand other than the bare root command bootstraps `.env` before runni
 | `UNAME`, `UHOME`        | The operator user name and home directory                                  |
 | `SONARQUBE_DB_PASSWORD` | Generated once from `crypto/rand` at first bootstrap                       |
 
-The file `.env` is the only copy of `SONARQUBE_DB_PASSWORD`, while `sonarqube/postgres-data` keeps the password of the first initialization. A deleted `.env` therefore generates a password which the existing database rejects, and the recovery is a rebuild of `sonarqube/postgres-data` and `sonarqube/data`.
+The `.env` file serves as the single host record of `SONARQUBE_DB_PASSWORD`, whereas `sonarqube/postgres-data` preserves the password of the first database initialization. If `.env` lacks this entry while `sonarqube/postgres-data` exists, the bootstrap process aborts to prevent generating a mismatched credential that the database would reject. Recovery requires restoring the password into `.env` from backup, or recreating `sonarqube/postgres-data` and `sonarqube/data`.
 
 ### Item D. Credential Rotation
 

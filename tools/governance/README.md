@@ -272,6 +272,9 @@ func BootstrapEnv(root string, out *ui.Printer) (*Env, error) {
     if err != nil {
         return nil, err
     }
+    if err := refuseSonarDBPasswordRegeneration(e, root, envPath); err != nil {
+        return nil, err
+    }
 
     _, statErr := os.Stat(envPath)
     isNewFile := os.IsNotExist(statErr)
@@ -315,7 +318,7 @@ func patchExistingEnv(e *Env, root string, facts HostFacts, out *ui.Printer) err
 
 `HOST_UID`、`HOST_GID`、`PROJECT_ROOT` 這三個每次都無條件覆寫，因為它們描述的是「現在這台機器、現在這份 checkout」，不是操作者的選擇。Compose 檔案用 `${HOST_UID}:${HOST_GID}` 決定容器內的執行身份，如果沿用另一台機器或另一個帳號留下的舊值，掛載出來的檔案擁有者會是錯的；`PROJECT_ROOT` 同理，把儲存庫換個位置 clone 之後，舊值會讓所有衍生路徑指向一個已經不存在的目錄。
 
-其餘欄位只在空值時補上。`SONARQUBE_DB_PASSWORD` 一旦被每次執行無條件覆寫，`.env` 裡的密碼就會與資料庫裡已經持久化的密碼永久脫節，而資料庫本身沒有第二份紀錄可以還原。`.env` 不保存 Bastion Vault 的位址，位址由 `workstation-topology.yaml` 宣告，理由見 _Item E_。
+其餘欄位只在空值時補上。`SONARQUBE_DB_PASSWORD` 一旦被每次執行無條件覆寫，`.env` 裡的密碼就會與資料庫裡已經持久化的密碼永久脫節，而資料庫本身沒有第二份紀錄可以還原。同樣的理由，`refuseSonarDBPasswordRegeneration` 在 `.env` 缺少密碼而 `sonarqube/postgres-data` 已經存在時直接報錯，不論 `.env` 是既有檔案還是新建：資料目錄存在代表資料庫已經用某個密碼初始化，這時產生的新密碼一定開不了既有的資料庫，操作者必須從備份還原原本的密碼。`.env` 不保存 Bastion Vault 的位址，位址由 `workstation-topology.yaml` 宣告，理由見 _Item E_。
 
 `SONARQUBE_DB_PASSWORD` 在這裡鑄造而不是交給 `secretrotate`，是因為它沒有可以認證的對象。_Section 6_ 的輪替流程建立在「用舊密碼登入外部服務、順勢換成新密碼」這個前提上，而這組密碼的消費者是 Compose 啟動容器時讀取的環境變數，不存在一個可以驗證舊值的線上端點。它只需要在第一次啟動時被鑄造一次，之後由 `.env` 自己保管。
 
