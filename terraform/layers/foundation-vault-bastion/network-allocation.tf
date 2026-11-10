@@ -16,10 +16,13 @@ locals {
     stages               = tolist(jsondecode(lookup(local.network_allocation_raw, "stages", "[]")))
     network_cidr         = lookup(local.network_allocation_raw, "network_cidr", "")
     bastion_publish_cidr = lookup(local.network_allocation_raw, "bastion_publish_cidr", "")
+    pod_network_cidr     = lookup(local.network_allocation_raw, "pod_network_cidr", "")
+    service_network_cidr = lookup(local.network_allocation_raw, "service_network_cidr", "")
   }
 
-  # Every repository which creates a libvirt network on the shared host reads the same baseline from the registry.
-  # A missing or malformed field resolves to an invalid value, hence the precondition below names the field.
+  # Every repository managing libvirt networks on the shared host consumes this registry baseline.
+  # Using try converts missing or malformed attributes into sentinel values, preventing mid-evaluation attribute failures.
+  # The baseline precondition below then catches the invalid values and reports the KV path alongside the expected schema.
   network_baseline_raw = try(jsondecode(lookup(local.network_allocation_raw, "network_baseline", "{}")), {})
   network_baseline = {
     host_vip_offset    = try(tonumber(local.network_baseline_raw.host_vip_offset), -1)
@@ -32,13 +35,11 @@ locals {
     cidr_index_max     = try(tonumber(local.network_baseline_raw.cidr_index_max), 0)
   }
 
-  # Cilium names the Hubble mTLS peers under these fixed suffixes outside the platform domain.
-  cilium_hubble_extra_dns_domains = ["hubble-grpc.cilium.io", "hubble-relay.cilium.io"]
-  # Raft peers of an in-cluster Vault join through the Service names under the cluster domain.
-  kubernetes_default_cluster_domain = "cluster.local"
-
   stage_domains = [for stage in local.network_allocation.stages : "${stage}.${local.network_allocation.domain_suffix}"]
+}
 
+# service-registry.tf publishes the host segments, which derive from the network allocation facts.
+locals {
   # The third octet of each host segment lies outside the catalog numbering of platform-foundation.
   host_segment_indexes = {
     host_telemetry_scrape = 249
@@ -56,7 +57,10 @@ locals {
   host_telemetry_scrape_address    = local.host_segment_cidrs.host_telemetry_scrape != "" ? cidrhost(local.host_segment_cidrs.host_telemetry_scrape, local.host_number) : ""
   host_log_rendezvous_address      = local.host_segment_cidrs.host_log_rendezvous != "" ? cidrhost(local.host_segment_cidrs.host_log_rendezvous, var.host_log_rendezvous_offset) : ""
   host_log_rendezvous_server_names = [for base in local.stage_domains : "host-log-rendezvous.${base}"]
+}
 
+# The preconditions of terraform_data.network_allocation_validation evaluate the checks below.
+locals {
   dns_name_pattern  = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
   dns_label_pattern = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
 
@@ -86,6 +90,25 @@ locals {
     local.bastion_publish_inside_network,
   ])
 
+  # Every Kubernetes cluster carves its pod and service networks from these pools by cidr_index.
+  kubernetes_pool_cidrs = [local.network_allocation.pod_network_cidr, local.network_allocation.service_network_cidr]
+  allocation_cidrs      = concat([local.network_allocation.network_cidr], local.kubernetes_pool_cidrs)
+  allocation_prefixes   = [for cidr in local.allocation_cidrs : can(cidrnetmask(cidr)) ? tonumber(split("/", cidr)[1]) : -1]
+
+  # Two networks overlap when both resolve to the same network address at the shorter prefix of the pair.
+  allocation_cidrs_disjoint = alltrue([for prefix in local.allocation_prefixes : prefix >= 0]) ? alltrue(flatten([
+    for i, left in local.allocation_cidrs : [
+      for j, right in local.allocation_cidrs : i >= j || (
+        cidrhost("${split("/", left)[0]}/${min(local.allocation_prefixes[i], local.allocation_prefixes[j])}", 0) !=
+        cidrhost("${split("/", right)[0]}/${min(local.allocation_prefixes[i], local.allocation_prefixes[j])}", 0)
+      )
+    ]
+  ])) : false
+
+  kubernetes_pools_valid = local.allocation_cidrs_disjoint && alltrue([
+    for prefix in slice(local.allocation_prefixes, 1, 3) : prefix + local.network_baseline.cidr_subnet_bits <= 32
+  ])
+
   # The bounds mirror the network_baseline validations of platform-foundation, which consumed the baseline from tfvars.
   network_baseline_valid = alltrue([
     local.network_baseline.host_vip_offset > 0 && local.network_baseline.host_vip_offset < 255,
@@ -112,6 +135,10 @@ resource "terraform_data" "network_allocation_validation" {
     precondition {
       condition     = local.network_baseline_valid
       error_message = "secret/parent-group-governance/network/allocation MUST hold network_baseline as a JSON object of host_vip_offset, global_mac_prefix, global_mtu, global_mss, node_exporter_port, cidr_subnet_bits, cidr_nat_offset, and cidr_index_max, with every host segment index above cidr_index_max."
+    }
+    precondition {
+      condition     = local.kubernetes_pools_valid
+      error_message = "secret/parent-group-governance/network/allocation MUST hold IPv4 pod_network_cidr and service_network_cidr which overlap neither each other nor network_cidr, each with a prefix length plus cidr_subnet_bits of at most 32."
     }
     precondition {
       condition     = local.topology_publish_inside_network
