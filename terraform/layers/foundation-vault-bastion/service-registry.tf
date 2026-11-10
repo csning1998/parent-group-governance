@@ -19,6 +19,8 @@ resource "vault_kv_secret_v2" "registry_platform_network_allocation" {
     stage_domains                    = jsonencode(local.stage_domains)
     network_cidr                     = local.network_allocation.network_cidr
     bastion_publish_cidr             = local.network_allocation.bastion_publish_cidr
+    pod_network_cidr                 = local.network_allocation.pod_network_cidr
+    service_network_cidr             = local.network_allocation.service_network_cidr
     host_telemetry_scrape_cidr       = local.host_segment_cidrs.host_telemetry_scrape
     host_telemetry_scrape_address    = local.host_telemetry_scrape_address
     host_log_rendezvous_cidr         = local.host_segment_cidrs.host_log_rendezvous

@@ -485,7 +485,7 @@ Step 1 to Step 4 run with the root token, which `eval "$(vault-proxy-env root)"`
 9. Apply `group-sonarqube` after Section 1 Item C Step 7 writes the administrator password into the Bastion Vault.
 10. Apply `group-gitlab-configuration`, which reads the token written by `group-sonarqube`.
 
-The platform trust facts hold four fields. Every field is a string, because KV version 2 stores flat string values.
+The platform trust facts hold the fields below. Every field is a string, because KV version 2 stores flat string values.
 
 | Field                  | Content                                                                    | Example            |
 | ---------------------- | -------------------------------------------------------------------------- | ------------------ |
@@ -493,8 +493,10 @@ The platform trust facts hold four fields. Every field is a string, because KV v
 | `stages`               | A JSON list of DNS labels, one SPIRE trust domain per stage                | `["production"]`   |
 | `network_cidr`         | The IPv4 network of the platform                                           | `10.20.0.0/16`     |
 | `bastion_publish_cidr` | The IPv4 network on which the Bastion Vault listens, inside `network_cidr` | `10.20.0.0/24`     |
+| `pod_network_cidr`     | The IPv4 pool from which each Kubernetes cluster takes its pod network     | `10.64.0.0/10`     |
+| `service_network_cidr` | The IPv4 pool from which each Kubernetes cluster takes its service network | `10.128.0.0/12`    |
 
-A precondition of `foundation-vault-bastion` stops the plan when a field is missing or malformed. The Name Constraints of the constrained intermediate CAs derive from these fields, and a changed value therefore reissues the constrained intermediate CAs on the next apply. Neither a tfvars file nor `TF_VAR_` overrides the facts. `documentation/architecture/bastion-vault-privilege-convergence.md` Section 4 Item A records the rationale.
+A precondition of `foundation-vault-bastion` stops the plan when a field is missing or malformed, or when `network_cidr`, `pod_network_cidr`, and `service_network_cidr` overlap. The Name Constraints of the constrained intermediate CAs derive from these fields, and a changed value therefore reissues the constrained intermediate CAs on the next apply. Neither a tfvars file nor `TF_VAR_` overrides the facts. `documentation/architecture/bastion-vault-privilege-convergence.md` Section 4 Item A records the rationale.
 
 ### Item D. Shared Modules
 

@@ -16,6 +16,8 @@ locals {
     stages               = tolist(jsondecode(lookup(local.network_allocation_raw, "stages", "[]")))
     network_cidr         = lookup(local.network_allocation_raw, "network_cidr", "")
     bastion_publish_cidr = lookup(local.network_allocation_raw, "bastion_publish_cidr", "")
+    pod_network_cidr     = lookup(local.network_allocation_raw, "pod_network_cidr", "")
+    service_network_cidr = lookup(local.network_allocation_raw, "service_network_cidr", "")
   }
 
   # Every repository which creates a libvirt network on the shared host reads the same baseline from the registry.
@@ -86,6 +88,25 @@ locals {
     local.bastion_publish_inside_network,
   ])
 
+  # Every Kubernetes cluster carves its pod and service networks from these pools by cidr_index.
+  kubernetes_pool_cidrs = [local.network_allocation.pod_network_cidr, local.network_allocation.service_network_cidr]
+  allocation_cidrs      = concat([local.network_allocation.network_cidr], local.kubernetes_pool_cidrs)
+  allocation_prefixes   = [for cidr in local.allocation_cidrs : can(cidrnetmask(cidr)) ? tonumber(split("/", cidr)[1]) : -1]
+
+  # Two networks overlap when both resolve to the same network address at the shorter prefix of the pair.
+  allocation_cidrs_disjoint = alltrue([for prefix in local.allocation_prefixes : prefix >= 0]) ? alltrue(flatten([
+    for i, left in local.allocation_cidrs : [
+      for j, right in local.allocation_cidrs : i >= j || (
+        cidrhost("${split("/", left)[0]}/${min(local.allocation_prefixes[i], local.allocation_prefixes[j])}", 0) !=
+        cidrhost("${split("/", right)[0]}/${min(local.allocation_prefixes[i], local.allocation_prefixes[j])}", 0)
+      )
+    ]
+  ])) : false
+
+  kubernetes_pools_valid = local.allocation_cidrs_disjoint && alltrue([
+    for prefix in slice(local.allocation_prefixes, 1, 3) : prefix + local.network_baseline.cidr_subnet_bits <= 32
+  ])
+
   # The bounds mirror the network_baseline validations of platform-foundation, which consumed the baseline from tfvars.
   network_baseline_valid = alltrue([
     local.network_baseline.host_vip_offset > 0 && local.network_baseline.host_vip_offset < 255,
@@ -112,6 +133,10 @@ resource "terraform_data" "network_allocation_validation" {
     precondition {
       condition     = local.network_baseline_valid
       error_message = "secret/parent-group-governance/network/allocation MUST hold network_baseline as a JSON object of host_vip_offset, global_mac_prefix, global_mtu, global_mss, node_exporter_port, cidr_subnet_bits, cidr_nat_offset, and cidr_index_max, with every host segment index above cidr_index_max."
+    }
+    precondition {
+      condition     = local.kubernetes_pools_valid
+      error_message = "secret/parent-group-governance/network/allocation MUST hold IPv4 pod_network_cidr and service_network_cidr which overlap neither each other nor network_cidr, each with a prefix length plus cidr_subnet_bits of at most 32."
     }
     precondition {
       condition     = local.topology_publish_inside_network
