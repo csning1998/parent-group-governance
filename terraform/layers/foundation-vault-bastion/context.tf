@@ -16,9 +16,9 @@ data "local_file" "bastion_vault_publish_ca" {
 }
 
 # Consumers trust both Transport Root CAs. The publish listener can switch to ML-DSA without a consumer redeployment.
+# Each certificate ends with one newline. A file without a trailing newline merges two PEM blocks and drops both anchors.
 locals {
   bastion_vault_listener_ca_bundle_pem = join("", [
-    data.local_file.bastion_vault_publish_ca.content,
-    data.local_file.bastion_vault_operator_ca.content,
+    for pem in [data.local_file.bastion_vault_publish_ca.content, data.local_file.bastion_vault_operator_ca.content] : "${trimspace(pem)}\n"
   ])
 }
