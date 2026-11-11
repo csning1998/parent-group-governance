@@ -47,6 +47,18 @@ type ProxyIdentity struct {
 	AccessTier       string `yaml:"access_tier"`        // logical privilege tier of the operator role (credential-distributor, consumer, tenant, administrator, credential-rotator)
 	OwnerCode        string `yaml:"owner_code"`         // repository owner code of a distributor or consumer identity
 	StateBackendPath string `yaml:"state_backend_path"` // KV v2 secret path storing the GitLab state backend token for this owner
+
+	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // target GitLab projects designated to receive code reviewer CI/CD variables
+}
+
+// ListCodeReviewerVariableProjects returns sorted and deduplicated project paths aggregated across all proxy identities.
+func (v VaultTopology) ListCodeReviewerVariableProjects() []string {
+	var paths []string
+	for _, identity := range v.OperatorVaultProxy.Identities {
+		paths = append(paths, identity.CodeReviewerVariableProjects...)
+	}
+	slices.Sort(paths)
+	return slices.Compact(paths)
 }
 
 // StateBackend defines the shared KV v2 mount and field schema across state backend paths.

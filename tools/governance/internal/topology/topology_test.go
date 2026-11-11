@@ -3,6 +3,7 @@ package topology
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -136,6 +137,30 @@ operator_vault_proxy:
       access_tier: "credential-distributor"
       owner_code: "personal"
 `
+
+// TestListCodeReviewerVariableProjects asserts byte-order sorting and deduplication across configured project paths.
+func TestListCodeReviewerVariableProjects(t *testing.T) {
+	topo, err := Load(writeTopology(t, `vault_bastion:
+  loopback_address: "127.0.0.1"
+  publish_address: "172.16.0.1"
+  api_port: 8200
+operator_vault_proxy:
+  identities:
+    credential-distributor-personal:
+      code_reviewer_variable_projects: ["personal/second-brain", "personal/LaTeX_Documents"]
+    credential-distributor:
+      code_reviewer_variable_projects: ["csning1998-lab/parent-group-governance", "personal/second-brain"]
+    administrator:
+      access_tier: "administrator"
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"csning1998-lab/parent-group-governance", "personal/LaTeX_Documents", "personal/second-brain"}
+	if got := topo.ListCodeReviewerVariableProjects(); !slices.Equal(got, want) {
+		t.Errorf("ListCodeReviewerVariableProjects() = %v, want %v", got, want)
+	}
+}
 
 // TestResolveStateBackendToken asserts the token location of a distributor and the rejection of an owner code without a distributor path.
 func TestResolveStateBackendToken(t *testing.T) {
