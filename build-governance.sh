@@ -73,13 +73,14 @@ else
         -e SONAR_TOKEN \
         -e SONAR_SCANNER_OPTS="-Dsonar.projectKey=${sonar_project_key} -Dsonar.projectBaseDir=/usr/src -Dsonar.qualitygate.wait=true" \
         "${scanner_image}")
+    # podman cp stops reading at the end-of-archive marker and fails on the trailing record padding of the default blocking factor.
     {
         git ls-files -z --cached --others --exclude-standard -- tools terraform ansible sonar-project.properties .gitignore
         printf '%s\0' .git
         for report in coverage.xml tools/${cli_module}/coverage.out; do
             if [ -e "${report}" ]; then printf '%s\0' "${report}"; fi
         done
-    } | tar -c --null --ignore-failed-read -T - | podman cp - "${scanner}:/usr/src"
+    } | tar -c -b 1 --null --ignore-failed-read -T - | podman cp - "${scanner}:/usr/src"
     podman start --attach "${scanner}"
     remove_scanner
 fi
