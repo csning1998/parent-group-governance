@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
@@ -51,6 +52,51 @@ func TestBootstrapEnvGeneratesSonarDBPasswordWhenMissingFromExistingFile(t *test
 	}
 	if got := e.Get(KeySonarQubeDBPassword); got == "" {
 		t.Error("SONARQUBE_DB_PASSWORD = empty, want a generated password")
+	}
+}
+
+// TestBootstrapEnvRefusesSonarDBPasswordRegeneration asserts refusal when .env lacks the password and the data directory exists.
+func TestBootstrapEnvRefusesSonarDBPasswordRegeneration(t *testing.T) {
+	cases := map[string]string{
+		"existing env file": KeyProjectRoot + "=\"/tmp\"\n",
+		"missing env file":  "",
+	}
+	for name, content := range cases {
+		t.Run(name, func(t *testing.T) {
+			root, envPath := createSonarDataWithoutPassword(t, content)
+
+			_, err := BootstrapEnv(root, ui.New(io.Discard, io.Discard))
+			if err == nil || !strings.Contains(err.Error(), KeySonarQubeDBPassword) {
+				t.Fatalf("BootstrapEnv = %v, want a refusal which names %s", err, KeySonarQubeDBPassword)
+			}
+			assertEnvContent(t, envPath, content)
+		})
+	}
+}
+
+func createSonarDataWithoutPassword(t *testing.T, content string) (root, envPath string) {
+	t.Helper()
+	root = t.TempDir()
+	envPath = filepath.Join(root, ".env")
+	if content != "" {
+		if err := os.WriteFile(envPath, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "sonarqube", "postgres-data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return root, envPath
+}
+
+func assertEnvContent(t *testing.T, envPath, want string) {
+	t.Helper()
+	data, err := os.ReadFile(envPath)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if string(data) != want {
+		t.Errorf(".env = %q, want the content left as %q", data, want)
 	}
 }
 

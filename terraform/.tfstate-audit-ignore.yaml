@@ -9,6 +9,8 @@ ignores:
         - data.domain_suffix
         - data.network_cidr
         - data.network_baseline
+        - data.pod_network_cidr
+        - data.service_network_cidr
         - data.stages
       reason: The network allocation facts are network CIDRs, stages, the domain suffix, and the host network baseline.
 
@@ -17,6 +19,8 @@ ignores:
         - data_json.bastion_publish_cidr
         - data_json.domain_suffix
         - data_json.network_cidr
+        - data_json.pod_network_cidr
+        - data_json.service_network_cidr
         - data_json.stage_domains
         - data_json.host_telemetry_scrape_cidr
         - data_json.host_telemetry_scrape_address

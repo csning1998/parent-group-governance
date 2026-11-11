@@ -410,6 +410,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 | Audit modification                | Writes targeting `sys/audit*`                                                                                                          |
 | root token                        | `auth.policies` containing `root`                                                                                                      |
 | Denied privilege escalation write | Denied writes targeting `sys/policies/acl/` or `role`, `users`, `groups`, `certs` under auth mounts                                    |
+| KV write alert                    | Granted or denied writes, including patch, to a KV v2 path of `workstation_vault_audit_kv_write_alert_paths`                           |
 
 ### Item C. Accessors and HMAC
 
@@ -451,7 +452,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 | `internal/vaultops/tls_test.go`                                         | `TestGenerateTLS*`         | Chain validity, subject alternative names of the topology, refusal without listener addresses, key types  |
 | `pkg/secretrotate/factory_default_test.go`                              | `TestAwaitFactoryDefault*` | Waiting for the service, the retained state verdict, and a credential without a factory default           |
 | `cmd/governance/menu_test.go`                                           | `TestBuildMenuOptions_*`   | Apply All first, Quit last, each host step alone, and the service admin password labels                   |
-| `ansible/roles/workstation_vault_audit/tests/test_vault_audit_check.py` | 20 pytest test cases       | 6 detection rules, log rotation and truncation, state persistence                                         |
+| `ansible/roles/workstation_vault_audit/tests/test_vault_audit_check.py` | 26 pytest test cases       | 7 detection rules, log rotation and truncation, state persistence                                         |
 
 Tests utilize httptest to simulate the Bastion Vault and the services of `service_admin_passwords`.
 
@@ -689,7 +690,7 @@ The test CA for `pki-intermediate-vault-downstream` does not have a URI SAN. The
 | Vault rejects non-compliant names during issuance                                   | `pki-intermediate-spire` Bastion IP and external DNS, and `pki-intermediate-vault-downstream` `localhost`, Bastion IP, and SVID, all 5 items rejected |
 | Subordinate self-signed leaf certificates under `pki-intermediate-spire`            | 1 expected pass succeeded, 4 expected rejections were all rejected                                                                                    |
 | Subordinate self-signed leaf certificates under `pki-intermediate-vault-downstream` | 2 expected passes succeeded, 5 expected rejections were all rejected                                                                                  |
-| Path length                                                                         | Test CA `pathlen` decrements from 2 to 1. Scenarios exceeding path limits remain untested                                                             |
+| Path length                                                                         | Test CA `pathlen` decrements from 2 to 1. `internal/pkipathlen` verifies the rejections past the limit on a Vault development server                  |
 | `pki-leaf-platform` issuance through a tenant role on 2026-10-04                    | 2 expected passes succeeded. Vault rejected `localhost`, `127.0.0.1`, the Bastion publish address, `gitlab.com`, and a SPIFFE URI                     |
 | `pki-leaf-platform` subordinate CA on 2026-10-04                                    | The CA certificate carries `pathlen:0`, and a tenant call on `root/sign-intermediate` returned 403                                                    |
 
@@ -742,8 +743,6 @@ Root token usage and rejected role writes MUST appear in the systemd journal.
 1. Rebuild mp to read `registry`, removing every `terraform_remote_state` reference to `foundation-vault-bastion`.
 2. Move the SPIRE Parent upstream authority to `pki-intermediate-spire`, the Downstream Vault intermediate CA to `pki-intermediate-vault-downstream`, and every listener certificate to `pki-leaf-platform`.
 3. Integrate the secret scanning routine from Section 9 Step E into pgg CI pipelines.
-4. Conduct verification testing for path length limit rejections when exceeding allowed CA tiers.
-5. Consolidate the publish address of `workstation-topology.yaml` and `bastion_publish_cidr` into one declaration source.
-6. Add an audit rule which alerts on writes to `secret/parent-group-governance/network/allocation`.
-7. Move the remaining instance values of pgg, such as the backend addresses, the listener addresses, and the Ansible defaults, out of the repository.
-8. Replace the shared GitLab token with one fine-grained personal access token per repository, limited to the project of the repository, which closes residual risk 5 of Item A on GitLab.com Free.
+4. Consolidate the publish address of `workstation-topology.yaml` and `bastion_publish_cidr` into one declaration source.
+5. Move the remaining instance values of pgg out of the repository, such as the backend addresses, the listener addresses, and the Ansible defaults.
+6. Replace the shared GitLab token with project-scoped fine-grained personal access tokens to close residual risk 5 of Item A on GitLab.com Free.

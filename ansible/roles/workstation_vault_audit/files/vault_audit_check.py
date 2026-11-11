@@ -16,6 +16,9 @@ import sys
 POLICY_PATH = re.compile(r"^sys/policies/acl/")
 ROLE_PATH = re.compile(r"^auth/[^/]+/(role|users|groups|certs)/")
 WRITE_OPERATIONS = {"create", "update", "delete"}
+# vault kv patch issues the operation patch on the data path of a KV v2 secret.
+KV_WRITE_OPERATIONS = WRITE_OPERATIONS | {"patch"}
+KV_V2_PREFIXES = "data|metadata|delete|undelete|destroy"
 
 
 def load_json(path, default):
@@ -97,6 +100,20 @@ def findings(entry, config):
         and operation in WRITE_OPERATIONS
     ):
         yield f"denied policy or role write: {where}"
+    if matches_kv_write_alert(path, operation, config["kv_write_alert_paths"]):
+        yield f"KV write to an alert path: {where}"
+
+
+def matches_kv_write_alert(path, operation, kv_write_alert_paths):
+    if operation not in KV_WRITE_OPERATIONS:
+        return False
+    return any(
+        re.match(
+            rf"^{re.escape(alert['mount'])}/({KV_V2_PREFIXES})/{re.escape(alert['path'])}$",
+            path,
+        )
+        for alert in kv_write_alert_paths
+    )
 
 
 def alert(message):

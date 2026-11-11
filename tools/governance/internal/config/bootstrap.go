@@ -3,7 +3,9 @@ package config
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/user"
@@ -53,6 +55,9 @@ func BootstrapEnv(root string, out *ui.Printer) (*Env, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := refuseSonarDBPasswordRegeneration(e, root, envPath); err != nil {
+		return nil, err
+	}
 
 	_, statErr := os.Stat(envPath)
 	isNewFile := os.IsNotExist(statErr)
@@ -70,6 +75,23 @@ func BootstrapEnv(root string, out *ui.Printer) (*Env, error) {
 		return nil, err
 	}
 	return e, nil
+}
+
+// refuseSonarDBPasswordRegeneration stops the bootstrap when .env lacks the password and sonarqube/postgres-data exists.
+func refuseSonarDBPasswordRegeneration(e *Env, root, envPath string) error {
+	if e.Get(KeySonarQubeDBPassword) != "" {
+		return nil
+	}
+	dataDir := filepath.Join(root, "sonarqube", "postgres-data")
+	_, err := os.Stat(dataDir)
+	switch {
+	case err == nil:
+		return fmt.Errorf("config: %s holds an initialized database while %s lacks %s; restore the password into %s", dataDir, envPath, KeySonarQubeDBPassword, envPath)
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	default:
+		return fmt.Errorf("config: stat %s: %w", dataDir, err)
+	}
 }
 
 // DetectHostFacts looks up the current user numeric identity.
