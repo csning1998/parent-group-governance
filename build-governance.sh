@@ -25,11 +25,18 @@ readonly sonar_host_url="${SONAR_HOST_URL:-http://127.0.0.1:9000}"
 export GOTOOLCHAIN=auto
 
 # Static analysis and formatting MUST execute within the target Go module directory.
-# The linter MUST be built by that toolchain, since a linter built by an older Go refuses the module.
+# The linter MUST be built by that toolchain because a linter built by an older Go refuses the module.
 (cd tools/"${cli_module}" && go fmt ./... >/dev/null)
 (cd tools/"${cli_module}" && go run "${golangci_lint_module}" run -c ../../.gitlab/golangci.yml ./...)
 
 go test -C tools/"${cli_module}" -race -count=1 -coverprofile=coverage.out ./...
+
+# Binary compilation MUST produce statically linked, path-independent executables matching deployment images.
+# A failed analysis MUST NOT block the binary which bootstraps the Bastion Vault and SonarQube.
+for binary in "${cli_binaries[@]}"; do
+    CGO_ENABLED=0 go build -C tools/"${cli_module}" -trimpath -ldflags='-s -w' -o ../../"${binary}" ./cmd/"${binary}"
+    echo "built: $(pwd)/${binary}"
+done
 
 # Coverage configuration MUST enforce relative paths to align host reports across scanner container mounts.
 coverage_rc=$(mktemp)
@@ -40,22 +47,19 @@ PYTHONDONTWRITEBYTECODE=1 COVERAGE_FILE="${coverage_rc}.data" uv run --no-projec
     --cov=ansible/roles/workstation_vault_audit/files --cov-config="$coverage_rc" --cov-report=xml:coverage.xml
 rm -f "${coverage_rc}.data"
 
-# The analysis MUST be skipped when SonarQube does not report UP, since the Bastion Vault and the token may not exist yet.
+# The analysis MUST be skipped when SonarQube does not report UP because the Bastion Vault and the token may not exist yet.
 if ! curl -fsS --max-time 5 "${sonar_host_url}/api/system/status" 2>/dev/null | grep -q '"status":"UP"'; then
     echo "skipped: SonarQube at ${sonar_host_url} is not UP" >&2
-# The analysis MUST be skipped on uncommitted sources, since a file without git blame counts entirely as new code.
+# The analysis MUST be skipped on uncommitted sources because a file without git blame counts entirely as new code.
 elif [[ -n "$(git status --porcelain -- tools terraform ansible)" ]]; then
     echo "skipped: tools, terraform, or ansible holds uncommitted changes, commit them before the SonarQube analysis" >&2
+elif ! command -v vault-proxy-env >/dev/null; then
+    echo "skipped: vault-proxy-env is missing, run the first menu item of ./governance in parent-group-governance" >&2
+# Token resolution MUST isolate proxy environment evaluation to prevent variable leaks and capture execution failures.
+elif ! sonar_token=$(proxy_env=$(vault-proxy-env credential-distributor) && eval "${proxy_env}" &&
+    vault kv get -mount=secret -field="${sonar_token_field}" "${sonar_token_path}"); then
+    echo "skipped: the Bastion Vault returned no ${sonar_token_field} at secret/${sonar_token_path}" >&2
 else
-    # Token resolution MUST isolate proxy environment evaluation to prevent variable leaks and capture execution failures.
-    if ! command -v vault-proxy-env >/dev/null; then
-        echo "vault-proxy-env is missing, run the first menu item of ./governance in parent-group-governance" >&2
-        exit 1
-    fi
-    proxy_env=$(vault-proxy-env credential-distributor)
-    sonar_token=$(eval "${proxy_env}" && vault kv get -mount=secret -field="${sonar_token_field}" "${sonar_token_path}")
-    unset proxy_env
-
     # The scanner receives copies of the unignored files, the git history, and the coverage reports through podman cp,
     # which bind-mounts no host path and skips ignored trees such as .terraform, node_modules, and Packer output.
     # The copies carry the labels of the container and leave the host files out of reach of the analyzer.
@@ -79,9 +83,3 @@ else
     podman start --attach "${scanner}"
     remove_scanner
 fi
-
-# Binary compilation MUST produce statically linked, path-independent executables matching deployment images.
-for binary in "${cli_binaries[@]}"; do
-    CGO_ENABLED=0 go build -C tools/"${cli_module}" -trimpath -ldflags='-s -w' -o ../../"${binary}" ./cmd/"${binary}"
-    echo "built: $(pwd)/${binary}"
-done
