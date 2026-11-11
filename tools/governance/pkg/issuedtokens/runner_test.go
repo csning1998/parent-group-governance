@@ -66,6 +66,9 @@ func TestGroupRunnerRegistrationRun(t *testing.T) {
 		},
 		"a failed write reports the created runner": {
 			prepare: func(t *testing.T, path string) {
+				if os.Geteuid() == 0 {
+					t.Skip("skipping permission-bit test when running as root")
+				}
 				dir := filepath.Dir(path)
 				if err := os.MkdirAll(dir, 0o500); err != nil {
 					t.Fatal(err)
