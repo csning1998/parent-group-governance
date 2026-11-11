@@ -410,7 +410,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 | Audit modification                | Writes targeting `sys/audit*`                                                                                                          |
 | root token                        | `auth.policies` containing `root`                                                                                                      |
 | Denied privilege escalation write | Denied writes targeting `sys/policies/acl/` or `role`, `users`, `groups`, `certs` under auth mounts                                    |
-| Watched KV path write             | Granted or denied writes, including patch, to a KV v2 path of `workstation_vault_audit_watched_kv_paths`                               |
+| KV write alert                    | Granted or denied writes, including patch, to a KV v2 path of `workstation_vault_audit_kv_write_alert_paths`                           |
 
 ### Item C. Accessors and HMAC
 

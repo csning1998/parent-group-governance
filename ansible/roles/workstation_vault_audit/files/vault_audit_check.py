@@ -100,12 +100,20 @@ def findings(entry, config):
         and operation in WRITE_OPERATIONS
     ):
         yield f"denied policy or role write: {where}"
-    for watched in config["watched_kv_paths"]:
-        watched_path = re.compile(
-            rf"^{re.escape(watched['mount'])}/({KV_V2_PREFIXES})/{re.escape(watched['path'])}$"
+    if matches_kv_write_alert(path, operation, config["kv_write_alert_paths"]):
+        yield f"KV write to an alert path: {where}"
+
+
+def matches_kv_write_alert(path, operation, kv_write_alert_paths):
+    if operation not in KV_WRITE_OPERATIONS:
+        return False
+    return any(
+        re.match(
+            rf"^{re.escape(alert['mount'])}/({KV_V2_PREFIXES})/{re.escape(alert['path'])}$",
+            path,
         )
-        if watched_path.match(path) and operation in KV_WRITE_OPERATIONS:
-            yield f"watched KV path write: {where}"
+        for alert in kv_write_alert_paths
+    )
 
 
 def alert(message):

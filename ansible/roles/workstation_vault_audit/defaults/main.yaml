@@ -22,8 +22,8 @@ workstation_vault_audit_rotate_keep: 14
 workstation_vault_audit_transit_mount: "transit-unseal"
 workstation_vault_audit_transit_source_cidrs: []
 
-# Any write attempt targeting a watched KV v2 path triggers an alert finding regardless of authorization outcome.
+# Any write attempt targeting a listed KV v2 path triggers an alert finding regardless of authorization outcome.
 # These network allocation facts anchor Name Constraints across constrained intermediate CAs and Kubernetes cluster networks.
-workstation_vault_audit_watched_kv_paths:
+workstation_vault_audit_kv_write_alert_paths:
   - mount: "secret"
     path: "parent-group-governance/network/allocation"

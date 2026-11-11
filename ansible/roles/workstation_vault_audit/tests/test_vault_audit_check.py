@@ -23,7 +23,7 @@ check = load_check_module()
 CONFIG = {
     "transit_mount": "transit-unseal",
     "transit_source_cidrs": ["172.16.127.0/24"],
-    "watched_kv_paths": [
+    "kv_write_alert_paths": [
         {"mount": "secret", "path": "parent-group-governance/network/allocation"}
     ],
 }
@@ -137,14 +137,14 @@ def build_response(
         pytest.param(
             build_response(ALLOCATION_DATA_PATH, operation="patch"),
             CONFIG,
-            ["watched KV path write"],
-            id="watched path patch",
+            ["KV write to an alert path"],
+            id="alert path patch",
         ),
         pytest.param(
             build_response(ALLOCATION_DATA_PATH, operation="create"),
             CONFIG,
-            ["watched KV path write"],
-            id="watched path put",
+            ["KV write to an alert path"],
+            id="alert path put",
         ),
         pytest.param(
             build_response(
@@ -152,8 +152,8 @@ def build_response(
                 operation="delete",
             ),
             CONFIG,
-            ["watched KV path write"],
-            id="watched path metadata delete",
+            ["KV write to an alert path"],
+            id="alert path metadata delete",
         ),
         pytest.param(
             build_response(
@@ -161,14 +161,14 @@ def build_response(
                 error="permission denied",
             ),
             CONFIG,
-            ["watched KV path write"],
-            id="denied watched path destroy",
+            ["KV write to an alert path"],
+            id="denied alert path destroy",
         ),
         pytest.param(
             build_response(ALLOCATION_DATA_PATH, operation="read"),
             CONFIG,
             [],
-            id="watched path read",
+            id="alert path read",
         ),
         pytest.param(
             build_response(f"{ALLOCATION_DATA_PATH}-draft", operation="create"),

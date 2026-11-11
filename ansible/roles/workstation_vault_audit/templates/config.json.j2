@@ -4,6 +4,6 @@
     "state_file": workstation_vault_audit_state_dir ~ "/check-state.json",
     "transit_mount": workstation_vault_audit_transit_mount,
     "transit_source_cidrs": workstation_vault_audit_transit_source_cidrs,
-    "watched_kv_paths": workstation_vault_audit_watched_kv_paths
+    "kv_write_alert_paths": workstation_vault_audit_kv_write_alert_paths
   } | to_nice_json
 }}
