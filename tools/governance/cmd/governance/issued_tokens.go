@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -104,5 +105,25 @@ func (a *app) issueSonarQubeAnalysisToken(ctx context.Context) error {
 	if len(revoked) > 0 {
 		a.out.Print(ui.Info, "Revoked the earlier tokens: "+strings.Join(revoked, ", "))
 	}
+	return nil
+}
+
+// registerGitLabGroupRunner provisions the group runner in GitLab and renders the corresponding config.toml.
+func (a *app) registerGitLabGroupRunner(ctx context.Context) error {
+	cfg := a.issuedTokens.GitLabGroupRunner
+	kv, err := a.newAdministratorKV()
+	if err != nil {
+		return err
+	}
+	gitlab, groupID, err := a.newGitLabClient(ctx, kv)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(a.root, cfg.ConfigPath)
+	id, err := issuedtokens.GroupRunnerRegistration{Config: cfg, GroupID: groupID, ConfigPath: path, GitLab: gitlab}.Run(ctx)
+	if err != nil {
+		return err
+	}
+	a.out.Print(ui.OK, fmt.Sprintf("Group runner %d wrote %s. Run podman compose restart gitlab-runner to load the runner.", id, path))
 	return nil
 }

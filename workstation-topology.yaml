@@ -198,3 +198,8 @@ service_issued_tokens:
       vault_kv_path: "parent-group-governance/sonarqube/ci-analysis-bot"
       vault_kv_field: "sonarqube_ci_token"
     gitlab_group_variable_key: "SONAR_TOKEN"
+  gitlab_group_runner:
+    description: "parent-group-governance-shared-podman-runner"
+    tag_list: ["podman", "local", "sonarqube-network"]
+    gitlab_url: "https://gitlab.com"
+    config_path: "gitlab-runner-configs/config.toml"

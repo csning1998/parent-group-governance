@@ -44,6 +44,11 @@ func (a *app) buildMenuOptions() []menuOption {
 			menuOption{"[Credentials] Issue the SonarQube Analysis Token", func(ctx context.Context) error { return a.issueSonarQubeAnalysisToken(ctx) }},
 		)
 	}
+	if a.issuedTokens.GitLabGroupRunner.ConfigPath != "" {
+		options = append(options,
+			menuOption{"[Credentials] Register the GitLab Group Runner", func(ctx context.Context) error { return a.registerGitLabGroupRunner(ctx) }},
+		)
+	}
 	options = append(options,
 		menuOption{"[Terraform] Audit State Secrets", func(ctx context.Context) error { return a.runStateAuditMenu(ctx) }},
 		menuOption{"Quit", nil},

@@ -24,12 +24,21 @@ type SonarQubeAnalysisTokenConfig struct {
 	GitLabGroupVariableKey string     `yaml:"gitlab_group_variable_key"` // GitLab group CI/CD variable key storing the token
 }
 
+// GitLabGroupRunnerConfig declares the group runner and the config.toml which the runner container reads.
+type GitLabGroupRunnerConfig struct {
+	Description string   `yaml:"description"` // runner description in the group settings and the runner name in config.toml
+	TagList     []string `yaml:"tag_list"`    // job tags which the runner accepts
+	GitLabURL   string   `yaml:"gitlab_url"`  // GitLab instance URL which the runner polls
+	ConfigPath  string   `yaml:"config_path"` // config.toml path relative to the project root
+}
+
 // Config is the service_issued_tokens section of workstation-topology.yaml.
 type Config struct {
 	GitLabAPIURL           string                       `yaml:"gitlab_api_url"`           // GitLab REST API base URL
 	GitLabTokenOwnerCode   string                       `yaml:"gitlab_token_owner_code"`  // owner code supplying the state backend token for GitLab variable updates
 	GitLabGroupRegistry    VaultField                   `yaml:"gitlab_group_registry"`    // registry field holding the top-level group ID
 	SonarQubeAnalysisToken SonarQubeAnalysisTokenConfig `yaml:"sonarqube_analysis_token"` // SonarQube analysis token of the group CI jobs
+	GitLabGroupRunner      GitLabGroupRunnerConfig      `yaml:"gitlab_group_runner"`      // group runner of the local Podman executor
 }
 
 // Load parses the service_issued_tokens section from the topology configuration at path.

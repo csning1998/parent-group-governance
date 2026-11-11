@@ -80,8 +80,8 @@ func newRotation(sonar *fakeSonarQube, vault *fakeVault, gitlab *fakeGitLab) Son
 	}
 }
 
-// TestRun asserts Vault storage, group variable updates, and token revocation across successful and failed rotation attempts.
-func TestRun(t *testing.T) {
+// TestSonarQubeAnalysisTokenRotationRun asserts Vault storage, group variable updates, and token revocation across successful and failed rotation attempts.
+func TestSonarQubeAnalysisTokenRotationRun(t *testing.T) {
 	newValue := "value-of-" + issuedName
 	cases := map[string]struct {
 		vaultErr     error

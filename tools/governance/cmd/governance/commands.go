@@ -38,6 +38,11 @@ func (a *app) newCredentialsCmd() *cobra.Command {
 		Short: "Issue the SonarQube analysis token of the group CI jobs and revoke the earlier tokens",
 		RunE:  func(cmd *cobra.Command, args []string) error { return a.issueSonarQubeAnalysisToken(cmd.Context()) },
 	})
+	issueCmd.AddCommand(&cobra.Command{
+		Use:   "gitlab-group-runner",
+		Short: "Register the group runner and write its config.toml, refusing an existing config.toml",
+		RunE:  func(cmd *cobra.Command, args []string) error { return a.registerGitLabGroupRunner(cmd.Context()) },
+	})
 	cmd.AddCommand(issueCmd)
 
 	return cmd
