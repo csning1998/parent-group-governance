@@ -267,10 +267,11 @@ func TestRegisterGitLabGroupRunner(t *testing.T) {
 // TestPublishCodeReviewerVariables asserts the variable writes, the refusal without a listed project, and a missing Vault field.
 func TestPublishCodeReviewerVariables(t *testing.T) {
 	cases := map[string]struct {
-		projects     []string
-		dropSecret   string
-		wantErr      string
-		wantRequests []string
+		projects      []string
+		dropSecret    string
+		emptyBotToken bool
+		wantErr       string
+		wantRequests  []string
 	}{
 		"writes both variables into the listed project": {
 			projects:     []string{"personal/second-brain"},
@@ -284,11 +285,19 @@ func TestPublishCodeReviewerVariables(t *testing.T) {
 			dropSecret: "secret/parent-group-governance/terraform/state-backend",
 			wantErr:    "read secret/parent-group-governance/terraform/state-backend",
 		},
+		"refuses an empty bot token list": {
+			projects:      []string{"personal/second-brain"},
+			emptyBotToken: true,
+			wantErr:       "lists no bot_tokens",
+		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			a, vault, services := newIssuedTokensApp(t, tc.projects)
 			delete(vault.secrets, tc.dropSecret)
+			if tc.emptyBotToken {
+				a.issuedTokens.CodeReviewerVariables.BotTokens = nil
+			}
 			assertOperationError(t, a.publishCodeReviewerVariables(context.Background()), tc.wantErr)
 			assertRequestsInclude(t, services.recorded(), tc.wantRequests...)
 		})

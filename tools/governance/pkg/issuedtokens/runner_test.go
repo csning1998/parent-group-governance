@@ -163,3 +163,18 @@ func assertRunnerConfig(t *testing.T, path string) {
 		}
 	}
 }
+
+// TestWriteRunnerConfig asserts the refusal of a config.toml created after the existence check of Run.
+func TestWriteRunnerConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), groupRunnerConfig.ConfigPath)
+	writeEarlierRunnerConfig(t, path)
+
+	err := writeRunnerConfig(path, groupRunnerConfig, "glrt-issued")
+	if !errors.Is(err, ErrRunnerConfigExists) {
+		t.Fatalf("got %v, want %v", err, ErrRunnerConfigExists)
+	}
+	content, readErr := os.ReadFile(path)
+	if readErr != nil || string(content) != "earlier" {
+		t.Fatalf("config.toml holds %q, %v, want the earlier content", content, readErr)
+	}
+}

@@ -80,6 +80,11 @@ func TestCodeReviewerVariablesPublicationRun(t *testing.T) {
 			wantErr:   errors.New("permission denied"),
 			wantReads: 1,
 		},
+		"an empty bot token list writes nothing": {
+			projects:      []string{"csning1998-lab/parent-group-governance"},
+			emptyBotToken: true,
+			wantErr:       ErrNoBotTokens,
+		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -88,8 +93,12 @@ func TestCodeReviewerVariablesPublicationRun(t *testing.T) {
 				"csning1998-lab/parent-group-governance":      true,
 				"csning1998-lab/gitlab-ci-with-code-reviewer": true,
 			}}
+			config := reviewerConfig
+			if tc.emptyBotToken {
+				config = CodeReviewerVariablesConfig{}
+			}
 
-			err := CodeReviewerVariablesPublication{Config: reviewerConfig, Projects: tc.projects, Vault: vault, GitLab: gitlab}.Run(context.Background())
+			err := CodeReviewerVariablesPublication{Config: config, Projects: tc.projects, Vault: vault, GitLab: gitlab}.Run(context.Background())
 			assertPublication(t, tc, err, vault, gitlab)
 		})
 	}
@@ -97,12 +106,13 @@ func TestCodeReviewerVariablesPublicationRun(t *testing.T) {
 
 // publicationCase declares one publication scenario and the expected reads and writes.
 type publicationCase struct {
-	projects    []string
-	vaultErr    error
-	wantErr     error
-	wantMissing []string
-	wantReads   int
-	wantWrites  []string
+	projects      []string
+	emptyBotToken bool
+	vaultErr      error
+	wantErr       error
+	wantMissing   []string
+	wantReads     int
+	wantWrites    []string
 }
 
 func assertPublication(t *testing.T, tc publicationCase, err error, vault *fakeSecretReader, gitlab *fakeProjectVariables) {

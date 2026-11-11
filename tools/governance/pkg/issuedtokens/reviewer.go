@@ -12,6 +12,9 @@ import (
 // ErrMissingProjects marks a publication refused because a listed project is absent from GitLab.
 var ErrMissingProjects = errors.New("issuedtokens: listed projects are absent from GitLab")
 
+// ErrNoBotTokens marks a publication refused because the configuration declares no bot token.
+var ErrNoBotTokens = errors.New("issuedtokens: code_reviewer_variables declares no bot_tokens")
+
 // SecretReader reads one field of a KV v2 secret.
 type SecretReader interface {
 	ReadField(ctx context.Context, field VaultField) (string, error)
