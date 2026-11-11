@@ -452,7 +452,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 | `internal/vaultops/tls_test.go`                                         | `TestGenerateTLS*`         | Chain validity, subject alternative names of the topology, refusal without listener addresses, key types  |
 | `pkg/secretrotate/factory_default_test.go`                              | `TestAwaitFactoryDefault*` | Waiting for the service, the retained state verdict, and a credential without a factory default           |
 | `cmd/governance/menu_test.go`                                           | `TestBuildMenuOptions_*`   | Apply All first, Quit last, each host step alone, and the service admin password labels                   |
-| `ansible/roles/workstation_vault_audit/tests/test_vault_audit_check.py` | 20 pytest test cases       | 6 detection rules, log rotation and truncation, state persistence                                         |
+| `ansible/roles/workstation_vault_audit/tests/test_vault_audit_check.py` | 26 pytest test cases       | 7 detection rules, log rotation and truncation, state persistence                                         |
 
 Tests utilize httptest to simulate the Bastion Vault and the services of `service_admin_passwords`.
 
