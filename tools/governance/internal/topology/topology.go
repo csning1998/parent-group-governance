@@ -25,6 +25,8 @@ const (
 	AccessRoleCredentialRotator AccessRole = "credential-rotator"
 )
 
+const accessTierCredentialDistributor = "credential-distributor"
+
 // BastionVault is the listener topology of the Bastion Vault server.
 type BastionVault struct {
 	LoopbackAddress string `yaml:"loopback_address"` // host loopback address (127.0.0.1) for local processes
@@ -41,8 +43,28 @@ func (b BastionVault) APIEndpoint() string {
 
 // ProxyIdentity defines one operator proxy instance listening on loopback and mapping to a Vault cert role.
 type ProxyIdentity struct {
-	ListenPort int    `yaml:"listen_port"` // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)
-	AccessTier string `yaml:"access_tier"` // logical privilege tier of the operator role (credential-distributor, consumer, tenant, administrator, credential-rotator)
+	ListenPort       int    `yaml:"listen_port"`        // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)
+	AccessTier       string `yaml:"access_tier"`        // logical privilege tier of the operator role (credential-distributor, consumer, tenant, administrator, credential-rotator)
+	OwnerCode        string `yaml:"owner_code"`         // repository owner code of a distributor or consumer identity
+	StateBackendPath string `yaml:"state_backend_path"` // KV v2 secret path storing the GitLab state backend token for this owner
+
+	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // target GitLab projects designated to receive code reviewer CI/CD variables
+}
+
+// ListCodeReviewerVariableProjects returns sorted and deduplicated project paths aggregated across all proxy identities.
+func (v VaultTopology) ListCodeReviewerVariableProjects() []string {
+	var paths []string
+	for _, identity := range v.OperatorVaultProxy.Identities {
+		paths = append(paths, identity.CodeReviewerVariableProjects...)
+	}
+	slices.Sort(paths)
+	return slices.Compact(paths)
+}
+
+// StateBackend defines the shared KV v2 mount and field schema across state backend paths.
+type StateBackend struct {
+	VaultKVMount string `yaml:"vault_kv_mount"` // KV v2 mount holding state backend tokens
+	VaultKVField string `yaml:"vault_kv_field"` // secret key holding the GitLab state backend token
 }
 
 // OperatorVaultProxy holds client connection parameters and identity mappings for operator Vault proxies.
@@ -50,7 +72,30 @@ type OperatorVaultProxy struct {
 	CertAuthMount    string                   `yaml:"cert_auth_mount"`   // Vault TLS certificate auth mount path matching CN operator-<identity>
 	UserConfigDir    string                   `yaml:"user_config_dir"`   // directory relative to user $HOME storing mTLS client certs and systemd units
 	PlaceholderToken string                   `yaml:"placeholder_token"` // dummy token string required by client headers, which the proxy strips and replaces
+	StateBackend     StateBackend             `yaml:"state_backend"`     // shared KV v2 location schema for owner state backend tokens
 	Identities       map[string]ProxyIdentity `yaml:"identities"`        // operator role entries mapped to their local listener ports and tiers
+}
+
+// KVField specifies the location of a single field within a KV v2 secret.
+type KVField struct {
+	Mount string
+	Path  string
+	Field string
+}
+
+// ResolveStateBackendToken returns the KV v2 location of the GitLab token for the given ownerCode distributor.
+func (v VaultTopology) ResolveStateBackendToken(ownerCode string) (KVField, error) {
+	var paths []string
+	for _, identity := range v.OperatorVaultProxy.Identities {
+		if identity.AccessTier == accessTierCredentialDistributor && identity.OwnerCode == ownerCode {
+			paths = append(paths, identity.StateBackendPath)
+		}
+	}
+	if len(paths) != 1 || paths[0] == "" {
+		return KVField{}, fmt.Errorf("topology: operator_vault_proxy MUST declare exactly one %s identity with owner_code %s and a state_backend_path, found %v", accessTierCredentialDistributor, ownerCode, paths)
+	}
+	backend := v.OperatorVaultProxy.StateBackend
+	return KVField{Mount: backend.VaultKVMount, Path: paths[0], Field: backend.VaultKVField}, nil
 }
 
 // ProxyEndpoint holds the client connection parameters required to communicate with a local operator Vault Proxy.

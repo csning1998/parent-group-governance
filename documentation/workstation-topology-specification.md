@@ -11,11 +11,12 @@ This specification defines the declarative configuration model for `workstation-
 
 ## Section 2. Architectural Model
 
-The topology file is organized into three distinct planes:
+The topology file is organized into four distinct planes:
 
 1. **Infrastructure Plane (`vault_bastion`)**: Configures daemon-level network listener interfaces and port bindings for the local Bastion Vault service.
 2. **Access Plane (`operator_vault_proxy`)**: Configures local forwarding proxies mediating operator connections via mTLS client certificates, abstracting Vault token lifecycle management away from human operators and automation callers.
 3. **Credential Lifecycle Plane (`service_admin_passwords`)**: Declares the registry of infrastructure service administrative accounts whose passwords undergo automated rotation by the Go governance CLI.
+4. **Credential Issuance Plane (`service_issued_tokens`)**: Declares the tokens which SonarQube and GitLab issue and `./governance credentials issue` writes into the Bastion Vault, GitLab CI/CD variables, and the runner configuration.
 
 ## Section 3. Schema and Field Reference
 
@@ -111,6 +112,7 @@ The `operator_vault_proxy` map configures workstation-local forwarding proxies t
     - `state_backend_path` (`string`): KV path of the GitLab token of the owner below `<owner_code>/`, such as `opgitlab/terraform/state-backend`. Every tier except `credential-rotator` MUST declare the field, and `vault-proxy-env` exports the token as `TF_HTTP_PASSWORD`.
     - `allowed_read_secret_paths` and `allowed_write_secret_paths` (`list(string)`): KV paths of whole segments, declared by `credential-distributor` alone.
     - `allowed_read_registry_paths` (`list(string)`): Registry domains below `platform/`, such as `platform/ai-provider`, declared by `credential-distributor` and `consumer`.
+    - `code_reviewer_variable_projects` (`list(string)`): Full GitLab project paths of the owner, such as `csning1998-lab/parent-group-governance`, which receive the code reviewer bot variables from `./governance credentials issue code-reviewer-variables`. Only `workstation-topology.yaml` grants a project the bot tokens, and a project cannot register itself.
 - Naming: `administrator` and `credential-rotator` carry the tier name, a tenant carries its owner code, and a `credential-distributor` or `consumer` identity carries `<access_tier>-<owner_code>`. The governance `credential-distributor` keeps the bare tier name until every repository runs with its own identity.
 
 ### Item C. Credential Lifecycle Plane: `service_admin_passwords`
@@ -129,6 +131,27 @@ The `service_admin_passwords` list registers infrastructure services whose initi
     - `verify_endpoint` (`string`): Target HTTP URL validating credential correctness via read-only authentication.
     - `admin_username` (`string`): Administrative account login username on the target service (`admin`).
     - `factory_default_password` (`string`): Out-of-the-box factory password required during initial bootstrap rotation.
+
+### Item D. Credential Issuance Plane: `service_issued_tokens`
+
+The `service_issued_tokens` object declares the tokens which a service issues. A Terraform-managed write would store each token in the state, hence `./governance credentials issue` writes each token through the administrator Vault Proxy.
+
+- `gitlab_api_url` (`string`): GitLab REST API base URL (`https://gitlab.com/api/v4`).
+- `gitlab_token_owner_code` (`string`): Owner code whose `credential-distributor` identity names the `state_backend_path` of the GitLab token for every API call (`parent-group-governance`).
+- `gitlab_group_registry` (`object`): `vault_kv_mount`, `vault_kv_path`, and `vault_kv_field` of the top-level group ID in the registry.
+- `sonarqube_analysis_token` (`object`):
+    - `user_tokens_endpoint` (`string`): The `api/user_tokens` web service of SonarQube.
+    - `admin_password_key` (`string`): The `key` of the `service_admin_passwords` entry whose account issues the token.
+    - `token_name_prefix` (`string`): Name prefix of every issued token. A rotation revokes the bare prefix and every earlier name of the prefix and a hyphen.
+    - `vault` (`object`): `vault_kv_mount`, `vault_kv_path`, and `vault_kv_field` of the token in the Bastion Vault.
+    - `gitlab_group_variable_key` (`string`): Group CI/CD variable receiving the token (`SONAR_TOKEN`).
+- `gitlab_group_runner` (`object`):
+    - `description` (`string`): Runner description in the group settings and runner name in `config.toml`.
+    - `tag_list` (`list(string)`): Job tags which the runner accepts.
+    - `gitlab_url` (`string`): GitLab instance URL which the runner polls.
+    - `config_path` (`string`): Path of `config.toml` relative to the project root. An existing file refuses the registration.
+- `code_reviewer_variables` (`object`):
+    - `bot_tokens` (`list(object)`): Each entry maps one Bastion Vault field (`vault`) to the project variable keys (`variable_keys`) receiving the token. `foundation-vault-bastion` grants the administrator identity read access on each listed path.
 
 ## Section 4. Operator Identity Contract
 
@@ -201,5 +224,14 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `service_admin_passwords` | Go CLI httprotate package          | `tools/governance/pkg/httprotate/httprotate.go`                      | Executes HTTP form-based authentication and rotation.           |
 | `service_admin_passwords` | Go CLI operations                  | `tools/governance/cmd/governance/operations.go`                      | Drives the password rotation loop in `runCredentialsRotate`.    |
 | `service_admin_passwords` | Go CLI menu                        | `tools/governance/cmd/governance/menu.go`                            | Exposes TUI menu items for credential rotation.                 |
+
+### Item D. Credential Issuance Plane Consumers
+
+| Field                                          | Consuming Component                | Source File Path                                                     | Usage Description                                                     |
+| ---------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `service_issued_tokens`                        | Go CLI issuedtokens package        | `tools/governance/pkg/issuedtokens/config.go`                        | Parses the token declarations.                                        |
+| `service_issued_tokens`                        | Go CLI issued token operations     | `tools/governance/cmd/governance/issued_tokens.go`                   | Drives the three `credentials issue` subcommands.                     |
+| `code_reviewer_variables.bot_tokens`           | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/access-operator-proxy.tf` | Grants the administrator identity read access on each bot token path. |
+| `identities.*.code_reviewer_variable_projects` | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Lists the projects receiving the code reviewer variables.             |
 
 ---

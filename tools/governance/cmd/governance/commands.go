@@ -32,6 +32,24 @@ func (a *app) newCredentialsCmd() *cobra.Command {
 	}
 	cmd.AddCommand(reconcileCmd)
 
+	issueCmd := &cobra.Command{Use: "issue", Short: "Issue service tokens into the Bastion Vault and GitLab"}
+	issueCmd.AddCommand(&cobra.Command{
+		Use:   "sonarqube-analysis-token",
+		Short: "Issue the SonarQube analysis token of the group CI jobs and revoke the earlier tokens",
+		RunE:  func(cmd *cobra.Command, args []string) error { return a.issueSonarQubeAnalysisToken(cmd.Context()) },
+	})
+	issueCmd.AddCommand(&cobra.Command{
+		Use:   "gitlab-group-runner",
+		Short: "Register the group runner and write its config.toml, refusing an existing config.toml",
+		RunE:  func(cmd *cobra.Command, args []string) error { return a.registerGitLabGroupRunner(cmd.Context()) },
+	})
+	issueCmd.AddCommand(&cobra.Command{
+		Use:   "code-reviewer-variables",
+		Short: "Write the code reviewer bot tokens into the variables of every listed project",
+		RunE:  func(cmd *cobra.Command, args []string) error { return a.publishCodeReviewerVariables(cmd.Context()) },
+	})
+	cmd.AddCommand(issueCmd)
+
 	return cmd
 }
 

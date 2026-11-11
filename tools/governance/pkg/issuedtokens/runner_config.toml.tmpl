@@ -3,9 +3,9 @@ concurrent = 4
 check_interval = 0
 
 [[runners]]
-  name         = "${runner_name}"
-  url          = "https://gitlab.com"
-  token        = "${runner_token}"
+  name         = "{{.Name}}"
+  url          = "{{.URL}}"
+  token        = "{{.Token}}"
   executor     = "docker"
   run_untagged = true
   [runners.docker]

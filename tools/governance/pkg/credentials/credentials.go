@@ -24,8 +24,9 @@ type Config struct {
 
 // Credential pairs a lookup Key with the secretrotate.Spec rotating the named secret.
 type Credential struct {
-	Key  string            // unique identifier for the credential within the rotation registry
-	Spec secretrotate.Spec // rotation specification and driver functions
+	Key           string            // unique identifier for the credential within the rotation registry
+	AdminUsername string            // administrator username authenticated by this service credential
+	Spec          secretrotate.Spec // rotation specification and driver functions
 }
 
 type credentialConfig struct {
@@ -118,7 +119,8 @@ func (c credentialConfig) toCredential() (Credential, error) {
 		return Credential{}, fmt.Errorf("credentials: %s: %w", c.Key, err)
 	}
 	return Credential{
-		Key: c.Key,
+		Key:           c.Key,
+		AdminUsername: c.Service.AdminUsername,
 		Spec: secretrotate.Spec{
 			Mount:                  c.VaultKVMount,
 			Path:                   c.VaultKVPath,

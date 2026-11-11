@@ -39,6 +39,21 @@ func (a *app) buildMenuOptions() []menuOption {
 			menuOption{"[Credentials] Reconcile Service Admin Passwords with the Live Service", func(ctx context.Context) error { return a.runReconcileCredentialMenu(ctx) }},
 		)
 	}
+	if a.issuedTokens.SonarQubeAnalysisToken.UserTokensEndpoint != "" {
+		options = append(options,
+			menuOption{"[Credentials] Issue the SonarQube Analysis Token", func(ctx context.Context) error { return a.issueSonarQubeAnalysisToken(ctx) }},
+		)
+	}
+	if a.issuedTokens.GitLabGroupRunner.ConfigPath != "" {
+		options = append(options,
+			menuOption{"[Credentials] Register the GitLab Group Runner", func(ctx context.Context) error { return a.registerGitLabGroupRunner(ctx) }},
+		)
+	}
+	if len(a.issuedTokens.CodeReviewerVariables.BotTokens) > 0 {
+		options = append(options,
+			menuOption{"[Credentials] Publish the Code Reviewer Variables", func(ctx context.Context) error { return a.publishCodeReviewerVariables(ctx) }},
+		)
+	}
 	options = append(options,
 		menuOption{"[Terraform] Audit State Secrets", func(ctx context.Context) error { return a.runStateAuditMenu(ctx) }},
 		menuOption{"Quit", nil},

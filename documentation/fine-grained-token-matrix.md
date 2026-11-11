@@ -7,7 +7,7 @@ This document defines the GitLab.com fine-grained personal access tokens across 
 1. The current constraint is the GitLab.com Free tier plan of the group, which provides neither project access tokens nor group access tokens.
 2. The chosen path provisions one fine-grained personal access token per repository for the state backend and one per CI tool for integration under the owner account. Setting `access` to selected memberships limits each downstream state backend token to its own project.
 3. Each state backend token provides `TF_HTTP_PASSWORD` for the Terraform HTTP state backend and supplies authentication for the `gitlab` provider across the layers of the repository.
-4. Each integration token authenticates one CI tool of `gitlab-ci-with-code-reviewer` in the pipelines of every repository which applies `provisioner-code-reviewer`.
+4. Each integration token authenticates one CI tool of `gitlab-ci-with-code-reviewer` in the pipelines of every repository whose CI variables carry the token. `./governance credentials issue code-reviewer-variables` writes the variables of each project in `code_reviewer_variable_projects`, and `provisioner-code-reviewer` writes the variables of each repository still calling the module.
 5. The associated cost is the manual rotation of each token, which attaches to the personal owner account and expires within 365 days.
 6. The owner manages tokens through <https://gitlab.com/-/user_settings/personal_access_tokens?state=active&sort=expires_asc>, which lists active tokens ordered by expiration date.
 7. Permission names conform to the GitLab fine-grained permission specifications for the [REST API](https://docs.gitlab.com/auth/tokens/fine_grained_access_tokens_rest/) and [GraphQL API](https://docs.gitlab.com/auth/tokens/fine_grained_access_tokens_graphql/).
@@ -88,28 +88,28 @@ Action codes: `C` Create, `R` Read, `U` Update, `D` Delete, `L` Lock, `P` Protec
 
 ### Item D. Terraform Consumers
 
-| Category         | Resource                  | Actions | Terraform consumer                                                                                                                    |
-| ---------------- | ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| CI/CD            | Terraform State           | CRL     | The HTTP backend of every layer                                                                                                       |
-| CI/CD            | Variable                  | CRUD    | `gitlab_project_variable` of the project, WIF, and code reviewer modules, and `gitlab_group_variable` of `group-gitlab-configuration` |
-| CI/CD            | Runner                    | C       | `gitlab_user_runner` of `group-gitlab-runner` through `POST /user/runners`                                                            |
-| CI/CD            | Runner                    | RUD     | `gitlab_user_runner` through `GET`, `PUT`, and `DELETE /runners/:id`                                                                  |
-| CI/CD            | Catalog Resource          | CD      | `gitlab_project_cicd_catalog` through the GraphQL API                                                                                 |
-| Projects         | Project                   | C       | The first apply or a rebuild of a downstream project through `POST /projects`                                                         |
-| Projects         | Project                   | RU      | `gitlab_project`, `data.gitlab_project`, and the catalog status read of `gitlab_project_cicd_catalog`                                 |
-| Repository       | Branch                    | P       | `gitlab_branch_protection`                                                                                                            |
-| Repository       | Branch                    | R       | `gitlab_project` creation (Section 5)                                                                                                 |
-| Repository       | Protected Branch          | RU      | `gitlab_branch_protection`                                                                                                            |
-| Repository       | Push Rule                 | R       | `gitlab_project` and `gitlab_group` refresh (Section 5)                                                                               |
-| System Access    | Job Token Scope Allowlist | CRD     | `gitlab_project_job_token_scope`                                                                                                      |
-| System Access    | User                      | R       | The configuration check of the `gitlab` provider (Section 5)                                                                          |
-| System Access    | Metadata                  | R       | `gitlab_branch_protection` and `gitlab_group` (Section 5)                                                                             |
-| Project Features | Remote Mirror Public Key  | R       | `data.gitlab_project_mirror_public_key`                                                                                               |
-| Project Features | Remote Mirror             | CRUD    | `gitlab_project_push_mirror`                                                                                                          |
-| Groups           | Group                     | C       | Subgroups of `group-topology` through `POST /groups`                                                                                  |
-| Groups           | Group                     | RU      | `gitlab_group` of `group-foundation` and `group-topology`                                                                             |
-| Project Planning | Label                     | CRUD    | `gitlab_group_label` of `group-gitlab-configuration`                                                                                  |
-| Project Planning | Work Item                 | CRUD    | `gitlab_project_milestone` of the repositories below `personal`                                                                       |
+| Category         | Resource                  | Actions | Terraform consumer                                                                                                                                      |
+| ---------------- | ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CI/CD            | Terraform State           | CRL     | The HTTP backend of every layer                                                                                                                         |
+| CI/CD            | Variable                  | CRUD    | `gitlab_project_variable` of the project and WIF modules, `gitlab_group_variable` of `group-gitlab-configuration`, and `./governance credentials issue` |
+| CI/CD            | Runner                    | C       | `./governance credentials issue gitlab-group-runner` through `POST /user/runners`                                                                       |
+| CI/CD            | Runner                    | RUD     | `terraform destroy` of the retired `group-gitlab-runner` through `DELETE /runners/:id`                                                                  |
+| CI/CD            | Catalog Resource          | CD      | `gitlab_project_cicd_catalog` through the GraphQL API                                                                                                   |
+| Projects         | Project                   | C       | The first apply or a rebuild of a downstream project through `POST /projects`                                                                           |
+| Projects         | Project                   | RU      | `gitlab_project`, `data.gitlab_project`, and the catalog status read of `gitlab_project_cicd_catalog`                                                   |
+| Repository       | Branch                    | P       | `gitlab_branch_protection`                                                                                                                              |
+| Repository       | Branch                    | R       | `gitlab_project` creation (Section 5)                                                                                                                   |
+| Repository       | Protected Branch          | RU      | `gitlab_branch_protection`                                                                                                                              |
+| Repository       | Push Rule                 | R       | `gitlab_project` and `gitlab_group` refresh (Section 5)                                                                                                 |
+| System Access    | Job Token Scope Allowlist | CRD     | `gitlab_project_job_token_scope`                                                                                                                        |
+| System Access    | User                      | R       | The configuration check of the `gitlab` provider (Section 5)                                                                                            |
+| System Access    | Metadata                  | R       | `gitlab_branch_protection` and `gitlab_group` (Section 5)                                                                                               |
+| Project Features | Remote Mirror Public Key  | R       | `data.gitlab_project_mirror_public_key`                                                                                                                 |
+| Project Features | Remote Mirror             | CRUD    | `gitlab_project_push_mirror`                                                                                                                            |
+| Groups           | Group                     | C       | Subgroups of `group-topology` through `POST /groups`                                                                                                    |
+| Groups           | Group                     | RU      | `gitlab_group` of `group-foundation` and `group-topology`                                                                                               |
+| Project Planning | Label                     | CRUD    | `gitlab_group_label` of `group-gitlab-configuration`                                                                                                    |
+| Project Planning | Work Item                 | CRUD    | `gitlab_project_milestone` of the repositories below `personal`                                                                                         |
 
 1. Only `parent-group-governance` declares `inbound_job_token_scope_project_ids`. All other callers of `provisioner-gitlab-project` retain the default `[]`. `gitlab_project_job_token_scope` therefore provisions no resources for those callers.
 2. `platform-observability` grants Remote Mirror and Remote Mirror Public Key for the GitHub mirror of `provisioner-github-mirror`.
@@ -207,7 +207,7 @@ unset t
 2. A replacement creates a new token through Item A, overwrites the local token file, writes the token through Item B, and verifies the token through Item C.
 3. The owner MUST revoke the superseded token on the management page in item 6 of Section 1 after the verification.
 4. A replacement does not change Terraform layer configurations or Vault access policies.
-5. When replacing an integration token, the owner MUST apply every `administration-gitlab-project` layer which invokes `provisioner-code-reviewer` prior to revoking the superseded token. This step synchronizes the updated secret from Bastion Vault into the CI variables of each repository.
+5. When replacing an integration token, the owner MUST run `./governance credentials issue code-reviewer-variables` and apply every `administration-gitlab-project` layer which still invokes `provisioner-code-reviewer` prior to revoking the superseded token. This step writes the updated secret from Bastion Vault into the CI variables of each repository.
 
 ## Section 5. Provider Requirements
 

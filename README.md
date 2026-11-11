@@ -45,8 +45,8 @@ The bootstrap is one linear sequence. Each step depends on the steps above, and 
 6. Apply `foundation-vault-bastion` with the root token in the same shell, as described in Section 6 Item C Step 4. The apply creates `operator-cert` and the cert roles, after which each background Vault Proxy logs in.
 7. Run `[Credentials] Rotate Service Admin Passwords` or `./governance credentials rotate sonarqube-admin-password`, which moves each service admin password into the Bastion Vault through the credential-rotator Vault Proxy as described in Section 4 Item D Step 3.
 8. Run `direnv allow` once in `terraform/` and once in `terraform/layers/administration-gitlab-project`, as described in Section 6 Item A.
-9. Apply the downstream Terraform layers in the order of Section 6 Item C Step 5 onwards: `group-foundation`, `group-ai-provider-anthropic`, `group-ai-provider-google-cloud`, `group-ai-provider-azure`, `administration-gitlab-project`, `group-topology`, `group-gitlab-runner`, `group-sonarqube`, and `group-gitlab-configuration`.
-10. Restart the runner with `podman compose restart gitlab-runner` after `group-gitlab-runner` renders the runner configuration.
+9. Apply the downstream Terraform layers and run the token commands in the order of Section 6 Item C Step 5 onwards: `group-foundation`, `group-ai-provider-anthropic`, `group-ai-provider-google-cloud`, `group-ai-provider-azure`, `administration-gitlab-project`, `group-topology`, `./governance credentials issue gitlab-group-runner`, `./governance credentials issue sonarqube-analysis-token`, `group-gitlab-configuration`, and `./governance credentials issue code-reviewer-variables`.
+10. Restart the runner with `podman compose restart gitlab-runner` after `./governance credentials issue gitlab-group-runner` writes the runner configuration.
 11. Run `[Vault] Revoke Root Token After Bootstrap`, or `./governance vault revoke-root`, which ends the bootstrap as described in Section 6 Item G.
 
 ## Section 2. Host Prerequisites
@@ -331,7 +331,7 @@ The CLI injects `workstation_libvirt_operator_user` from the operator account, b
 
 ### Item D. SonarQube Bootstrap
 
-SonarQube holds the analysis token which `group-sonarqube` mints, and the token feeds the group variable `SONAR_TOKEN`. The administrator password lives in the Bastion Vault at `secret/parent-group-governance/sonarqube/admin-account`, field `sonarqube_admin_password`, and `./governance` is the only writer. `group-sonarqube` reads the password through an ephemeral read and authenticates as `admin` against `http://127.0.0.1:9000`.
+SonarQube issues the analysis token which `./governance credentials issue sonarqube-analysis-token` writes into the Bastion Vault and the group variable `SONAR_TOKEN`. The administrator password lives in the Bastion Vault at `secret/parent-group-governance/sonarqube/admin-account`, field `sonarqube_admin_password`, and `./governance` is the only writer. The command reads the password through the administrator Vault Proxy and authenticates as `admin` against `http://127.0.0.1:9000`.
 
 1. All container services start together at Section 1 Item C Step 2. `SONARQUBE_DB_PASSWORD` comes from `.env`, which Section 5 Item C generates at the first bootstrap. `podman-compose` automatically creates the missing bind mount directories under `sonarqube/` on the host, which inherit `container_file_t` from the repository root.
 2. `./governance vault init` waits until `/api/authentication/validate` answers and verifies the factory default `admin` before the initialization.
@@ -344,8 +344,7 @@ SonarQube holds the analysis token which `group-sonarqube` mints, and the token 
     vault kv get -mount=secret -field=sonarqube_admin_password parent-group-governance/sonarqube/admin-account | tr -d '\n' | xclip -selection clipboard
     ```
 
-4. Apply `group-sonarqube`, which writes the analysis token into `secret/parent-group-governance/sonarqube/ci-analysis-bot`, field `sonarqube_ci_token`.
-5. Apply `group-gitlab-configuration`, which publishes `SONAR_TOKEN` as a masked group variable.
+4. Run `./governance credentials issue sonarqube-analysis-token`. The command issues a global analysis token named `gitlab-ci-analysis-<UTC time>`, writes the token into `secret/parent-group-governance/sonarqube/ci-analysis-bot`, field `sonarqube_ci_token`, and into the masked and hidden group variable `SONAR_TOKEN`, and then revokes every earlier global analysis token named `gitlab-ci-analysis` or `gitlab-ci-analysis-<suffix>`. A rerun of the command rotates the token.
 
 The administrator password exists in two places alone: the Bastion Vault and the hash inside `sonarqube/postgres-data`. A rebuilt Bastion Vault therefore orphans a retained database, whose password no tool can recover. `./governance vault init` refuses while SonarQube rejects the factory default password, hence a rebuild of the Bastion Vault rebuilds SonarQube before Section 1 Item C Step 3.
 
@@ -428,18 +427,16 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 | `group-foundation`               | The top level group `Personal Lab` at path `csning1998-lab`                              | `administrator`                             | None                                                                                                           |
 | `administration-gitlab-project`  | The GitLab project hosting this repository and every Terraform state                     | `credential-distributor`                    | `group-foundation`, `group-ai-provider-anthropic`, `group-ai-provider-google-cloud`, `group-ai-provider-azure` |
 | `group-topology`                 | Every subgroup and nested subgroup beneath the top level group                           | `administrator`                             | `group-foundation`                                                                                             |
-| `group-gitlab-configuration`     | Group labels and the group CI variables sourced from Vault                               | `administrator`                             | `group-topology`                                                                                               |
-| `group-gitlab-runner`            | The group runner registration and the rendered `gitlab-runner-configs/config.toml`       | `administrator`                             | `group-topology`                                                                                               |
-| `group-sonarqube`                | The SonarQube global analysis token, written into Vault                                  | `administrator`                             | None                                                                                                           |
+| `group-gitlab-configuration`     | Group labels and the group CI variables without a credential                             | `administrator`                             | `group-topology`                                                                                               |
 | `group-ai-provider-anthropic`    | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`          | `administrator`                             | None                                                                                                           |
 | `group-ai-provider-google-cloud` | The Google Cloud Workload Identity Federation pool and provider                          | `administrator`                             | None                                                                                                           |
 | `group-ai-provider-azure`        | The Azure OpenAI Cognitive Services account, the customer managed key, and the Key Vault | `administrator`                             | None                                                                                                           |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing constrained intermediates. Each constrained intermediate issues subordinate certificates. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
-The layer `group-gitlab-configuration` publishes the masked group variable `SONAR_TOKEN` read out of Vault. Reviewer bot credentials have migrated to the project layer (`administration-gitlab-project`) via `provisioner-code-reviewer`.
+The layer `group-gitlab-configuration` publishes the plain group variable `SONAR_HOST_URL`. The group runner, the group variable `SONAR_TOKEN`, and the reviewer bot variables carry a credential, and `./governance credentials issue` writes each credential, as Item E describes.
 
-The layer `group-sonarqube` writes the path `sonarqube/ci-analysis-bot`. The `./governance` rotation of `sonarqube-admin-password` writes the path `sonarqube/admin-account`. The separation keeps one writer per Vault path.
+The command `./governance credentials issue sonarqube-analysis-token` writes the path `sonarqube/ci-analysis-bot`. The `./governance` rotation of `sonarqube-admin-password` writes the path `sonarqube/admin-account`. The separation keeps one writer per Vault path.
 
 ### Item C. Apply Order
 
@@ -481,9 +478,10 @@ Step 1 to Step 4 run with the root token, which `eval "$(vault-proxy-env root)"`
 5. Apply `group-foundation`.
 6. Apply `group-ai-provider-*` (for example `group-ai-provider-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
 7. Apply `administration-gitlab-project`, whose `.envrc` loads the `credential-distributor` identity, and apply `group-topology` in either order.
-8. Apply `group-gitlab-runner`. Restart the runner container with `podman compose restart gitlab-runner` afterwards.
-9. Apply `group-sonarqube` after Section 1 Item C Step 7 writes the administrator password into the Bastion Vault.
-10. Apply `group-gitlab-configuration`, which reads the token written by `group-sonarqube`.
+8. Run `./governance credentials issue gitlab-group-runner`, and restart the runner container with `podman compose restart gitlab-runner` afterwards.
+9. Run `./governance credentials issue sonarqube-analysis-token` after Section 1 Item C Step 7 writes the administrator password into the Bastion Vault.
+10. Apply `group-gitlab-configuration`.
+11. Run `./governance credentials issue code-reviewer-variables` after every project of `code_reviewer_variable_projects` exists.
 
 The platform trust facts hold the fields below. Every field is a string, because KV version 2 stores flat string values.
 
@@ -503,17 +501,21 @@ A precondition of `foundation-vault-bastion` stops the plan when a field is miss
 - `provisioner-gitlab-project` creates one GitLab project with a fixed merge policy, branch protection on `main`, and generic `extra_variables`. The caller supplies every environment specific value.
 - `provisioner-vault-credential` generates a set of random passwords and writes one KV version 2 secret. The module is the single generation point for the secrets under its control.
 
-### Item E. Known Operational Risks of the State
+### Item E. Service-Issued Credentials Outside the State
 
-`./governance terraform audit-state` reports the locations below, since each value enters the state through a provider attribute without a write-only form. Each location is a known operational risk, and the ignore file MUST NOT exempt the location, because the value is confidential. The convergence model is a CI job which reads Vault at run time through a GitLab `id_tokens` login, which removes the CI variable itself.
+The `gitlab` provider offers no write-only argument for a CI/CD variable and returns the runner token as an attribute, and the `sonarqube` provider offers no ephemeral resource. A Terraform-managed write of these values therefore stores each value in the state. `./governance credentials issue` writes the values below through the administrator Vault Proxy instead, and Terraform manages no resource holding the values.
 
-| Layer                           | Address                                                                      | Value                                                                    |
-| ------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `administration-gitlab-project` | `module.code_reviewer`                                                       | The reviewer and tag bot tokens, read and published as project variables |
-| `group-gitlab-configuration`    | `data.vault_kv_secret_v2.sonar_token`, `gitlab_group_variable.review_secret` | The SonarQube analysis token, read and published as a group variable     |
-| `group-sonarqube`               | `sonarqube_user_token.ci_analysis`, `vault_kv_secret_v2.sonar_token`         | The SonarQube analysis token, minted by the provider                     |
-| `group-gitlab-runner`           | `gitlab_user_runner.shared`, `local_sensitive_file.runner_config`            | The runner authentication token                                          |
-| `group-ai-provider-azure`       | `azurerm_cognitive_account.openai`                                           | The account access keys, inert while `local_auth_enabled = false`        |
+| Command                                                   | Credential                          | Destination                                                                                                                                 |
+| --------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `./governance credentials issue sonarqube-analysis-token` | The SonarQube global analysis token | `secret/parent-group-governance/sonarqube/ci-analysis-bot` and the group variable `SONAR_TOKEN`                                             |
+| `./governance credentials issue gitlab-group-runner`      | The runner authentication token     | `gitlab-runner-configs/config.toml`, mode 0600                                                                                              |
+| `./governance credentials issue code-reviewer-variables`  | The reviewer and tag bot tokens     | `REVIEW_MR_REVIEWER`, `CLAUDE_MR_REVIEWER`, `GEMINI_MR_REVIEWER`, and `TAG_PUSH_TOKEN` of each project in `code_reviewer_variable_projects` |
+
+- `gitlab-group-runner` refuses an existing `gitlab-runner-configs/config.toml`, because a second registration leaves the earlier runner registered with a valid token.
+- `code-reviewer-variables` checks every listed project before any write, and a listed project absent from GitLab stops the command without a write.
+- The cost is the absence of these values from every plan. Terraform detects no drift, and a recreated project or group receives the values on the next run of the command alone.
+
+The state of `group-ai-provider-azure` still holds the two access keys of `azurerm_cognitive_account.openai`, written before `local_auth_enabled = false`. `azurerm` 5.11.0 reads the keys only while local authentication is enabled, hence a refresh keeps the stale values. Azure refuses a key regeneration while `disableLocalAuth` is true, hence `terraform state rm` and `terraform import` of the account remove the values without a regeneration. The stale keys stay valid inside Azure, and a later enablement of local authentication MUST regenerate both keys first.
 
 The historical state versions of every layer still hold values which a later change removed. A purge of the history and a rotation of each exposed value close the record.
 

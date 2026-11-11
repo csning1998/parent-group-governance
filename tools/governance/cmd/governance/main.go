@@ -15,23 +15,26 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultenv"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/issuedtokens"
 )
 
 type app struct {
-	root        string
-	home        string
-	ansibleDir  string
-	topology    topology.VaultTopology
-	credentials []credentials.Credential
-	env         *config.Env
-	out         *ui.Printer
-	in          *bufio.Reader
+	root         string
+	home         string
+	ansibleDir   string
+	topology     topology.VaultTopology
+	credentials  []credentials.Credential
+	issuedTokens issuedtokens.Config
+	env          *config.Env
+	out          *ui.Printer
+	in           *bufio.Reader
 }
 
 func execute(args []string) int {
 	out := ui.New(os.Stdout, os.Stderr)
 
-	// A stale VAULT_CACERT of a wiped TLS directory otherwise fails every client, and VAULT_SKIP_VERIFY disables verification.
+	// Clear unsets ambient Vault variables because a missing CA file fails every client construction
+	// and VAULT_SKIP_VERIFY disables certificate verification.
 	err := vaultenv.Clear()
 	if err != nil {
 		out.Print(ui.Fatal, err.Error())
@@ -81,6 +84,13 @@ func execute(args []string) int {
 		return 1
 	}
 	a.credentials = creds
+
+	issued, err := issuedtokens.Load(topologyPath)
+	if err != nil {
+		out.Print(ui.Fatal, err.Error())
+		return 1
+	}
+	a.issuedTokens = issued
 
 	var rootCmd *cobra.Command
 	rootCmd = &cobra.Command{

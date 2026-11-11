@@ -31,11 +31,11 @@ operator_vault_proxy:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
         - "parent-group-governance/sonarqube/ci-analysis-bot"
-        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
-        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
       allowed_write_secret_paths: []
       allowed_read_registry_paths:
         - "platform/ai-provider"
+      code_reviewer_variable_projects:
+        - "csning1998-lab/parent-group-governance"
     platform-foundation:
       listen_port: 8211
       access_tier: "tenant"
@@ -89,12 +89,12 @@ operator_vault_proxy:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
         - "parent-group-governance/sonarqube/ci-analysis-bot"
-        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
-        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
       allowed_write_secret_paths: []
       allowed_read_registry_paths:
         - "platform/ai-provider"
         - "platform/gitlab-group"
+      code_reviewer_variable_projects:
+        - "csning1998-lab/gitlab-ci-with-code-reviewer"
     credential-distributor-generic-agent-criteria-source:
       listen_port: 8217
       access_tier: "credential-distributor"
@@ -179,3 +179,39 @@ service_admin_passwords:
       verify_endpoint: http://127.0.0.1:9000/api/authentication/validate
       admin_username: admin
       factory_default_password: admin
+
+# Credential Issuance Plane: tokens issued by SonarQube and GitLab,
+# and written into the Bastion Vault and GitLab via ./governance.
+service_issued_tokens:
+  gitlab_api_url: "https://gitlab.com/api/v4"
+  gitlab_token_owner_code: "parent-group-governance"
+  gitlab_group_registry:
+    vault_kv_mount: "registry"
+    vault_kv_path: "platform/gitlab-group/top-level"
+    vault_kv_field: "group_id"
+  sonarqube_analysis_token:
+    user_tokens_endpoint: "http://127.0.0.1:9000/api/user_tokens"
+    admin_password_key: "sonarqube-admin-password"
+    token_name_prefix: "gitlab-ci-analysis"
+    vault:
+      vault_kv_mount: "secret"
+      vault_kv_path: "parent-group-governance/sonarqube/ci-analysis-bot"
+      vault_kv_field: "sonarqube_ci_token"
+    gitlab_group_variable_key: "SONAR_TOKEN"
+  gitlab_group_runner:
+    description: "parent-group-governance-shared-podman-runner"
+    tag_list: ["podman", "local", "sonarqube-network"]
+    gitlab_url: "https://gitlab.com"
+    config_path: "gitlab-runner-configs/config.toml"
+  code_reviewer_variables:
+    bot_tokens:
+      - vault:
+          vault_kv_mount: "secret"
+          vault_kv_path: "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+          vault_kv_field: "token"
+        variable_keys: ["REVIEW_MR_REVIEWER", "CLAUDE_MR_REVIEWER", "GEMINI_MR_REVIEWER"]
+      - vault:
+          vault_kv_mount: "secret"
+          vault_kv_path: "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+          vault_kv_field: "token"
+        variable_keys: ["TAG_PUSH_TOKEN"]

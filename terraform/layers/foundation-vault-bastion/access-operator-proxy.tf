@@ -219,6 +219,15 @@ resource "vault_policy" "operator_administrator" {
           }
         ]...
       ),
+      # Grants administrator read and write access to code reviewer bot tokens, decoupling secret ingestion from distributor identity lifecycles.
+      merge(
+        [
+          for bot in local.workstation.service_issued_tokens.code_reviewer_variables.bot_tokens : {
+            "${bot.vault.vault_kv_mount}/data/${bot.vault.vault_kv_path}"     = { capabilities = local.acl_capability.kv_data }
+            "${bot.vault.vault_kv_mount}/metadata/${bot.vault.vault_kv_path}" = { capabilities = local.acl_capability.kv_metadata }
+          }
+        ]...
+      ),
       merge(
         [
           for mount in local.administrator_mount_paths : {

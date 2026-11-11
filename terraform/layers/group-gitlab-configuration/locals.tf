@@ -1,12 +1,8 @@
 
 
 locals {
-  # Target: group-topology and group-sonarqube state, hosted under this GitLab project.
+  # Resolves the remote state backend base URL hosted under this GitLab project.
   _state_base = "https://gitlab.com/api/v4/projects/86417732/terraform/state"
-
-  group_variables_secret = {
-    SONAR_TOKEN = data.vault_kv_secret_v2.sonar_token.data["sonarqube_ci_token"]
-  }
 
   # Job containers connect to SonarQube through the sonarqube compose service endpoint
   # on the sonarqube-ci-net bridge network configured in the runner network mode.

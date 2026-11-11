@@ -3,6 +3,7 @@ package topology
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -111,5 +112,83 @@ func TestResolveProxyEndpoint_RequiresExactlyOneIdentity(t *testing.T) {
 		if _, err := topo.ResolveProxyEndpoint("/home/u", access); err == nil {
 			t.Errorf("ResolveProxyEndpoint(%s) error = nil, want a rejection", access)
 		}
+	}
+}
+
+// stateBackendTopology defines fixture topology containing distributor and consumer identities with state backend mappings.
+const stateBackendTopology = `vault_bastion:
+  loopback_address: "127.0.0.1"
+  publish_address: "172.16.0.1"
+  api_port: 8200
+operator_vault_proxy:
+  state_backend:
+    vault_kv_mount: "secret"
+    vault_kv_field: "token"
+  identities:
+    credential-distributor:
+      access_tier: "credential-distributor"
+      owner_code: "parent-group-governance"
+      state_backend_path: "parent-group-governance/terraform/state-backend"
+    consumer-parent-group-governance:
+      access_tier: "consumer"
+      owner_code: "parent-group-governance"
+      state_backend_path: "parent-group-governance/terraform/consumer-state-backend"
+    credential-distributor-personal:
+      access_tier: "credential-distributor"
+      owner_code: "personal"
+`
+
+// TestListCodeReviewerVariableProjects asserts byte-order sorting and deduplication across configured project paths.
+func TestListCodeReviewerVariableProjects(t *testing.T) {
+	topo, err := Load(writeTopology(t, `vault_bastion:
+  loopback_address: "127.0.0.1"
+  publish_address: "172.16.0.1"
+  api_port: 8200
+operator_vault_proxy:
+  identities:
+    credential-distributor-personal:
+      code_reviewer_variable_projects: ["personal/second-brain", "personal/LaTeX_Documents"]
+    credential-distributor:
+      code_reviewer_variable_projects: ["csning1998-lab/parent-group-governance", "personal/second-brain"]
+    administrator:
+      access_tier: "administrator"
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"csning1998-lab/parent-group-governance", "personal/LaTeX_Documents", "personal/second-brain"}
+	if got := topo.ListCodeReviewerVariableProjects(); !slices.Equal(got, want) {
+		t.Errorf("ListCodeReviewerVariableProjects() = %v, want %v", got, want)
+	}
+}
+
+// TestResolveStateBackendToken asserts the token location of a distributor and the rejection of an owner code without a distributor path.
+func TestResolveStateBackendToken(t *testing.T) {
+	topo, err := Load(writeTopology(t, stateBackendTopology))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cases := map[string]struct {
+		ownerCode string
+		want      KVField
+		wantErr   bool
+	}{
+		"distributor identity matching the owner code": {
+			ownerCode: "parent-group-governance",
+			want:      KVField{Mount: "secret", Path: "parent-group-governance/terraform/state-backend", Field: "token"},
+		},
+		"a distributor without a state_backend_path": {ownerCode: "personal", wantErr: true},
+		"an owner code without a distributor":        {ownerCode: "platform-foundation", wantErr: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := topo.ResolveStateBackendToken(tc.ownerCode)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("ResolveStateBackendToken(%s) error = %v, want an error %t", tc.ownerCode, err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("ResolveStateBackendToken(%s) = %+v, want %+v", tc.ownerCode, got, tc.want)
+			}
+		})
 	}
 }
