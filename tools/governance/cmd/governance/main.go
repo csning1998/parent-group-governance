@@ -31,7 +31,8 @@ type app struct {
 func execute(args []string) int {
 	out := ui.New(os.Stdout, os.Stderr)
 
-	// A stale VAULT_CACERT of a wiped TLS directory otherwise fails every client, and VAULT_SKIP_VERIFY disables verification.
+	// Clear unsets ambient Vault variables because a missing CA file fails every client construction
+	// and VAULT_SKIP_VERIFY disables certificate verification.
 	err := vaultenv.Clear()
 	if err != nil {
 		out.Print(ui.Fatal, err.Error())
