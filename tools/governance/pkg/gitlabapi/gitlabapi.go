@@ -48,6 +48,54 @@ func (c *Client) UpsertGroupVariable(ctx context.Context, groupID string, v Vari
 	return c.upsertVariable(ctx, "groups/"+url.PathEscape(groupID)+"/variables", v)
 }
 
+// UpsertProjectVariable creates or updates a project-level CI/CD variable at the specified project path.
+func (c *Client) UpsertProjectVariable(ctx context.Context, projectPath string, v Variable) error {
+	return c.upsertVariable(ctx, "projects/"+url.PathEscape(projectPath)+"/variables", v)
+}
+
+// HasProject verifies token access to the specified project, returning false when GitLab responds with 404 Not Found.
+func (c *Client) HasProject(ctx context.Context, projectPath string) (bool, error) {
+	err := c.send(ctx, http.MethodGet, "projects/"+url.PathEscape(projectPath), nil, nil)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// GroupRunner defines registration parameters of a GitLab group runner.
+type GroupRunner struct {
+	GroupID     string
+	Description string
+	TagList     []string
+	Locked      bool
+	RunUntagged bool
+}
+
+// CreatedRunner represents registration credentials of a newly provisioned runner.
+type CreatedRunner struct {
+	ID    int    `json:"id"`
+	Token string `json:"token"`
+}
+
+// CreateGroupRunner provisions a group-level runner linked to the token owner and returns its identifier and authentication token.
+func (c *Client) CreateGroupRunner(ctx context.Context, r GroupRunner) (CreatedRunner, error) {
+	form := url.Values{}
+	form.Set("runner_type", "group_type")
+	form.Set("group_id", r.GroupID)
+	form.Set("description", r.Description)
+	form.Set("tag_list", strings.Join(r.TagList, ","))
+	form.Set("locked", strconv.FormatBool(r.Locked))
+	form.Set("run_untagged", strconv.FormatBool(r.RunUntagged))
+	var created CreatedRunner
+	if err := c.send(ctx, http.MethodPost, "user/runners", form, &created); err != nil {
+		return CreatedRunner{}, err
+	}
+	if created.Token == "" {
+		return CreatedRunner{}, fmt.Errorf("gitlabapi: runner %d returned no token", created.ID)
+	}
+	return created, nil
+}
+
 // upsertVariable supplies the hidden attribute only during resource creation, matching immutable GitLab API constraints.
 func (c *Client) upsertVariable(ctx context.Context, collection string, v Variable) error {
 	form := url.Values{}
@@ -67,7 +115,7 @@ func (c *Client) upsertVariable(ctx context.Context, collection string, v Variab
 	return c.send(ctx, http.MethodPost, collection, form, nil)
 }
 
-// send excludes form payload data from error diagnostics to prevent credential disclosure.
+// send omits form payloads and raw response decode errors from diagnostics to prevent credential disclosure.
 func (c *Client) send(ctx context.Context, method, path string, form url.Values, out any) error {
 	endpoint := c.baseURL + "/" + path
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, strings.NewReader(form.Encode()))
@@ -75,7 +123,9 @@ func (c *Client) send(ctx context.Context, method, path string, form url.Values,
 		return fmt.Errorf("gitlabapi: build %s %s: %w", method, endpoint, err)
 	}
 	req.Header.Set("PRIVATE-TOKEN", c.token)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if form != nil {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -94,7 +144,7 @@ func (c *Client) send(ctx context.Context, method, path string, form url.Values,
 		return nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("gitlabapi: decode the response of %s %s: %w", method, endpoint, err)
+		return fmt.Errorf("gitlabapi: decode the response of %s %s", method, endpoint)
 	}
 	return nil
 }

@@ -99,3 +99,85 @@ func TestUpsertGroupVariable(t *testing.T) {
 		})
 	}
 }
+
+// TestUpsertProjectVariable asserts the escaped project path in the variable endpoint.
+func TestUpsertProjectVariable(t *testing.T) {
+	srv, requests := newRecordingServer(t, http.StatusOK)
+
+	err := New(srv.URL, "pat").UpsertProjectVariable(context.Background(), "csning1998-lab/parent-group-governance", Variable{Key: "TAG_PUSH_TOKEN", Value: "tag-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "PUT /projects/csning1998-lab%2Fparent-group-governance/variables/TAG_PUSH_TOKEN"
+	if got := (*requests)[0].method + " " + (*requests)[0].path; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
+// TestHasProject asserts the presence answer for status 200, the absence answer for status 404, and the error for other statuses.
+func TestHasProject(t *testing.T) {
+	cases := map[string]struct {
+		status  int
+		want    bool
+		wantErr bool
+	}{
+		"an existing project":  {status: http.StatusOK, want: true},
+		"an absent project":    {status: http.StatusNotFound, want: false},
+		"a rejected token":     {status: http.StatusUnauthorized, wantErr: true},
+		"a server-side defect": {status: http.StatusInternalServerError, wantErr: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.EscapedPath() != "/projects/personal%2Fsecond-brain" {
+					t.Fatalf("got %s %s", r.Method, r.URL.EscapedPath())
+				}
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(`{}`))
+			}))
+			t.Cleanup(srv.Close)
+
+			got, err := New(srv.URL, "pat").HasProject(context.Background(), "personal/second-brain")
+			if (err != nil) != tc.wantErr || got != tc.want {
+				t.Fatalf("HasProject() = %t, %v, want %t and an error %t", got, err, tc.want, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestCreateGroupRunner asserts the group runner form and the rejection of a response without a token.
+func TestCreateGroupRunner(t *testing.T) {
+	runner := GroupRunner{GroupID: "137791469", Description: "shared-runner", TagList: []string{"podman", "local"}, Locked: true, RunUntagged: true}
+	cases := map[string]struct {
+		response string
+		want     CreatedRunner
+		wantErr  bool
+	}{
+		"a created runner returns the token": {response: `{"id":9171,"token":"glrt-issued","token_expires_at":null}`, want: CreatedRunner{ID: 9171, Token: "glrt-issued"}},
+		"a response without a token":         {response: `{"id":9171}`, wantErr: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := r.ParseForm(); err != nil {
+					t.Fatal(err)
+				}
+				form := r.PostForm
+				if r.Method != http.MethodPost || r.URL.Path != "/user/runners" {
+					t.Fatalf("got %s %s, want POST /user/runners", r.Method, r.URL.Path)
+				}
+				if form.Get("runner_type") != "group_type" || form.Get("group_id") != "137791469" || form.Get("tag_list") != "podman,local" || form.Get("locked") != "true" || form.Get("run_untagged") != "true" {
+					t.Fatalf("got form %v", form)
+				}
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(tc.response))
+			}))
+			t.Cleanup(srv.Close)
+
+			got, err := New(srv.URL, "pat").CreateGroupRunner(context.Background(), runner)
+			if (err != nil) != tc.wantErr || got != tc.want {
+				t.Fatalf("CreateGroupRunner() = %+v, %v, want %+v and an error %t", got, err, tc.want, tc.wantErr)
+			}
+		})
+	}
+}
