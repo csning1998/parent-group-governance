@@ -179,3 +179,22 @@ service_admin_passwords:
       verify_endpoint: http://127.0.0.1:9000/api/authentication/validate
       admin_username: admin
       factory_default_password: admin
+
+# Credential Issuance Plane: tokens issued by SonarQube and GitLab,
+# and written into the Bastion Vault and GitLab via ./governance.
+service_issued_tokens:
+  gitlab_api_url: "https://gitlab.com/api/v4"
+  gitlab_token_owner_code: "parent-group-governance"
+  gitlab_group_registry:
+    vault_kv_mount: "registry"
+    vault_kv_path: "platform/gitlab-group/top-level"
+    vault_kv_field: "group_id"
+  sonarqube_analysis_token:
+    user_tokens_endpoint: "http://127.0.0.1:9000/api/user_tokens"
+    admin_password_key: "sonarqube-admin-password"
+    token_name_prefix: "gitlab-ci-analysis"
+    vault:
+      vault_kv_mount: "secret"
+      vault_kv_path: "parent-group-governance/sonarqube/ci-analysis-bot"
+      vault_kv_field: "sonarqube_ci_token"
+    gitlab_group_variable_key: "SONAR_TOKEN"

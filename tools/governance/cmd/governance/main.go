@@ -15,17 +15,19 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultenv"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/issuedtokens"
 )
 
 type app struct {
-	root        string
-	home        string
-	ansibleDir  string
-	topology    topology.VaultTopology
-	credentials []credentials.Credential
-	env         *config.Env
-	out         *ui.Printer
-	in          *bufio.Reader
+	root         string
+	home         string
+	ansibleDir   string
+	topology     topology.VaultTopology
+	credentials  []credentials.Credential
+	issuedTokens issuedtokens.Config
+	env          *config.Env
+	out          *ui.Printer
+	in           *bufio.Reader
 }
 
 func execute(args []string) int {
@@ -82,6 +84,13 @@ func execute(args []string) int {
 		return 1
 	}
 	a.credentials = creds
+
+	issued, err := issuedtokens.Load(topologyPath)
+	if err != nil {
+		out.Print(ui.Fatal, err.Error())
+		return 1
+	}
+	a.issuedTokens = issued
 
 	var rootCmd *cobra.Command
 	rootCmd = &cobra.Command{

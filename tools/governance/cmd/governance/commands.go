@@ -32,6 +32,14 @@ func (a *app) newCredentialsCmd() *cobra.Command {
 	}
 	cmd.AddCommand(reconcileCmd)
 
+	issueCmd := &cobra.Command{Use: "issue", Short: "Issue service tokens into the Bastion Vault and GitLab"}
+	issueCmd.AddCommand(&cobra.Command{
+		Use:   "sonarqube-analysis-token",
+		Short: "Issue the SonarQube analysis token of the group CI jobs and revoke the earlier tokens",
+		RunE:  func(cmd *cobra.Command, args []string) error { return a.issueSonarQubeAnalysisToken(cmd.Context()) },
+	})
+	cmd.AddCommand(issueCmd)
+
 	return cmd
 }
 
