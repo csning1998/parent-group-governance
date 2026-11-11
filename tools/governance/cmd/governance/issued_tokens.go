@@ -127,3 +127,25 @@ func (a *app) registerGitLabGroupRunner(ctx context.Context) error {
 	a.out.Print(ui.OK, fmt.Sprintf("Group runner %d wrote %s. Run podman compose restart gitlab-runner to load the runner.", id, path))
 	return nil
 }
+
+// publishCodeReviewerVariables distributes code reviewer bot tokens to CI/CD variables across configured target projects.
+func (a *app) publishCodeReviewerVariables(ctx context.Context) error {
+	projects := a.topology.ListCodeReviewerVariableProjects()
+	if len(projects) == 0 {
+		return fmt.Errorf("no identity of operator_vault_proxy lists code_reviewer_variable_projects")
+	}
+	kv, err := a.newAdministratorKV()
+	if err != nil {
+		return err
+	}
+	gitlab, _, err := a.newGitLabClient(ctx, kv)
+	if err != nil {
+		return err
+	}
+	publication := issuedtokens.CodeReviewerVariablesPublication{Config: a.issuedTokens.CodeReviewerVariables, Projects: projects, Vault: kv, GitLab: gitlab}
+	if err := publication.Run(ctx); err != nil {
+		return err
+	}
+	a.out.Print(ui.OK, "The code reviewer variables reached "+strings.Join(projects, ", ")+".")
+	return nil
+}

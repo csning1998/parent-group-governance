@@ -31,11 +31,11 @@ operator_vault_proxy:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
         - "parent-group-governance/sonarqube/ci-analysis-bot"
-        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
-        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
       allowed_write_secret_paths: []
       allowed_read_registry_paths:
         - "platform/ai-provider"
+      code_reviewer_variable_projects:
+        - "csning1998-lab/parent-group-governance"
     platform-foundation:
       listen_port: 8211
       access_tier: "tenant"
@@ -89,12 +89,12 @@ operator_vault_proxy:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
         - "parent-group-governance/sonarqube/ci-analysis-bot"
-        - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
-        - "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
       allowed_write_secret_paths: []
       allowed_read_registry_paths:
         - "platform/ai-provider"
         - "platform/gitlab-group"
+      code_reviewer_variable_projects:
+        - "csning1998-lab/gitlab-ci-with-code-reviewer"
     credential-distributor-generic-agent-criteria-source:
       listen_port: 8217
       access_tier: "credential-distributor"
@@ -203,3 +203,15 @@ service_issued_tokens:
     tag_list: ["podman", "local", "sonarqube-network"]
     gitlab_url: "https://gitlab.com"
     config_path: "gitlab-runner-configs/config.toml"
+  code_reviewer_variables:
+    bot_tokens:
+      - vault:
+          vault_kv_mount: "secret"
+          vault_kv_path: "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
+          vault_kv_field: "token"
+        variable_keys: ["REVIEW_MR_REVIEWER", "CLAUDE_MR_REVIEWER", "GEMINI_MR_REVIEWER"]
+      - vault:
+          vault_kv_mount: "secret"
+          vault_kv_path: "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"
+          vault_kv_field: "token"
+        variable_keys: ["TAG_PUSH_TOKEN"]

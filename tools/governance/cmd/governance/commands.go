@@ -43,6 +43,11 @@ func (a *app) newCredentialsCmd() *cobra.Command {
 		Short: "Register the group runner and write its config.toml, refusing an existing config.toml",
 		RunE:  func(cmd *cobra.Command, args []string) error { return a.registerGitLabGroupRunner(cmd.Context()) },
 	})
+	issueCmd.AddCommand(&cobra.Command{
+		Use:   "code-reviewer-variables",
+		Short: "Write the code reviewer bot tokens into the variables of every listed project",
+		RunE:  func(cmd *cobra.Command, args []string) error { return a.publishCodeReviewerVariables(cmd.Context()) },
+	})
 	cmd.AddCommand(issueCmd)
 
 	return cmd

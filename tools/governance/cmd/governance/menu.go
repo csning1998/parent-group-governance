@@ -49,6 +49,11 @@ func (a *app) buildMenuOptions() []menuOption {
 			menuOption{"[Credentials] Register the GitLab Group Runner", func(ctx context.Context) error { return a.registerGitLabGroupRunner(ctx) }},
 		)
 	}
+	if len(a.issuedTokens.CodeReviewerVariables.BotTokens) > 0 {
+		options = append(options,
+			menuOption{"[Credentials] Publish the Code Reviewer Variables", func(ctx context.Context) error { return a.publishCodeReviewerVariables(ctx) }},
+		)
+	}
 	options = append(options,
 		menuOption{"[Terraform] Audit State Secrets", func(ctx context.Context) error { return a.runStateAuditMenu(ctx) }},
 		menuOption{"Quit", nil},
