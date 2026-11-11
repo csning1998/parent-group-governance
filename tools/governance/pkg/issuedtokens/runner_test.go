@@ -34,28 +34,14 @@ var groupRunnerConfig = GitLabGroupRunnerConfig{
 
 // TestGroupRunnerRegistrationRun asserts the written config.toml, the refusal of an existing file, and both failure paths.
 func TestGroupRunnerRegistrationRun(t *testing.T) {
-	cases := map[string]struct {
-		prepare      func(t *testing.T, path string)
-		createErr    error
-		wantErr      error
-		wantRequests int
-		wantFile     bool
-		wantRunnerID int
-	}{
+	cases := map[string]runnerRegistrationCase{
 		"a registration writes the token into a 0600 config.toml": {
 			wantRequests: 1,
 			wantFile:     true,
 			wantRunnerID: 9171,
 		},
 		"an existing config.toml refuses the registration": {
-			prepare: func(t *testing.T, path string) {
-				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, []byte("earlier"), 0o600); err != nil {
-					t.Fatal(err)
-				}
-			},
+			prepare:  writeEarlierRunnerConfig,
 			wantErr:  ErrRunnerConfigExists,
 			wantFile: true,
 		},
@@ -65,16 +51,7 @@ func TestGroupRunnerRegistrationRun(t *testing.T) {
 			wantRequests: 1,
 		},
 		"a failed write reports the created runner": {
-			prepare: func(t *testing.T, path string) {
-				if os.Geteuid() == 0 {
-					t.Skip("skipping permission-bit test when running as root")
-				}
-				dir := filepath.Dir(path)
-				if err := os.MkdirAll(dir, 0o500); err != nil {
-					t.Fatal(err)
-				}
-				t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
-			},
+			prepare:      lockRunnerConfigDir,
 			wantErr:      errors.New("runner 9171 exists in GitLab"),
 			wantRequests: 1,
 			wantRunnerID: 9171,
@@ -89,24 +66,65 @@ func TestGroupRunnerRegistrationRun(t *testing.T) {
 			creator := &fakeRunnerCreator{err: tc.createErr}
 
 			id, err := GroupRunnerRegistration{Config: groupRunnerConfig, GroupID: "137791469", ConfigPath: path, GitLab: creator}.Run(context.Background())
-			assertRunnerError(t, err, tc.wantErr)
-			if id != tc.wantRunnerID || len(creator.requested) != tc.wantRequests {
-				t.Fatalf("got runner %d after %d requests, want runner %d after %d requests", id, len(creator.requested), tc.wantRunnerID, tc.wantRequests)
-			}
-			if tc.wantRequests > 0 {
-				got := creator.requested[0]
-				if got.GroupID != "137791469" || !got.Locked || !got.RunUntagged || strings.Join(got.TagList, ",") != "podman,local,sonarqube-network" {
-					t.Fatalf("requested %+v", got)
-				}
-			}
-			_, statErr := os.Stat(path)
-			if (statErr == nil) != tc.wantFile {
-				t.Fatalf("config.toml exists %t, want %t", statErr == nil, tc.wantFile)
-			}
-			if tc.wantFile && tc.wantErr == nil {
-				assertRunnerConfig(t, path)
-			}
+			assertRunnerRegistration(t, tc, path, id, err, creator)
 		})
+	}
+}
+
+// runnerRegistrationCase declares one registration scenario and the expected outcome.
+type runnerRegistrationCase struct {
+	prepare      func(t *testing.T, path string)
+	createErr    error
+	wantErr      error
+	wantRequests int
+	wantFile     bool
+	wantRunnerID int
+}
+
+func writeEarlierRunnerConfig(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("earlier"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func lockRunnerConfigDir(t *testing.T, path string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("skipping permission-bit test when running as root")
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+}
+
+func assertRunnerRegistration(t *testing.T, tc runnerRegistrationCase, path string, id int, err error, creator *fakeRunnerCreator) {
+	t.Helper()
+	assertRunnerError(t, err, tc.wantErr)
+	if id != tc.wantRunnerID || len(creator.requested) != tc.wantRequests {
+		t.Fatalf("got runner %d after %d requests, want runner %d after %d requests", id, len(creator.requested), tc.wantRunnerID, tc.wantRequests)
+	}
+	if tc.wantRequests > 0 {
+		assertRequestedRunner(t, creator.requested[0])
+	}
+	_, statErr := os.Stat(path)
+	if (statErr == nil) != tc.wantFile {
+		t.Fatalf("config.toml exists %t, want %t", statErr == nil, tc.wantFile)
+	}
+	if tc.wantFile && tc.wantErr == nil {
+		assertRunnerConfig(t, path)
+	}
+}
+
+func assertRequestedRunner(t *testing.T, got gitlabapi.GroupRunner) {
+	t.Helper()
+	if got.GroupID != "137791469" || !got.Locked || !got.RunUntagged || strings.Join(got.TagList, ",") != "podman,local,sonarqube-network" {
+		t.Fatalf("requested %+v", got)
 	}
 }
 

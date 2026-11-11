@@ -50,20 +50,12 @@ func TestUpsertGroupVariable(t *testing.T) {
 		"an existing variable is updated without masked_and_hidden": {
 			putStatus:    http.StatusOK,
 			wantRequests: []string{putPath},
-			checkForm: func(t *testing.T, form url.Values) {
-				if form.Get("value") != "secret-value" || form.Get("raw") != "true" || form.Get("protected") != "false" || form.Has("masked_and_hidden") {
-					t.Fatalf("the PUT carries form %v", form)
-				}
-			},
+			checkForm:    checkUpdateForm,
 		},
 		"a missing variable is created as masked and hidden": {
 			putStatus:    http.StatusNotFound,
 			wantRequests: []string{putPath, "POST /api/v4/groups/42/variables"},
-			checkForm: func(t *testing.T, form url.Values) {
-				if form.Get("key") != "SONAR_TOKEN" || form.Get("masked_and_hidden") != "true" || form.Has("masked") {
-					t.Fatalf("the POST carries form %v, want key and masked_and_hidden without masked", form)
-				}
-			},
+			checkForm:    checkCreateForm,
 		},
 		"a rejection reports the status without the value": {
 			putStatus:    http.StatusForbidden,
@@ -75,28 +67,52 @@ func TestUpsertGroupVariable(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv, requests := newRecordingServer(t, tc.putStatus)
 			err := New(srv.URL+"/api/v4/", "pat").UpsertGroupVariable(context.Background(), "42", variable)
-			switch {
-			case tc.wantErr == "" && err != nil:
-				t.Fatal(err)
-			case tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)):
-				t.Fatalf("got %v, want an error carrying %q", err, tc.wantErr)
-			case err != nil && strings.Contains(err.Error(), variable.Value):
-				t.Fatal("the error carries the variable value")
-			}
-			got := make([]string, len(*requests))
-			for i, r := range *requests {
-				if r.token != "pat" {
-					t.Fatalf("request %d carries token %q", i, r.token)
-				}
-				got[i] = r.method + " " + r.path
-			}
-			if !slices.Equal(got, tc.wantRequests) {
-				t.Fatalf("got requests %v, want %v", got, tc.wantRequests)
-			}
+			assertUpsertError(t, err, tc.wantErr, variable.Value)
+			assertRecordedRequests(t, *requests, tc.wantRequests)
 			if tc.checkForm != nil {
 				tc.checkForm(t, (*requests)[len(*requests)-1].form)
 			}
 		})
+	}
+}
+
+func checkUpdateForm(t *testing.T, form url.Values) {
+	t.Helper()
+	if form.Get("value") != "secret-value" || form.Get("raw") != "true" || form.Get("protected") != "false" || form.Has("masked_and_hidden") {
+		t.Fatalf("the PUT carries form %v", form)
+	}
+}
+
+func checkCreateForm(t *testing.T, form url.Values) {
+	t.Helper()
+	if form.Get("key") != "SONAR_TOKEN" || form.Get("masked_and_hidden") != "true" || form.Has("masked") {
+		t.Fatalf("the POST carries form %v, want key and masked_and_hidden without masked", form)
+	}
+}
+
+func assertUpsertError(t *testing.T, err error, want, secret string) {
+	t.Helper()
+	switch {
+	case want == "" && err != nil:
+		t.Fatal(err)
+	case want != "" && (err == nil || !strings.Contains(err.Error(), want)):
+		t.Fatalf("got %v, want an error carrying %q", err, want)
+	case err != nil && strings.Contains(err.Error(), secret):
+		t.Fatal("the error carries the variable value")
+	}
+}
+
+func assertRecordedRequests(t *testing.T, requests []recordedRequest, want []string) {
+	t.Helper()
+	got := make([]string, len(requests))
+	for i, r := range requests {
+		if r.token != "pat" {
+			t.Fatalf("request %d carries token %q", i, r.token)
+		}
+		got[i] = r.method + " " + r.path
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got requests %v, want %v", got, want)
 	}
 }
 
@@ -158,26 +174,36 @@ func TestCreateGroupRunner(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if err := r.ParseForm(); err != nil {
-					t.Fatal(err)
-				}
-				form := r.PostForm
-				if r.Method != http.MethodPost || r.URL.Path != "/user/runners" {
-					t.Fatalf("got %s %s, want POST /user/runners", r.Method, r.URL.Path)
-				}
-				if form.Get("runner_type") != "group_type" || form.Get("group_id") != "137791469" || form.Get("tag_list") != "podman,local" || form.Get("locked") != "true" || form.Get("run_untagged") != "true" {
-					t.Fatalf("got form %v", form)
-				}
-				w.WriteHeader(http.StatusCreated)
-				_, _ = w.Write([]byte(tc.response))
-			}))
-			t.Cleanup(srv.Close)
-
+			srv := newGroupRunnerServer(t, tc.response)
 			got, err := New(srv.URL, "pat").CreateGroupRunner(context.Background(), runner)
 			if (err != nil) != tc.wantErr || got != tc.want {
 				t.Fatalf("CreateGroupRunner() = %+v, %v, want %+v and an error %t", got, err, tc.want, tc.wantErr)
 			}
 		})
+	}
+}
+
+// newGroupRunnerServer answers POST /user/runners with response after checking the group runner form.
+func newGroupRunnerServer(t *testing.T, response string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		if r.Method != http.MethodPost || r.URL.Path != "/user/runners" {
+			t.Fatalf("got %s %s, want POST /user/runners", r.Method, r.URL.Path)
+		}
+		checkGroupRunnerForm(t, r.PostForm)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(response))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func checkGroupRunnerForm(t *testing.T, form url.Values) {
+	t.Helper()
+	if form.Get("runner_type") != "group_type" || form.Get("group_id") != "137791469" || form.Get("tag_list") != "podman,local" || form.Get("locked") != "true" || form.Get("run_untagged") != "true" {
+		t.Fatalf("got form %v", form)
 	}
 }
