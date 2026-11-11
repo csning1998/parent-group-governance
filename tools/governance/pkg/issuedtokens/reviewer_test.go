@@ -54,14 +54,7 @@ var (
 
 // TestCodeReviewerVariablesPublicationRun asserts the writes into every listed project and the refusal before any write.
 func TestCodeReviewerVariablesPublicationRun(t *testing.T) {
-	cases := map[string]struct {
-		projects    []string
-		vaultErr    error
-		wantErr     error
-		wantMissing []string
-		wantReads   int
-		wantWrites  []string
-	}{
+	cases := map[string]publicationCase{
 		"every listed project receives every variable": {
 			projects:  []string{"csning1998-lab/parent-group-governance", "csning1998-lab/gitlab-ci-with-code-reviewer"},
 			wantReads: 2,
@@ -97,20 +90,30 @@ func TestCodeReviewerVariablesPublicationRun(t *testing.T) {
 			}}
 
 			err := CodeReviewerVariablesPublication{Config: reviewerConfig, Projects: tc.projects, Vault: vault, GitLab: gitlab}.Run(context.Background())
-			switch {
-			case tc.wantErr == nil && err != nil:
-				t.Fatal(err)
-			case tc.wantErr != nil && (err == nil || !errors.Is(err, tc.wantErr) && !strings.Contains(err.Error(), tc.wantErr.Error())):
-				t.Fatalf("got %v, want %v", err, tc.wantErr)
-			}
-			for _, path := range tc.wantMissing {
-				if !strings.Contains(err.Error(), path) {
-					t.Fatalf("the error %v lacks %s", err, path)
-				}
-			}
-			if vault.reads != tc.wantReads || !slices.Equal(gitlab.writes, tc.wantWrites) {
-				t.Fatalf("got %d reads and writes %v, want %d reads and writes %v", vault.reads, gitlab.writes, tc.wantReads, tc.wantWrites)
-			}
+			assertPublication(t, tc, err, vault, gitlab)
 		})
+	}
+}
+
+// publicationCase declares one publication scenario and the expected reads and writes.
+type publicationCase struct {
+	projects    []string
+	vaultErr    error
+	wantErr     error
+	wantMissing []string
+	wantReads   int
+	wantWrites  []string
+}
+
+func assertPublication(t *testing.T, tc publicationCase, err error, vault *fakeSecretReader, gitlab *fakeProjectVariables) {
+	t.Helper()
+	assertRunnerError(t, err, tc.wantErr)
+	for _, path := range tc.wantMissing {
+		if !strings.Contains(err.Error(), path) {
+			t.Fatalf("the error %v lacks %s", err, path)
+		}
+	}
+	if vault.reads != tc.wantReads || !slices.Equal(gitlab.writes, tc.wantWrites) {
+		t.Fatalf("got %d reads and writes %v, want %d reads and writes %v", vault.reads, gitlab.writes, tc.wantReads, tc.wantWrites)
 	}
 }
