@@ -60,6 +60,9 @@
 - `pkg/vaultclient` 提供共用的 Vault API 客戶端建置（支援 AppRole、JWT/OIDC、Token 驗證與 mTLS）、健康度與封印狀態探測（`InspectStatus`、`ProbeSealState`）、多環境上下文解析（`ResolveTargetContext`）以及安全的權杖檔案管理（`~/.vault-token`）。詳見 _Section 4 Item G_
 - `pkg/tokensource` 提供憑證 Token Provider 介面，支援靜態憑證與透過 Vault JWT Auth 交換 KV-v2 機密（`VaultKV`），供 CI 與自動化作業換取機密權杖。
 - `pkg/stateaudit` 負責 Terraform state 機密稽核，結合 sensitive 標記與 gitleaks 規則，支援歷史版本比對、`.tfstate-audit-ignore.yaml` 規則豁免與互動終端展示（`--reveal`）。詳見 _Section 11_
+- `pkg/issuedtokens` 負責解析 `workstation-topology.yaml` 的 `service_issued_tokens`，並執行三個寫入流程：SonarQube 分析 token 的輪替、group runner 的註冊，以及 reviewer 變數的寫入。這三類值由服務核發，Terraform 寫入時值會留在 state，因此改由 `./governance credentials issue` 寫入。
+- `pkg/gitlabapi` 是 GitLab REST API 的用戶端，涵蓋群組與專案的 CI/CD 變數、專案存在與否的查詢，以及 `POST /user/runners`。錯誤訊息不包含請求內容與解碼錯誤，避免帶出憑證。
+- `pkg/sonarusertokens` 是 SonarQube `api/user_tokens` 的用戶端，負責 token 的產生、列出與撤銷。
 
 ### Item C. Package Dependency Overview
 
@@ -77,6 +80,11 @@ flowchart TD
     CLI --> RotatePkg["pkg/secretrotate"]
     CLI --> StateAuditPkg["pkg/stateaudit"]
     CLI --> VaultClientPkg["pkg/vaultclient"]
+    CLI --> IssuedPkg["pkg/issuedtokens"]
+    CLI --> GitLabPkg["pkg/gitlabapi"]
+    CLI --> SonarPkg["pkg/sonarusertokens"]
+    IssuedPkg --> GitLabPkg
+    IssuedPkg --> SonarPkg
 
     VaultOpsPkg --> VaultClientPkg
     RotatePkg --> VaultClientPkg
@@ -1837,7 +1845,7 @@ _Section 2 Item E_ 說明了兩個介面各自在哪裡觸發 `BootstrapEnv`，�
 
 1. `host`（別名 `ansible`）：開發機前置環境維護。包含 `apply-all`（別名 `all`）、`apply-selinux`（別名 `selinux`）、`apply-libvirt`（別名 `libvirt`）、`apply-vault-proxy`（別名 `vault-proxy`）與 `verify`（別名 `verify-tools`）。
 2. `vault`：Bastion Vault 生命週期管理。包含 `generate-tls`（別名 `tls-generate`）、`init`、`enable-kv`、`unseal`、`revoke-root`（別名 `revoke-root-token`）、`generate-root`（別名 `generate-root-token`），以及掛在 `vault rotate` 與 `vault reconcile` 底下的憑證動態子指令。為維持既有指令相容性，`vault` 根節點亦保留隱藏的憑證輪替別名。
-3. `credentials`：憑證專屬命名空間，掛載 `credentials rotate <key>` 與 `credentials reconcile <key>`。
+3. `credentials`：憑證專屬命名空間，掛載 `credentials rotate <key>`、`credentials reconcile <key>`，以及 `credentials issue` 底下的 `sonarqube-analysis-token`、`gitlab-group-runner` 與 `code-reviewer-variables`。三個 `issue` 子指令都經 `administrator` 的 Vault Proxy 讀寫 Bastion Vault，並以 `service_issued_tokens.gitlab_token_owner_code` 對應的 state backend 權杖呼叫 GitLab API。
 4. `terraform`：Terraform 治理操作，掛載 `terraform audit-state`（別名 `audit`、`state-audit`）。
 5. `audit-state-secrets`：隱藏之頂層機密稽核指令，供腳本直接調用。
 6. `env`：環境檢查（`env verify` 為隱藏指令）。
