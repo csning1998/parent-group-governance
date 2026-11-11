@@ -36,6 +36,9 @@ type CodeReviewerVariablesPublication struct {
 
 // Run checks every listed project before any write and writes nothing while a listed project is absent.
 func (p CodeReviewerVariablesPublication) Run(ctx context.Context) error {
+	if len(p.Config.BotTokens) == 0 {
+		return ErrNoBotTokens
+	}
 	var missing []string
 	for _, path := range p.Projects {
 		found, err := p.GitLab.HasProject(ctx, path)

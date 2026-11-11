@@ -56,7 +56,8 @@ func (r GroupRunnerRegistration) Run(ctx context.Context) (int, error) {
 	return created.ID, nil
 }
 
-// writeRunnerConfig renames a 0600 temporary file into place, which keeps a partial file away from the runner container.
+// writeRunnerConfig links a complete 0600 temporary file to path and refuses a path created after the existence check.
+// A hard link fails on an existing target while a rename replaces the target and loses the token of the earlier runner.
 func writeRunnerConfig(path string, cfg GitLabGroupRunnerConfig, token string) error {
 	tmpl, err := template.New("config.toml").Parse(runnerConfigTemplate)
 	if err != nil {
@@ -82,5 +83,11 @@ func writeRunnerConfig(path string, cfg GitLabGroupRunnerConfig, token string) e
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path)
+	if err := os.Link(tmp.Name(), path); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return fmt.Errorf("%w: %s", ErrRunnerConfigExists, path)
+		}
+		return err
+	}
+	return nil
 }

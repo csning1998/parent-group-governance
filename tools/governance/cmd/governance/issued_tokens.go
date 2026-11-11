@@ -130,6 +130,9 @@ func (a *app) registerGitLabGroupRunner(ctx context.Context) error {
 
 // publishCodeReviewerVariables distributes code reviewer bot tokens to CI/CD variables across configured target projects.
 func (a *app) publishCodeReviewerVariables(ctx context.Context) error {
+	if len(a.issuedTokens.CodeReviewerVariables.BotTokens) == 0 {
+		return fmt.Errorf("service_issued_tokens.code_reviewer_variables lists no bot_tokens")
+	}
 	projects := a.topology.ListCodeReviewerVariableProjects()
 	if len(projects) == 0 {
 		return fmt.Errorf("no identity of operator_vault_proxy lists code_reviewer_variable_projects")
