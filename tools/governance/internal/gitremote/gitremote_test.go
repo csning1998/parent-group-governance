@@ -15,18 +15,39 @@ func TestParse(t *testing.T) {
 		"https://some-user:some-token@gitlab.example.com/example-group/example-subgroup/example-project",
 		"ssh://git@gitlab.example.com:2222/example-group/example-subgroup/example-project.git",
 	} {
+		t.Run(url, func(t *testing.T) {
+			got, err := Parse(url)
+			if err != nil || got != want {
+				t.Errorf("Parse(%q) = %+v, %v, want %+v", url, got, err, want)
+			}
+		})
+	}
+}
+
+// TestParseKeepsThePortOfAnHTTPSRemote asserts the host keeps the web port because the port names the GitLab endpoint.
+func TestParseKeepsThePortOfAnHTTPSRemote(t *testing.T) {
+	want := Remote{Host: "gitlab.example.com:8443", ProjectPath: "example-group/example-project"}
+	for _, url := range []string{
+		"https://gitlab.example.com:8443/example-group/example-project.git",
+		"https://some-user:some-token@gitlab.example.com:8443/example-group/example-project",
+	} {
 		got, err := Parse(url)
 		if err != nil || got != want {
 			t.Errorf("Parse(%q) = %+v, %v, want %+v", url, got, err, want)
 		}
 	}
+	if got := want.APIURL(); got != "https://gitlab.example.com:8443/api/v4" {
+		t.Errorf("APIURL() = %q, want https://gitlab.example.com:8443/api/v4", got)
+	}
 }
 
 func TestParseRejectsARemoteWithoutHostOrProject(t *testing.T) {
 	for _, url := range []string{"", "example-project", "https://gitlab.example.com/", "git@gitlab.example.com:example-project.git", "/srv/git/example-group/example-project.git"} {
-		if _, err := Parse(url); !errors.Is(err, ErrUnsupportedRemote) {
-			t.Errorf("Parse(%q) error = %v, want ErrUnsupportedRemote", url, err)
-		}
+		t.Run(url, func(t *testing.T) {
+			if _, err := Parse(url); !errors.Is(err, ErrUnsupportedRemote) {
+				t.Errorf("Parse(%q) error = %v, want ErrUnsupportedRemote", url, err)
+			}
+		})
 	}
 }
 

@@ -29,9 +29,14 @@ func Parse(url string) (Remote, error) {
 		authority, path, _ = strings.Cut(url, ":")
 	}
 	authority = authority[strings.LastIndex(authority, "@")+1:]
-	host, _, _ := strings.Cut(authority, ":")
+	hostname, _, _ := strings.Cut(authority, ":")
+	host := hostname
+	// Retains the port on HTTP and HTTPS remotes for WebURL and APIURL, whereas SSH ports target the SSH daemon.
+	if hasScheme && (scheme == "https" || scheme == "http") {
+		host = authority
+	}
 	path = strings.TrimSuffix(strings.Trim(path, "/"), ".git")
-	if host == "" || !strings.Contains(path, "/") {
+	if hostname == "" || !strings.Contains(path, "/") {
 		return Remote{}, fmt.Errorf("%w: %q", ErrUnsupportedRemote, url)
 	}
 	return Remote{Host: host, ProjectPath: path}, nil
@@ -56,7 +61,7 @@ func (r Remote) APIURL() string {
 	return r.WebURL() + "/api/v4"
 }
 
-// TopLevelGroup returns the root namespace segment of the project path.
+// TopLevelGroup returns the first segment of the project path as the path of the top-level group.
 func (r Remote) TopLevelGroup() string {
 	group, _, _ := strings.Cut(r.ProjectPath, "/")
 	return group
