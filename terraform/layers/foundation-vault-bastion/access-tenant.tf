@@ -1,6 +1,6 @@
 
-# Each key is an owner code, and executing_repository names the repository running the Terraform of that tenant.
-# The platform tenant code appears once, and every other declaration of this layer references the platform tenant code.
+# Maps each tenant owner code to the repository executing its Terraform configurations.
+# Centralizes platform_tenant for the ACL, PKI, and Transit unseal declarations of this layer.
 locals {
   governance_owner = local.workstation.operator_vault_proxy.governance_owner_code
   platform_tenant  = "platform-foundation"

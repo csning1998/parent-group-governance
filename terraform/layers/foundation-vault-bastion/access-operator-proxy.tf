@@ -4,9 +4,7 @@
 locals {
   operator_proxy = local.workstation.operator_vault_proxy
 
-  # The identity name determines the access tier and the owner code. The administrator and the credential-rotator carry
-  # the governance owner code, a credential-distributor or consumer name joins the tier and the owner code, and every
-  # other name is a tenant named after its owner code. Every identity except the credential-rotator runs Terraform.
+  # Derives each proxy identity's access tier and owner code from its map key per the topology naming contract.
   operator_identity_roles = {
     for name in keys(local.operator_proxy.identities) : name => {
       access_tier = (
@@ -38,7 +36,8 @@ locals {
     for name, identity in local.operator_proxy.identities : name => identity if local.operator_identity_roles[name].access_tier == "credential-rotator"
   }
 
-  # Each identity which runs Terraform reads the GitLab token of its owner, and the administrator writes every token.
+  # Maps every identity executing Terraform to its owner's GitLab state token path, excluding credential-rotator.
+  # The administrator policy writes every path of the map.
   operator_state_backend_paths = {
     for name, role in local.operator_identity_roles : name => "${role.owner_code}/terraform/state-backend" if role.access_tier != "credential-rotator"
   }
@@ -60,7 +59,7 @@ locals {
   )
 }
 
-# The preconditions of terraform_data.operator_identities_validation evaluate the checks below.
+# Validates relative Vault KV path segments in operator_identities_validation preconditions.
 locals {
   operator_path_pattern = "^[a-z0-9]+(-[a-z0-9]+)*(/[a-z0-9]+(-[a-z0-9]+)*)*$"
 }

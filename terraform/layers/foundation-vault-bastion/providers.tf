@@ -14,7 +14,8 @@ terraform {
       version = "~> 2.9.0"
     }
   }
-  # The .envrc of the layer supplies TF_HTTP_ADDRESS, TF_HTTP_LOCK_ADDRESS, and TF_HTTP_UNLOCK_ADDRESS.
+  # State and lock URLs are omitted to avoid hardcoding the GitLab project ID in HCL. The layer .envrc supplies
+  # TF_HTTP_ADDRESS, TF_HTTP_LOCK_ADDRESS, and TF_HTTP_UNLOCK_ADDRESS.
   backend "http" {
     lock_method    = "POST"
     unlock_method  = "DELETE"

@@ -5,7 +5,7 @@ resource "vault_auth_backend" "approle" {
   type     = "approle"
 }
 
-# JWT auth backend of the GitLab instance of var.gitlab_url.
+# Verifies CI job JWTs issued by the GitLab instance configured in var.gitlab_url.
 resource "vault_jwt_auth_backend" "gitlab_saas" {
   provider           = vault.bastion
   path               = "gitlab-saas-ci-job-jwt-provider"
