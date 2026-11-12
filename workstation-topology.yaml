@@ -21,12 +21,14 @@ operator_vault_proxy:
     vault_kv_mount: "secret"
     vault_kv_field: "token"
     terraform_http_username: "gitlab-ci-token"
+    gitlab_api_url: "https://gitlab.com/api/v4"
   identities:
     credential-distributor:
       listen_port: 8210
       access_tier: "credential-distributor"
       owner_code: "parent-group-governance"
       state_backend_path: "parent-group-governance/terraform/state-backend"
+      state_backend_project_id: "86417732"
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
@@ -41,11 +43,13 @@ operator_vault_proxy:
       access_tier: "tenant"
       owner_code: "platform-foundation"
       state_backend_path: "platform-foundation/terraform/state-backend"
+      state_backend_project_id: "84608830"
     administrator:
       listen_port: 8212
       access_tier: "administrator"
       owner_code: "parent-group-governance"
       state_backend_path: "parent-group-governance/terraform/state-backend"
+      state_backend_project_id: "86417732"
     credential-rotator:
       listen_port: 8213
       access_tier: "credential-rotator"
@@ -55,6 +59,7 @@ operator_vault_proxy:
       access_tier: "credential-distributor"
       owner_code: "platform-foundation"
       state_backend_path: "platform-foundation/terraform/state-backend"
+      state_backend_project_id: "84608830"
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
@@ -70,6 +75,7 @@ operator_vault_proxy:
       access_tier: "credential-distributor"
       owner_code: "opgitlab"
       state_backend_path: "opgitlab/terraform/state-backend"
+      state_backend_project_id: "82448331"
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
@@ -85,6 +91,7 @@ operator_vault_proxy:
       access_tier: "credential-distributor"
       owner_code: "gitlab-ci-with-code-reviewer"
       state_backend_path: "gitlab-ci-with-code-reviewer/terraform/state-backend"
+      state_backend_project_id: "83083739"
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
@@ -100,6 +107,7 @@ operator_vault_proxy:
       access_tier: "credential-distributor"
       owner_code: "generic-agent-criteria-source"
       state_backend_path: "generic-agent-criteria-source/terraform/state-backend"
+      state_backend_project_id: "85419450"
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
@@ -114,6 +122,7 @@ operator_vault_proxy:
       access_tier: "consumer"
       owner_code: "opgitlab"
       state_backend_path: "opgitlab/terraform/state-backend"
+      state_backend_project_id: "82448331"
       allowed_read_registry_paths:
         - "platform/network"
     consumer-platform-observability:
@@ -121,6 +130,7 @@ operator_vault_proxy:
       access_tier: "consumer"
       owner_code: "platform-observability"
       state_backend_path: "platform-observability/terraform/state-backend"
+      state_backend_project_id: "87321619"
       allowed_read_registry_paths:
         - "platform/gitlab-group"
     credential-distributor-personal:
@@ -143,6 +153,7 @@ operator_vault_proxy:
       access_tier: "credential-distributor"
       owner_code: "terraform-provider-sshclient"
       state_backend_path: "terraform-provider-sshclient/terraform/state-backend"
+      state_backend_project_id: "86090557"
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
@@ -156,6 +167,7 @@ operator_vault_proxy:
       access_tier: "credential-distributor"
       owner_code: "platform-observability"
       state_backend_path: "platform-observability/terraform/state-backend"
+      state_backend_project_id: "87321619"
       allowed_read_secret_paths:
         - "parent-group-governance/ai-provider-console/anthropic"
         - "parent-group-governance/github/publication"
@@ -209,7 +221,8 @@ service_issued_tokens:
           vault_kv_mount: "secret"
           vault_kv_path: "gitlab-ci-with-code-reviewer/integration/code-reviewer-bot"
           vault_kv_field: "token"
-        variable_keys: ["REVIEW_MR_REVIEWER", "CLAUDE_MR_REVIEWER", "GEMINI_MR_REVIEWER"]
+        variable_keys:
+          ["REVIEW_MR_REVIEWER", "CLAUDE_MR_REVIEWER", "GEMINI_MR_REVIEWER"]
       - vault:
           vault_kv_mount: "secret"
           vault_kv_path: "gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot"

@@ -99,6 +99,7 @@ The `operator_vault_proxy` map configures workstation-local forwarding proxies t
     - `vault_kv_mount` (`string`): KV v2 secrets engine mount path (`secret`).
     - `vault_kv_field` (`string`): JSON field name containing the token string (`token`).
     - `terraform_http_username` (`string`): Basic auth HTTP username required by GitLab HTTP remote state API (`gitlab-ci-token`).
+    - `gitlab_api_url` (`string`): Base URL of the GitLab REST API hosting the state files (`https://gitlab.com/api/v4`).
 
 #### `operator_vault_proxy.identities`
 
@@ -110,6 +111,7 @@ The `operator_vault_proxy` map configures workstation-local forwarding proxies t
     - `access_tier` (`string`): One of `credential-distributor`, `consumer`, `tenant`, `administrator`, and `credential-rotator`.
     - `owner_code` (`string`): Owner code of the repository which the identity serves. Code MUST read the owner from this field and MUST NOT split the identity key.
     - `state_backend_path` (`string`): KV path of the GitLab token of the owner below `<owner_code>/`, such as `opgitlab/terraform/state-backend`. Every tier except `credential-rotator` MUST declare the field, and `vault-proxy-env` exports the token as `TF_HTTP_PASSWORD`.
+    - `state_backend_project_id` (`string`): ID of the GitLab project storing the state files of the owner, such as `86417732`. An identity with `state_backend_path` SHOULD declare the field, and `vault-proxy-env` exports the state base URL of the project.
     - `allowed_read_secret_paths` and `allowed_write_secret_paths` (`list(string)`): KV paths of whole segments, declared by `credential-distributor` alone.
     - `allowed_read_registry_paths` (`list(string)`): Registry domains below `platform/`, such as `platform/ai-provider`, declared by `credential-distributor` and `consumer`.
     - `code_reviewer_variable_projects` (`list(string)`): Full GitLab project paths of the owner, such as `csning1998-lab/parent-group-governance`, which receive the code reviewer bot variables from `./governance credentials issue code-reviewer-variables`. Only `workstation-topology.yaml` grants a project the bot tokens, and a project cannot register itself.
