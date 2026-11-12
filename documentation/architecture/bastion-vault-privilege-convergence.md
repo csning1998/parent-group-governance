@@ -578,7 +578,7 @@ The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 
 3. Initialize the Bastion Vault, unseal the Bastion Vault, and enable the KV v2 engine through `./governance`.
 4. Write the instance values with `vault kv put secret/parent-group-governance/network/allocation @network-allocation.json`, using `network-allocation.example.json` as the template.
 5. Apply `foundation-vault-bastion` with `vault-proxy-env root`. The apply creates the operator cert roles, after which every Proxy logs in.
-6. Execute the `workstation_vault_audit` playbook, passing `workstation_vault_audit_home`.
+6. Run `./governance host apply-vault-audit`, which injects `workstation_vault_audit_home` and `workstation_vault_audit_repository` into the `workstation_vault_audit` playbook.
 7. Run the mp layers which require the Bastion Vault through the platform-foundation Proxy, following the sequence documented in `architecture_platform-foundation_deployment-chain.md` in the planning repository.
 8. Revoke the root token with `./governance vault revoke-root` once the administrator Proxy logs in.
 

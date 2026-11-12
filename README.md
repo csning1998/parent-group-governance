@@ -376,6 +376,7 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 | `[Host] Apply Workstation SELinux Policy and File Contexts`                | `host apply-selinux`                     | Runs the playbook described in Section 3 Item B                            |
 | `[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites` | `host apply-libvirt`                     | Runs the playbook described in Section 4 Item C                            |
 | `[Host] Apply Workstation Vault Proxies`                                   | `host apply-vault-proxy`                 | Runs the playbook described in Section 6 Item F                            |
+| `[Host] Apply Workstation Vault Audit Check`                               | `host apply-vault-audit`                 | Installs the audit log check without the become password                   |
 | `[Vault] Set up TLS for Bastion Vault`                                     | `vault generate-tls`                     | Clears `vault/tls` and issues two CAs and two listener certificates        |
 | `[Vault] Initialize Bastion Vault`                                         | `vault init`                             | Verifies the factory default of each service, then initializes and unseals |
 | `[Vault] Enable KV-v2 Engine`                                              | `vault enable-kv`                        | Mounts the KV version 2 engine at the path `secret`                        |

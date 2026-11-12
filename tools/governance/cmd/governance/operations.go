@@ -331,8 +331,20 @@ func (a *app) runHostVaultProxyPlaybook(ctx context.Context) error {
 	return a.runHostPlaybooks(ctx, a.buildVaultProxyPlaybook)
 }
 
-func (a *app) runHostVaultAuditPlaybook(_ context.Context) error {
-	return nil
+func (a *app) buildVaultAuditPlaybook() hostPlaybook {
+	return hostPlaybook{
+		file: "playbooks/workstation_vault_audit.yaml",
+		extraVars: map[string]any{
+			"workstation_vault_audit_home":       a.home,
+			"workstation_vault_audit_repository": a.root,
+		},
+		doneMsg: "Workstation Vault audit check applied.",
+	}
+}
+
+// runHostVaultAuditPlaybook runs without the become password, since the audit units live in the user manager.
+func (a *app) runHostVaultAuditPlaybook(ctx context.Context) error {
+	return a.executePlaybook(ctx, a.buildVaultAuditPlaybook(), "")
 }
 
 func (a *app) unsealVault(ctx context.Context) error {

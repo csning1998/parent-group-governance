@@ -98,6 +98,12 @@ func (a *app) newHostCmd() *cobra.Command {
 		RunE:    func(cmd *cobra.Command, args []string) error { return a.runHostVaultProxyPlaybook(cmd.Context()) },
 	})
 	cmd.AddCommand(&cobra.Command{
+		Use:     "apply-vault-audit",
+		Aliases: []string{"vault-audit"},
+		Short:   "[Host] Apply the workstation Vault audit check",
+		RunE:    func(cmd *cobra.Command, args []string) error { return a.runHostVaultAuditPlaybook(cmd.Context()) },
+	})
+	cmd.AddCommand(&cobra.Command{
 		Use:     "verify",
 		Aliases: []string{"verify-tools"},
 		Short:   "[Host] Verify Terraform, Vault, and Ansible on PATH",

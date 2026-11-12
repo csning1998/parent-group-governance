@@ -1843,7 +1843,7 @@ _Section 2 Item E_ 說明了兩個介面各自在哪裡觸發 `BootstrapEnv`，�
 
 指令樹以功能劃分為六組子指令命名空間：
 
-1. `host`（別名 `ansible`）：開發機前置環境維護。包含 `apply-all`（別名 `all`）、`apply-selinux`（別名 `selinux`）、`apply-libvirt`（別名 `libvirt`）、`apply-vault-proxy`（別名 `vault-proxy`）與 `verify`（別名 `verify-tools`）。
+1. `host`（別名 `ansible`）：開發機前置環境維護。包含 `apply-all`（別名 `all`）、`apply-selinux`（別名 `selinux`）、`apply-libvirt`（別名 `libvirt`）、`apply-vault-proxy`（別名 `vault-proxy`）、`apply-vault-audit`（別名 `vault-audit`）與 `verify`（別名 `verify-tools`）。
 2. `vault`：Bastion Vault 生命週期管理。包含 `generate-tls`（別名 `tls-generate`）、`init`、`enable-kv`、`unseal`、`revoke-root`（別名 `revoke-root-token`）、`generate-root`（別名 `generate-root-token`），以及掛在 `vault rotate` 與 `vault reconcile` 底下的憑證動態子指令。為維持既有指令相容性，`vault` 根節點亦保留隱藏的憑證輪替別名。
 3. `credentials`：憑證專屬命名空間，掛載 `credentials rotate <key>`、`credentials reconcile <key>`，以及 `credentials issue` 底下的 `sonarqube-analysis-token`、`gitlab-group-runner` 與 `code-reviewer-variables`。三個 `issue` 子指令都經 `administrator` 的 Vault Proxy 讀寫 Bastion Vault，並以 `service_issued_tokens.gitlab_token_owner_code` 對應的 state backend 權杖呼叫 GitLab API。
 4. `terraform`：Terraform 治理操作，掛載 `terraform audit-state`（別名 `audit`、`state-audit`）。
@@ -1912,17 +1912,18 @@ type menuOption struct {
 3. `[Host] Apply Workstation SELinux Policy and File Contexts` (`runHostSELinuxPlaybook`)
 4. `[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites` (`runHostLibvirtPlaybook`)
 5. `[Host] Apply Workstation Vault Proxies` (`runHostVaultProxyPlaybook`)
-6. `[Vault] Set up TLS for Bastion Vault` (`generateVaultTLS`)
-7. `[Vault] Initialize Bastion Vault` (`initVault`)
-8. `[Vault] Enable KV-v2 Engine` (`enableVaultKV`)
-9. `[Vault] Unseal Bastion Vault` (`unsealVault`)
-10. `[Vault] Revoke Root Token After Bootstrap` (`revokeRootToken`)
-11. `[Vault] Generate Root Token for Break-Glass` (`generateRootToken`)
-12. 憑證存在時追加：
+6. `[Host] Apply Workstation Vault Audit Check` (`runHostVaultAuditPlaybook`)
+7. `[Vault] Set up TLS for Bastion Vault` (`generateVaultTLS`)
+8. `[Vault] Initialize Bastion Vault` (`initVault`)
+9. `[Vault] Enable KV-v2 Engine` (`enableVaultKV`)
+10. `[Vault] Unseal Bastion Vault` (`unsealVault`)
+11. `[Vault] Revoke Root Token After Bootstrap` (`revokeRootToken`)
+12. `[Vault] Generate Root Token for Break-Glass` (`generateRootToken`)
+13. 憑證存在時追加：
     - `[Credentials] Rotate Service Admin Passwords` (`runRotateCredentialMenu`)
     - `[Credentials] Reconcile Service Admin Passwords with the Live Service` (`runReconcileCredentialMenu`)
-13. `[Terraform] Audit State Secrets` (`runStateAuditMenu`)
-14. `Quit` (`nil`)
+14. `[Terraform] Audit State Secrets` (`runStateAuditMenu`)
+15. `Quit` (`nil`)
 
 用 `nil` 當結束的標記，而不是另外設一個布林欄位或用字串比對標籤，讓「選到這一項要做什麼」與「這一項是不是結束」用同一個欄位表達，判斷只需要 `chosen.run == nil` 一個條件。
 
@@ -2075,6 +2076,8 @@ if becomePass == "" {
 2. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca-ml-dsa-87.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA、兩張 listener 憑證與終結點的客戶端憑證。CA 已存在時，只以 `vaultops.EnsureTerminatorClientCert` 補上缺少的終結點客戶端憑證。
 3. 配置 Libvirt 虛擬網路，並產生 Bastion Vault 與 TLS 終結點的設定檔（`buildLibvirtPlaybook`）。這一步會斷言終結點掛載的 `publish.pem`、`publish-key.pem`、`ca-ml-dsa-87.pem`、`terminator-client.pem` 與 `terminator-client-key.pem` 已存在，所以排在本機憑證中心之後。
 4. 部署本機 Vault Proxies（`buildVaultProxyPlaybook`），Proxy 的客戶端憑證由本機 CA 簽發。
+
+`buildVaultAuditPlaybook` 執行 `playbooks/workstation_vault_audit.yaml`，注入 `workstation_vault_audit_home: a.home` 與 `workstation_vault_audit_repository: a.root`。audit 檢查的 systemd unit 安裝在操作者的 user manager，playbook 宣告 `become: false`，所以 `runHostVaultAuditPlaybook` 不索取提權密碼。audit device 由 `foundation-vault-bastion` 建立，這支 playbook 因此不在 `runHostAll` 內，依部署順序在該 layer apply 之後單獨執行。
 
 #### 3. 身分代理與安全輪替（`buildProxyConfig`、`newRotationClient`、`revokeRootToken`）
 
