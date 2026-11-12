@@ -85,7 +85,7 @@ func newBackend(t *testing.T) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, password, ok := r.BasicAuth()
-		if !ok || user != "gitlab-ci-token" || password != "backend-secret" {
+		if !ok || user != "some-gitlab-ci-token" || password != "some-backend-secret" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -106,7 +106,7 @@ func newBackend(t *testing.T) *httptest.Server {
 
 func TestHTTPSource(t *testing.T) {
 	server := newBackend(t)
-	source := HTTPSource{Client: server.Client(), Username: "gitlab-ci-token", Password: "backend-secret"}
+	source := HTTPSource{Client: server.Client(), Username: "some-gitlab-ci-token", Password: "some-backend-secret"}
 
 	current, err := source.FetchCurrent(context.Background(), server.URL+"/state/a")
 	if err != nil || string(current) != `{"version": 4, "serial": 3}` {
@@ -124,10 +124,10 @@ func TestHTTPSource(t *testing.T) {
 
 func TestHTTPSourceReportsRejectedCredentials(t *testing.T) {
 	server := newBackend(t)
-	source := HTTPSource{Client: server.Client(), Username: "gitlab-ci-token", Password: "wrong-secret"}
+	source := HTTPSource{Client: server.Client(), Username: "some-gitlab-ci-token", Password: "some-wrong-secret"}
 
 	_, err := source.FetchCurrent(context.Background(), server.URL+"/state/a")
-	if err == nil || !strings.Contains(err.Error(), "401") || strings.Contains(err.Error(), "wrong-secret") {
+	if err == nil || !strings.Contains(err.Error(), "401") || strings.Contains(err.Error(), "some-wrong-secret") {
 		t.Errorf("FetchCurrent error = %v, want the status 401 without the password", err)
 	}
 }
@@ -135,7 +135,7 @@ func TestHTTPSourceReportsRejectedCredentials(t *testing.T) {
 // TestHTTPSourceReportsAStateWhichNeverExisted covers GitLab, which answers 204 for a layer without any apply.
 func TestHTTPSourceReportsAStateWhichNeverExisted(t *testing.T) {
 	server := newBackend(t)
-	source := HTTPSource{Client: server.Client(), Username: "gitlab-ci-token", Password: "backend-secret"}
+	source := HTTPSource{Client: server.Client(), Username: "some-gitlab-ci-token", Password: "some-backend-secret"}
 
 	_, err := source.FetchCurrent(context.Background(), server.URL+"/state/never-applied")
 	if !errors.Is(err, ErrStateMissing) {

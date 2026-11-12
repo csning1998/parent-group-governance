@@ -117,7 +117,7 @@ func TestBuildConfigFromEnv(t *testing.T) {
 		t.Fatalf("BuildConfigFromEnv: %v", err)
 	}
 	source, ok := cfg.Source.(HTTPSource)
-	if !ok || source.Username != "gitlab-ci-token" || source.Password != "backend-secret" || source.Client == nil {
+	if !ok || source.Username != "some-gitlab-ci-token" || source.Password != "some-backend-secret" || source.Client == nil {
 		t.Errorf("Source = %+v, want an HTTPSource of the TF_HTTP credentials", cfg.Source)
 	}
 	wantLayers := []Layer{{Name: "a", Address: "https://gitlab.com/api/v4/projects/1/terraform/state/a"}}
