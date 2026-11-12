@@ -1,0 +1,9 @@
+---
+- name: "Play [Host telemetry]: Open the host telemetry scrape segment to the observability scrapers"
+  hosts: workstation
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../../workstation-topology.yaml
+  roles:
+    - workstation_host_telemetry

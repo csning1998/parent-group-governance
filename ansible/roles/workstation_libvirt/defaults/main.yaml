@@ -10,9 +10,8 @@ workstation_libvirt_operator_user: ""
 workstation_libvirt_publish_network:
   name: "vault-bastion-publish"
   netmask: "255.255.255.0"
-  # The full RFC 1918 class B private address space. Guests on any service
-  # segment reach Bastion Vault through the routed publish network.
-  source_cidr: "172.16.0.0/12"
+  # A guest reaches Bastion Vault through a NIC on the publish segment alone, which ADR-143 requires as the 8200 source.
+  source_cidr: "{{ (vault_bastion.publish_address.split('.')[:3] | join('.')) ~ '.0/24' }}"
 
 # vault.hcl.j2 renders the listeners of vault_bastion in workstation-topology.yaml, which the playbook loads.
 # The CLI injects workstation_libvirt_vault_config_path.
@@ -32,15 +31,10 @@ workstation_libvirt_terminator:
     - terminator-client-key.pem
   tls_dir: "/etc/haproxy/tls"
 
-# The scrapers read the Bastion Vault metrics listener and the host exporters which the inventory declares.
-# A scraper reaches the host through its segment gateway. Firewall rules restrict the source address alone.
-# An empty scraper_source_cidrs keeps every scrape port closed.
-workstation_libvirt_exporter:
-  scraper_source_cidrs: []
-  host_exporter_ports: []
-
+# The role workstation_host_telemetry opens the scrape ports on the host telemetry scrape segment alone.
+# The policy libvirt-to-host therefore admits no scrape port.
 workstation_libvirt_scrape_ports: >-
-  {{ [vault_bastion.metrics_port] + (workstation_libvirt_exporter.host_exporter_ports | default([])) }}
+  {{ [vault_bastion.metrics_port] + (host_telemetry_scrape.host_exporter_ports | default([])) }}
 
 # Seconds which virtnetworkd waits at start for firewalld to report the running state.
 workstation_libvirt_firewalld_ready_timeout: 120

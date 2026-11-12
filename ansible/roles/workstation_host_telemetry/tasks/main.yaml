@@ -1,0 +1,91 @@
+---
+- name: "Section 0. Require the injected segment and the workstation topology"
+  ansible.builtin.assert:
+    that:
+      - workstation_host_telemetry_scrape_cidr is match('^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$')
+      - workstation_host_telemetry_scrape_address is match('^\d{1,3}(\.\d{1,3}){3}$')
+      - vault_bastion is mapping
+      - host_telemetry_scrape is mapping
+    fail_msg: >-
+      workstation_host_telemetry needs the host telemetry scrape segment and address, which the CLI reads from the
+      registry after the apply of foundation-vault-bastion, and workstation-topology.yaml, which the playbook loads.
+
+# The host keeps the address of the segment on a routed bridge, as on the publish network.
+- name: "A1. Define the host telemetry scrape network"
+  community.libvirt.virt_net:
+    uri: qemu:///system
+    command: define
+    name: "{{ host_telemetry_scrape.network_name }}"
+    xml: "{{ lookup('template', 'host-telemetry-network.xml.j2') }}"
+
+- name: "A2. Ensure the host telemetry scrape network is active"
+  community.libvirt.virt_net:
+    uri: qemu:///system
+    state: active
+    name: "{{ host_telemetry_scrape.network_name }}"
+
+- name: "A3. Ensure the host telemetry scrape network autostarts"
+  community.libvirt.virt_net:
+    uri: qemu:///system
+    autostart: true
+    name: "{{ host_telemetry_scrape.network_name }}"
+
+# The policy precedes libvirt-to-host, whose target REJECT closes every scrape port outside this policy.
+- name: "B1. Declare the policy for scraper traffic to the host"
+  ansible.builtin.template:
+    src: host-telemetry-to-host.xml.j2
+    dest: /etc/firewalld/policies/host-telemetry-to-host.xml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: "B2. Reload firewalld to reconcile runtime state with the permanent configuration"
+  ansible.builtin.command:
+    cmd: firewall-cmd --reload
+  changed_when: false
+
+- name: "B3. Read the runtime policy for scraper traffic to the host"
+  ansible.builtin.command:
+    cmd: firewall-cmd --info-policy=host-telemetry-to-host
+  register: _workstation_host_telemetry_policy_info
+  changed_when: false
+
+- name: "B4. Assert each scrape port admits the segment once"
+  ansible.builtin.assert:
+    that:
+      - (_workstation_host_telemetry_policy_info.stdout | regex_findall('port="' ~ item ~ '"') | length) == 1
+    fail_msg: >-
+      The runtime policy host-telemetry-to-host admits port {{ item }} other than once. Compare against the rendered
+      host-telemetry-to-host.xml.j2 and rerun B1 and B2.
+  loop: "{{ workstation_host_telemetry_scrape_ports }}"
+
+# haproxy.cfg of workstation_libvirt reads the fact on every later run, hence apply-libvirt keeps the frontend.
+- name: "C1. Create the directory of the local facts"
+  ansible.builtin.file:
+    path: /etc/ansible/facts.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "C2. Record the host address on the scrape segment as a local fact"
+  ansible.builtin.copy:
+    content: "{{ {'scrape_address': workstation_host_telemetry_scrape_address} | to_nice_json }}\n"
+    dest: /etc/ansible/facts.d/host_telemetry.fact
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: "C3. Read the local facts"
+  ansible.builtin.setup:
+    filter: ansible_local
+
+# The CLI reissued the publish certificate with the scrape address in the SAN before this playbook.
+- name: "C4. Render the terminator configuration with the metrics frontend of the scrape address"
+  ansible.builtin.include_role:
+    name: workstation_libvirt
+    tasks_from: E-vault-config.yaml
+
+- name: "C5. Report the terminator restart"
+  ansible.builtin.debug:
+    msg: Run podman compose restart vault-terminator to load the publish certificate and the metrics frontend of the scrape address.

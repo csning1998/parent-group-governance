@@ -3,11 +3,3 @@ all:
   hosts:
     workstation:
       ansible_connection: local
-      # The scraper segment, cidr_index 155 of the platform network.
-      workstation_libvirt_exporter:
-        scraper_source_cidrs:
-          - 172.16.155.0/24
-        # The ports of node_exporter and the libvirt exporter on this host.
-        host_exporter_ports:
-          - 9100
-          - 9177

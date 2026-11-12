@@ -16,13 +16,4 @@
     <port protocol="tcp" port="{{ vault_bastion.api_port }}"/>
     <accept/>
   </rule>
-{% for cidr in workstation_libvirt_exporter.scraper_source_cidrs | default([]) %}
-{% for port in workstation_libvirt_scrape_ports %}
-  <rule family="ipv4">
-    <source address="{{ cidr }}"/>
-    <port protocol="tcp" port="{{ port }}"/>
-    <accept/>
-  </rule>
-{% endfor %}
-{% endfor %}
 </policy>

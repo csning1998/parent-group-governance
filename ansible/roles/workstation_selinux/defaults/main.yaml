@@ -1,10 +1,11 @@
 ---
-# Public contract. Callers MUST inject workstation_selinux_home from the
-# operator account. become: true gathers facts as root. ansible_facts.user_dir
-# then resolves to /root. A hardcoded home path is forbidden.
+# Public contract. Callers MUST inject workstation_selinux_home and workstation_selinux_repository, since
+# become: true gathers facts as root and ansible_facts.user_dir resolves to /root. Hardcoded paths are forbidden.
 workstation_selinux_home: ""
+workstation_selinux_repository: ""
 workstation_selinux_gitlab_root: "{{ workstation_selinux_home }}/GitLab"
-workstation_selinux_lab_root: "{{ workstation_selinux_gitlab_root }}/csning1998-lab"
+# The sibling repositories of the group share the parent directory of this checkout.
+workstation_selinux_lab_root: "{{ workstation_selinux_repository | dirname }}"
 workstation_selinux_platform_foundation_root: >-
   {{ workstation_selinux_lab_root }}/platform-engineering-lab/platform-foundation
 workstation_selinux_user_uid: "{{ ansible_facts['user_uid'] }}"
@@ -38,11 +39,11 @@ workstation_selinux_personal_on_premise_agent_rel: >-
   ~ ')(/.*)?' }}
 
 workstation_selinux_fcontext_present:
-  - target: "{{ workstation_selinux_lab_root }}/parent-group-governance/(vault|sonarqube)(/.*)?"
+  - target: "{{ workstation_selinux_repository }}/(vault|sonarqube)(/.*)?"
     ftype: a
-  - target: "{{ workstation_selinux_lab_root }}/parent-group-governance/.git(/.*)?"
+  - target: "{{ workstation_selinux_repository }}/.git(/.*)?"
     ftype: a
-  - target: "{{ workstation_selinux_lab_root }}/parent-group-governance/.gitleaks.toml"
+  - target: "{{ workstation_selinux_repository }}/.gitleaks.toml"
     ftype: f
   - target: "{{ workstation_selinux_platform_foundation_root }}/(vault|sonarqube|runner-config)(/.*)?"
     ftype: a
@@ -82,7 +83,7 @@ workstation_selinux_fcontext_absent:
   - target: "vault(/.*)?"
   - target: "sonarqube(/.*)?"
   - target: "\\.git(/.*)?"
-  - target: "{{ workstation_selinux_lab_root }}/parent-group-governance/(vault|sonarqube|runner-config)(/.*)?"
+  - target: "{{ workstation_selinux_repository }}/(vault|sonarqube|runner-config)(/.*)?"
   - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/credentials/.git(/.*)?"
   - target: "{{ workstation_selinux_gitlab_root }}/csning1998/.git(/.*)?"
   - target: "{{ workstation_selinux_lab_root }}/platform-engineering-lab/meta-platform/(vault|sonarqube|runner-config)(/.*)?"
@@ -124,10 +125,10 @@ workstation_selinux_fcontext_absent:
   - target: "/run/spire-agent/public(/.*)?"
 
 workstation_selinux_restorecon_paths:
-  - "{{ workstation_selinux_lab_root }}/parent-group-governance/vault"
-  - "{{ workstation_selinux_lab_root }}/parent-group-governance/sonarqube"
-  - "{{ workstation_selinux_lab_root }}/parent-group-governance/.git"
-  - "{{ workstation_selinux_lab_root }}/parent-group-governance/.gitleaks.toml"
+  - "{{ workstation_selinux_repository }}/vault"
+  - "{{ workstation_selinux_repository }}/sonarqube"
+  - "{{ workstation_selinux_repository }}/.git"
+  - "{{ workstation_selinux_repository }}/.gitleaks.toml"
   - "{{ workstation_selinux_platform_foundation_root }}/vault"
   - "{{ workstation_selinux_platform_foundation_root }}/sonarqube"
   - "{{ workstation_selinux_platform_foundation_root }}/runner-config"

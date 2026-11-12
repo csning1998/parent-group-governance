@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Managed by the parent-group-governance role workstation_host_telemetry. -->
+<policy target="CONTINUE" priority="-2">
+  <short>host-telemetry-to-host</short>
+  <description>Observability scrapers on the host telemetry scrape segment reach the scrape ports of the host address on the segment.</description>
+  <ingress-zone name="libvirt-routed"/>
+  <egress-zone name="HOST"/>
+{% for port in workstation_host_telemetry_scrape_ports %}
+  <rule family="ipv4">
+    <source address="{{ workstation_host_telemetry_scrape_cidr }}"/>
+    <destination address="{{ workstation_host_telemetry_scrape_address }}"/>
+    <port protocol="tcp" port="{{ port }}"/>
+    <accept/>
+  </rule>
+{% endfor %}
+</policy>

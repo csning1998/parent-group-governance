@@ -1,0 +1,8 @@
+---
+# Public contract. The CLI injects the host telemetry scrape segment and the host address on the segment, which
+# foundation-vault-bastion publishes in the registry. The playbook loads workstation-topology.yaml.
+workstation_host_telemetry_scrape_cidr: ""
+workstation_host_telemetry_scrape_address: ""
+# The scrape ports are the Bastion Vault metrics port and the host exporter ports of workstation-topology.yaml.
+workstation_host_telemetry_scrape_ports: >-
+  {{ [vault_bastion.metrics_port] + (host_telemetry_scrape.host_exporter_ports | default([])) }}
