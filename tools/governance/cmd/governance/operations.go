@@ -331,6 +331,10 @@ func (a *app) runHostVaultProxyPlaybook(ctx context.Context) error {
 	return a.runHostPlaybooks(ctx, a.buildVaultProxyPlaybook)
 }
 
+func (a *app) runHostVaultAuditPlaybook(_ context.Context) error {
+	return nil
+}
+
 func (a *app) unsealVault(ctx context.Context) error {
 	op, err := a.newVaultOperator()
 	if err != nil {

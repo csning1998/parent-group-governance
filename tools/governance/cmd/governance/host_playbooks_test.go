@@ -37,6 +37,7 @@ func TestHostMenuOptions_RunTheirPlaybookAlone(t *testing.T) {
 		"[Host] Apply Workstation SELinux Policy and File Contexts":                "playbooks/workstation_selinux.yaml",
 		"[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites": "playbooks/workstation_libvirt.yaml",
 		"[Host] Apply Workstation Vault Proxies":                                   "playbooks/workstation_vault_proxy.yaml",
+		"[Host] Apply Workstation Vault Audit Check":                               "playbooks/workstation_vault_audit.yaml",
 	}
 	for label, playbook := range cases {
 		t.Run(label, func(t *testing.T) {
@@ -55,6 +56,24 @@ func TestHostMenuOptions_RunTheirPlaybookAlone(t *testing.T) {
 				t.Errorf("playbooks = %q, want %q alone", got, playbook)
 			}
 		})
+	}
+}
+
+func TestRunHostVaultAuditPlaybook_InjectsTheOperatorPathsWithoutBecome(t *testing.T) {
+	f := newHostFixture(t, "", "")
+
+	err := f.a.runHostVaultAuditPlaybook(context.Background())
+	if err != nil {
+		t.Fatalf("runHostVaultAuditPlaybook: %v", err)
+	}
+	calls := f.calls(t)
+	if len(calls) != 1 {
+		t.Fatalf("calls = %q, want one run without a become password prompt", calls)
+	}
+	for _, want := range []string{"workstation_vault_audit_home", f.a.home, "workstation_vault_audit_repository", f.a.root} {
+		if !strings.Contains(calls[0], want) {
+			t.Errorf("call %q, want the extra var fragment %s", calls[0], want)
+		}
 	}
 }
 
