@@ -13,7 +13,7 @@ This module provides the authoritative implementation for provisioning multi-clo
 ```hcl
 module "workload_identity_federation" {
   source  = "gitlab.com/csning1998-lab/provisioner-workload-identity-federation/gitlab"
-  version = "~> 0.4.0"
+  version = "~> 0.7.0"
 
   gitlab_url = var.gitlab_url
 
