@@ -154,7 +154,7 @@ The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Work
 2. The role reissues a certificate within 30 days of expiry, or when the certificate no longer verifies against the CA.
 3. The systemd user unit `vault-proxy@<identity>.service` runs `vault proxy` with `auto_auth` method `cert`, `api_proxy` with `use_auto_auth_token = "force"`, and a TCP listener on `127.0.0.1` at the port of the identity.
 4. The listener sets `tls_require_and_verify_client_cert` with the ML-DSA-87 CA, hence a process without the client key of the identity cannot reach the Proxy.
-5. `vault-proxy-env <identity>` prints `VAULT_ADDR` of the Proxy, `VAULT_CACERT`, `VAULT_CLIENT_CERT`, `VAULT_CLIENT_KEY`, the placeholder `VAULT_TOKEN`, `TERRAFORM_VAULT_SKIP_CHILD_TOKEN=true`, and `TF_HTTP_USERNAME` with `TF_HTTP_PASSWORD`. A `.envrc` of each repository or layer loads the output through direnv.
+5. `vault-proxy-env <identity>` prints `VAULT_ADDR` of the Proxy, `VAULT_CACERT`, `VAULT_CLIENT_CERT`, `VAULT_CLIENT_KEY`, the placeholder `VAULT_TOKEN`, `TERRAFORM_VAULT_SKIP_CHILD_TOKEN=true`, `TF_HTTP_USERNAME` with `TF_HTTP_PASSWORD`, and `GITLAB_TERRAFORM_STATE_BASE` for an identity with `state_backend_project_id`. A `.envrc` of each repository or layer loads the output through direnv.
 
 #### Item D.3 Token Boundary Guarantees
 

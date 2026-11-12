@@ -44,11 +44,25 @@ fi
 
 {% set state_read = 'vault kv get -mount=' ~ operator_vault_proxy.state_backend.vault_kv_mount ~ ' -field=' ~ operator_vault_proxy.state_backend.vault_kv_field %}
 {% set governance_path = operator_vault_proxy.identities.administrator.state_backend_path %}
-# Prints the KV path of the GitLab token of $1, empty for an identity which runs no Terraform.
+# Prints the KV path of the GitLab token of $1. Empty for an identity which runs no Terraform.
 state_backend_path() {
   case "$1" in
 {% for name, spec in operator_vault_proxy.identities.items() if spec.state_backend_path is defined %}
     {{ name }}) echo "{{ spec.state_backend_path }}" ;;
+{% endfor %}
+    *) echo "" ;;
+  esac
+}
+
+{% set state_base_prefix = operator_vault_proxy.state_backend.gitlab_api_url ~ '/projects/' %}
+# Prints the state base URL of the GitLab project of $1. Empty for an identity without state_backend_project_id.
+state_backend_base() {
+  case "$1" in
+{% if operator_vault_proxy.identities.administrator.state_backend_project_id is defined %}
+    root) echo "{{ state_base_prefix }}{{ operator_vault_proxy.identities.administrator.state_backend_project_id }}/terraform/state" ;;
+{% endif %}
+{% for name, spec in operator_vault_proxy.identities.items() if spec.state_backend_project_id is defined %}
+    {{ name }}) echo "{{ state_base_prefix }}{{ spec.state_backend_project_id }}/terraform/state" ;;
 {% endfor %}
     *) echo "" ;;
   esac
@@ -85,3 +99,5 @@ else
 fi
 echo "export TF_HTTP_USERNAME={{ operator_vault_proxy.state_backend.terraform_http_username }}"
 echo "export TF_HTTP_PASSWORD='${state_token}'"
+state_base="$(state_backend_base "${identity}")"
+[ -z "${state_base}" ] || echo "export GITLAB_TERRAFORM_STATE_BASE=${state_base}"
