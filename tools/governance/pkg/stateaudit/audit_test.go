@@ -100,14 +100,17 @@ func TestCheckRevealOutputRefusesPipesAndCI(t *testing.T) {
 
 func TestBuildConfigFromEnv(t *testing.T) {
 	terraformDir := t.TempDir()
-	writeLayer(t, filepath.Join(terraformDir, "layers"), "a",
-		"terraform {\n  backend \"http\" {\n    address = \"https://gitlab.com/api/v4/projects/1/terraform/state/a\"\n  }\n}\n")
+	writeLayer(t, filepath.Join(terraformDir, "layers"), "a", "terraform {\n  backend \"http\" {}\n}\n")
 	err := os.WriteFile(filepath.Join(terraformDir, IgnoreFileName),
 		[]byte("ignores:\n  a:\n    - {address: x.y, path: z, reason: test}\n"), 0o600)
 	if err != nil {
 		t.Fatalf("write ignore file: %v", err)
 	}
-	env := map[string]string{"TF_HTTP_USERNAME": "gitlab-ci-token", "TF_HTTP_PASSWORD": "backend-secret"}
+	env := map[string]string{
+		"TF_HTTP_USERNAME":            "some-gitlab-ci-token",
+		"TF_HTTP_PASSWORD":            "some-backend-secret",
+		"GITLAB_TERRAFORM_STATE_BASE": "https://gitlab.com/api/v4/projects/1/terraform/state",
+	}
 
 	cfg, err := BuildConfigFromEnv(terraformDir, func(key string) string { return env[key] }, true)
 	if err != nil {
@@ -117,15 +120,16 @@ func TestBuildConfigFromEnv(t *testing.T) {
 	if !ok || source.Username != "gitlab-ci-token" || source.Password != "backend-secret" || source.Client == nil {
 		t.Errorf("Source = %+v, want an HTTPSource of the TF_HTTP credentials", cfg.Source)
 	}
-	if len(cfg.Layers) != 1 || len(cfg.Ignores) != 1 || !cfg.History || cfg.Detector == nil {
-		t.Errorf("Config = %+v, want one layer, one ignore entry, history, and a detector", cfg)
+	wantLayers := []Layer{{Name: "a", Address: "https://gitlab.com/api/v4/projects/1/terraform/state/a"}}
+	if !slices.Equal(cfg.Layers, wantLayers) || len(cfg.Ignores) != 1 || !cfg.History || cfg.Detector == nil {
+		t.Errorf("Config = %+v, want a configuration which contains the layers %+v, one ignore entry, the history flag, and a detector", cfg, wantLayers)
 	}
 }
 
 func TestBuildConfigFromEnvRequiresCredentials(t *testing.T) {
 	for name, env := range map[string]map[string]string{
-		"no password": {"TF_HTTP_USERNAME": "gitlab-ci-token"},
-		"no username": {"TF_HTTP_PASSWORD": "backend-secret"},
+		"no password": {"TF_HTTP_USERNAME": "some-gitlab-ci-token"},
+		"no username": {"TF_HTTP_PASSWORD": "some-backend-secret"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := BuildConfigFromEnv(t.TempDir(), func(key string) string { return env[key] }, false)
