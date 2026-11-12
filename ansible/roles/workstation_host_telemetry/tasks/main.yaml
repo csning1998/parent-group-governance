@@ -10,7 +10,7 @@
       workstation_host_telemetry needs the host telemetry scrape segment and address, which the CLI reads from the
       registry after the apply of foundation-vault-bastion, and workstation-topology.yaml, which the playbook loads.
 
-# The host keeps the address of the segment on a routed bridge, as on the publish network.
+# Binds the scrape gateway IP to a dedicated routed bridge, allowing scraper guests to reach host listeners without NAT.
 - name: "A1. Define the host telemetry scrape network"
   community.libvirt.virt_net:
     uri: qemu:///system
@@ -30,7 +30,8 @@
     autostart: true
     name: "{{ host_telemetry_scrape.network_name }}"
 
-# The policy precedes libvirt-to-host, whose target REJECT closes every scrape port outside this policy.
+# Priority -2 evaluates before libvirt-to-host (priority -1, target REJECT), admitting traffic from the scrape
+# subnet before general guest traffic is rejected.
 - name: "B1. Declare the policy for scraper traffic to the host"
   ansible.builtin.template:
     src: host-telemetry-to-host.xml.j2
@@ -59,7 +60,8 @@
       host-telemetry-to-host.xml.j2 and rerun B1 and B2.
   loop: "{{ workstation_host_telemetry_scrape_ports }}"
 
-# haproxy.cfg of workstation_libvirt reads the fact on every later run, hence apply-libvirt keeps the frontend.
+# Persisting the scrape IP in /etc/ansible/facts.d ensures subsequent workstation_libvirt runs retain the
+# host_telemetry_metrics frontend when rendering haproxy.cfg.
 - name: "C1. Create the directory of the local facts"
   ansible.builtin.file:
     path: /etc/ansible/facts.d
@@ -80,7 +82,7 @@
   ansible.builtin.setup:
     filter: ansible_local
 
-# The CLI reissued the publish certificate with the scrape address in the SAN before this playbook.
+# Renders haproxy.cfg to bind the metrics frontend to the scrape IP after the CLI adds the IP to the publish certificate SAN.
 - name: "C4. Render the terminator configuration with the metrics frontend of the scrape address"
   ansible.builtin.include_role:
     name: workstation_libvirt
@@ -88,4 +90,6 @@
 
 - name: "C5. Report the terminator restart"
   ansible.builtin.debug:
-    msg: Run podman compose restart vault-terminator to load the publish certificate and the metrics frontend of the scrape address.
+    msg: >-
+      Run podman compose restart vault-terminator to load the publish certificate
+      and the metrics frontend of the scrape address.

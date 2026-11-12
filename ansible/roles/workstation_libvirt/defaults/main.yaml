@@ -10,7 +10,7 @@ workstation_libvirt_operator_user: ""
 workstation_libvirt_publish_network:
   name: "vault-bastion-publish"
   netmask: "255.255.255.0"
-  # A guest reaches Bastion Vault through a NIC on the publish segment alone, which ADR-143 requires as the 8200 source.
+  # Restricts port 8200 ingress to the /24 publish subnet per ADR-143, requiring guest VMs to attach a publish NIC.
   source_cidr: "{{ (vault_bastion.publish_address.split('.')[:3] | join('.')) ~ '.0/24' }}"
 
 # vault.hcl.j2 renders the listeners of vault_bastion in workstation-topology.yaml, which the playbook loads.
@@ -31,8 +31,8 @@ workstation_libvirt_terminator:
     - terminator-client-key.pem
   tls_dir: "/etc/haproxy/tls"
 
-# The role workstation_host_telemetry opens the scrape ports on the host telemetry scrape segment alone.
-# The policy libvirt-to-host therefore admits no scrape port.
+# Scraper access is isolated to the host-telemetry-to-host policy in workstation_host_telemetry.
+# Task C10 uses this port list to assert the absence of telemetry ports from libvirt-to-host.
 workstation_libvirt_scrape_ports: >-
   {{ [vault_bastion.metrics_port] + (host_telemetry_scrape.host_exporter_ports | default([])) }}
 

@@ -45,12 +45,13 @@ fi
 {% set state_read = 'vault kv get -mount=' ~ operator_vault_proxy.state_backend.vault_kv_mount ~ ' -field=' ~ operator_vault_proxy.state_backend.vault_kv_field %}
 {% set governance_owner = operator_vault_proxy.governance_owner_code %}
 {% set project_ids = operator_vault_proxy.state_backend.project_ids %}
-{# The identity name determines the owner code, by the naming rule of workstation-topology-specification.md. #}
+{# Derives the owner code from the identity naming rules in workstation-topology-specification.md. #}
 {% macro owner_of(name) -%}
 {% if name in ['administrator', 'credential-rotator'] %}{{ governance_owner }}{% elif name.startswith('credential-distributor-') %}{{ name[23:] }}{% elif name.startswith('consumer-') %}{{ name[9:] }}{% else %}{{ name }}{% endif %}
 {%- endmacro %}
 {% set governance_path = governance_owner ~ '/terraform/state-backend' %}
-# Prints the KV path of the GitLab token of $1. Empty for the credential-rotator, which runs no Terraform.
+# Outputs the KV v2 secret path storing the GitLab state token for $1, or an empty string for credential-rotator
+# because the rotator identity does not execute Terraform.
 state_backend_path() {
   case "$1" in
 {% for name in operator_vault_proxy.identities if name != 'credential-rotator' %}
@@ -61,7 +62,7 @@ state_backend_path() {
 }
 
 {% set state_base_prefix = workstation_vault_proxy_gitlab_url ~ '/api/v4/projects/' %}
-# Prints the state base URL of the GitLab project of $1. Empty for an owner without a project ID.
+# Outputs the GitLab HTTP state base URL for the owner of $1, or an empty string for an owner without a registered project ID.
 state_backend_base() {
   case "$1" in
 {% if governance_owner in project_ids %}

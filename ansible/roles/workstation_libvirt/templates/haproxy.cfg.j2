@@ -37,8 +37,8 @@ frontend publish_metrics
     default_backend vault_metrics
 
 {% if (ansible_local | default({})).host_telemetry.scrape_address is defined %}
-# The role workstation_host_telemetry records the host address on the scrape segment as a local fact, and the
-# publish certificate names the address, hence the frontend reuses the publish certificate.
+# Enabled once workstation_host_telemetry records the scrape IP in local facts and the CLI adds the IP to the
+# @publish/listener TLS certificate SAN.
 frontend host_telemetry_metrics
     mode http
     option httplog

@@ -1,10 +1,10 @@
 ---
-# Public contract. Callers MUST inject workstation_selinux_home and workstation_selinux_repository, since
-# become: true gathers facts as root and ansible_facts.user_dir resolves to /root. Hardcoded paths are forbidden.
+# Public contract. Callers MUST inject workstation_selinux_home and workstation_selinux_repository because
+# privilege escalation (become: true) resolves ansible_facts.user_dir to /root. Hardcoded paths are forbidden.
 workstation_selinux_home: ""
 workstation_selinux_repository: ""
 workstation_selinux_gitlab_root: "{{ workstation_selinux_home }}/GitLab"
-# The sibling repositories of the group share the parent directory of this checkout.
+# Resolves the parent group directory shared by sibling repositories checked out alongside this repository.
 workstation_selinux_lab_root: "{{ workstation_selinux_repository | dirname }}"
 workstation_selinux_platform_foundation_root: >-
   {{ workstation_selinux_lab_root }}/platform-engineering-lab/platform-foundation

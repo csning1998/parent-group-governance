@@ -12,8 +12,8 @@ vault_bastion:
   # Vault allocates a cluster listener one port above each API listener, reserving port 8203 for the metrics listener.
   publish_backend_port: 8204
 
-# Observability Plane: the host segment on which scrapers reach the metrics of the host, see ADR-143.
-# foundation-vault-bastion publishes the segment and the host address at the registry location below.
+# Observability Plane: dedicated libvirt routed segment exposing host metrics to observability scrapers (ADR-143).
+# The foundation-vault-bastion layer allocates the subnet in the Vault registry for the host telemetry playbook to consume.
 host_telemetry_scrape:
   network_name: "host-telemetry-scrape"
   registry:
@@ -21,11 +21,11 @@ host_telemetry_scrape:
     vault_kv_path: "platform/network/allocation"
     cidr_field: "host_telemetry_scrape_cidr"
     address_field: "host_telemetry_scrape_address"
-  # The ports of node_exporter and the libvirt exporter on this host.
+  # Host TCP ports exposed to the scrape segment alongside vault_bastion.metrics_port (node_exporter and libvirt_exporter).
   host_exporter_ports: [9100, 9177]
 
 # Access Plane: Local forwarding proxies mediating mTLS client authentication.
-# The identity name determines the access tier and the owner code, see documentation/workstation-topology-specification.md.
+# Identity keys determine the access tier and the owner code per documentation/workstation-topology-specification.md.
 operator_vault_proxy:
   governance_owner_code: "parent-group-governance"
   cert_auth_mount: "operator-cert"

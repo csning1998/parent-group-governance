@@ -72,12 +72,13 @@
       The runtime policy libvirt-to-host does not match the declared service set (dhcp, dhcpv6, dns) and the
       Bastion Vault rich rule. Compare against the rendered libvirt-to-host.xml.j2 and rerun C1 and C3.
 
-# The policy host-telemetry-to-host of the role workstation_host_telemetry carries every scrape rule.
+# Telemetry ingress belongs exclusively to host-telemetry-to-host. The libvirt-to-host policy does not expose scrape ports.
 - name: "C10. Assert the policy for routed guest traffic admits no scrape port"
   ansible.builtin.assert:
     that:
       - _workstation_libvirt_policy_info.stdout is not search('port="' ~ item ~ '"')
     fail_msg: >-
       The runtime policy libvirt-to-host admits the scrape port {{ item }}, which the policy host-telemetry-to-host
-      restricts to the host telemetry scrape segment. Compare against the rendered libvirt-to-host.xml.j2 and rerun C1 and C3.
+      restricts to the host telemetry scrape segment.
+      Compare against the rendered libvirt-to-host.xml.j2 and rerun C1 and C3.
   loop: "{{ workstation_libvirt_scrape_ports }}"

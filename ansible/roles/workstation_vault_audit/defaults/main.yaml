@@ -1,7 +1,6 @@
 ---
-# Public contract. Callers MUST inject workstation_vault_audit_home from the operator account and
-# workstation_vault_audit_repository from the repository checkout. The units run in the user manager of the operator,
-# the same account which runs the rootless Bastion Vault container.
+# Public contract. Callers MUST inject workstation_vault_audit_home and workstation_vault_audit_repository.
+# The systemd units are executed by the operator user manager sharing the UID of the rootless Bastion Vault container.
 workstation_vault_audit_home: ""
 workstation_vault_audit_repository: ""
 workstation_vault_audit_dir: "{{ workstation_vault_audit_repository }}/vault/audit"
