@@ -7,8 +7,8 @@ set -e
 MSG_FILE="$1"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-# The image follows the GitLab host and top-level group of origin and the reviewer tag of .gitlab-ci.yml.
-# The registry host assumes the registry.<GitLab host> convention, and REVIEWER_IMAGE overrides the whole reference.
+# Derives the container registry path from the origin remote and the tag pinned in .gitlab-ci.yml to keep the hook
+# portable across group renames. Setting REVIEWER_IMAGE overrides the derived reference.
 origin="$(git remote get-url origin)"
 case "${origin}" in
     *://*)

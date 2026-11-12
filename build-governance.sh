@@ -11,7 +11,7 @@ readonly cli_module="governance"
 readonly -a cli_binaries=(
     governance
 )
-# The project key reproduces CI_PROJECT_PATH_SLUG of the origin project path, which the CI job passes as the key.
+# Reproduces the GitLab CI_PROJECT_PATH_SLUG normalization rules to align local and CI scans on the same SonarQube project key.
 origin_project_path="$(git remote get-url origin)"
 origin_project_path="${origin_project_path#*://*/}"
 origin_project_path="${origin_project_path#*:}"
