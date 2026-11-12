@@ -10,14 +10,14 @@
 
 # The CLI provisions the local CA before running this task. A missing certificate indicates execution outside host apply-all.
 # The check precedes E3, since vault.hcl names terminator-client.pem and Vault refuses to start without the file.
-- name: "E2. Stat the certificates which the TLS terminator mounts"
+- name: "E2. Stat the certificates mounted by the TLS terminator"
   ansible.builtin.stat:
     path: "{{ workstation_libvirt_terminator.certificate_dir }}/{{ item }}"
   loop: "{{ workstation_libvirt_terminator.certificate_files }}"
   register: workstation_libvirt_terminator_certificates
 
-# Podman creates an empty directory at a missing bind mount source, which a plain existence check accepts.
-- name: "E2. Require the certificates which the TLS terminator mounts"
+# Asserts regular files because Podman creates an empty directory when a bind mount source path is missing on the host.
+- name: "E2. Require the certificates mounted by the TLS terminator"
   ansible.builtin.assert:
     that:
       - item.stat.exists
@@ -48,7 +48,19 @@
     group: "{{ workstation_libvirt_operator_user }}"
     mode: "0644"
 
-# Injecting addresses through environment files avoids hardcoding listener addresses in compose.yml.
+# Renders haproxy-telemetry.cfg for vault-telemetry-terminator once workstation_host_telemetry records the scrape IP
+# in local facts.
+- name: "E4. Render the telemetry terminator configuration for the scrape address"
+  ansible.builtin.template:
+    src: haproxy-telemetry.cfg.j2
+    dest: "{{ workstation_libvirt_terminator.config_dir }}/haproxy-telemetry.cfg"
+    owner: "{{ workstation_libvirt_operator_user }}"
+    group: "{{ workstation_libvirt_operator_user }}"
+    mode: "0644"
+  when: (ansible_local | default({})).host_telemetry.scrape_address is defined
+
+# Writes listener addresses to environment files instead of hardcoding IPs in compose.yml. Both terminator containers
+# read terminator.env, and the role appends TERMINATOR_SCRAPE_ADDRESS when the scrape IP fact exists.
 - name: "E5. Render the container environment files from the declared listeners"
   ansible.builtin.copy:
     content: "{{ item.content }}\n"
@@ -60,6 +72,12 @@
     - dest: "{{ workstation_libvirt_vault.config_path | dirname }}/vault.env"
       content: "VAULT_ADDR=https://{{ vault_bastion.loopback_address }}:{{ vault_bastion.api_port }}"
     - dest: "{{ workstation_libvirt_terminator.config_dir }}/terminator.env"
-      content: "TERMINATOR_PUBLISH_ADDRESS={{ vault_bastion.publish_address }}"
+      content: "{{ _workstation_libvirt_terminator_env | join('\n') }}"
   loop_control:
     label: "{{ item.dest | basename }}"
+  vars:
+    _workstation_libvirt_scrape_address: "{{ (ansible_local | default({})).host_telemetry.scrape_address | default('') }}"
+    _workstation_libvirt_terminator_env: >-
+      {{ ['TERMINATOR_PUBLISH_ADDRESS=' ~ vault_bastion.publish_address]
+         + (['TERMINATOR_SCRAPE_ADDRESS=' ~ _workstation_libvirt_scrape_address]
+            if _workstation_libvirt_scrape_address else []) }}

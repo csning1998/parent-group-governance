@@ -7,8 +7,8 @@
       - vault_bastion is mapping
       - host_telemetry_scrape is mapping
     fail_msg: >-
-      workstation_host_telemetry needs the host telemetry scrape segment and address, which the CLI reads from the
-      registry after the apply of foundation-vault-bastion, and workstation-topology.yaml, which the playbook loads.
+      workstation_host_telemetry needs the host telemetry scrape segment and address read by the CLI from the
+      registry after the apply of foundation-vault-bastion, and workstation-topology.yaml loaded by the playbook.
 
 # Binds the scrape gateway IP to a dedicated routed bridge, allowing scraper guests to reach host listeners without NAT.
 - name: "A1. Define the host telemetry scrape network"
@@ -61,7 +61,7 @@
   loop: "{{ workstation_host_telemetry_scrape_ports }}"
 
 # Persisting the scrape IP in /etc/ansible/facts.d ensures subsequent workstation_libvirt runs retain the
-# host_telemetry_metrics frontend when rendering haproxy.cfg.
+# telemetry terminator configuration.
 - name: "C1. Create the directory of the local facts"
   ansible.builtin.file:
     path: /etc/ansible/facts.d
@@ -82,14 +82,16 @@
   ansible.builtin.setup:
     filter: ansible_local
 
-# Renders haproxy.cfg to bind the metrics frontend to the scrape IP after the CLI adds the IP to the publish certificate SAN.
-- name: "C4. Render the terminator configuration with the metrics frontend of the scrape address"
+# Renders haproxy-telemetry.cfg to bind the metrics frontend to the scrape IP after
+# the CLI adds the IP to the publish certificate SAN.
+- name: "C4. Render the telemetry terminator configuration for the scrape address"
   ansible.builtin.include_role:
     name: workstation_libvirt
     tasks_from: E-vault-config.yaml
 
-- name: "C5. Report the terminator restart"
+- name: "C5. Report the terminator restarts"
   ansible.builtin.debug:
     msg: >-
-      Run podman compose restart vault-terminator to load the publish certificate
-      and the metrics frontend of the scrape address.
+      Run podman compose restart vault-terminator to load the publish certificate, and run
+      podman compose --profile host-telemetry up -d vault-telemetry-terminator to load the
+      metrics frontend of the scrape address.

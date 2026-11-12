@@ -36,17 +36,6 @@ frontend publish_metrics
     http-request deny unless METH_GET { path /v1/sys/metrics }
     default_backend vault_metrics
 
-{% if (ansible_local | default({})).host_telemetry.scrape_address is defined %}
-# Enabled once workstation_host_telemetry records the scrape IP in local facts and the CLI adds the IP to the
-# @publish/listener TLS certificate SAN.
-frontend host_telemetry_metrics
-    mode http
-    option httplog
-    bind {{ ansible_local.host_telemetry.scrape_address }}:{{ vault_bastion.metrics_port }} ssl crt "@publish/listener" ssl-min-ver TLSv1.3 curves MLKEM1024:SecP384r1MLKEM1024
-    http-request deny unless METH_GET { path /v1/sys/metrics }
-    default_backend vault_metrics
-
-{% endif %}
 backend vault_metrics
     mode http
     server vault {{ vault_bastion.loopback_address }}:{{ vault_bastion.metrics_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem"
