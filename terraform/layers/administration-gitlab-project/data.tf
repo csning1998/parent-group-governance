@@ -1,6 +1,6 @@
 
 locals {
-  _state_base = "https://gitlab.com/api/v4/projects/86417732/terraform/state"
+  _state_base = var.gitlab_terraform_state_base
 }
 
 locals {

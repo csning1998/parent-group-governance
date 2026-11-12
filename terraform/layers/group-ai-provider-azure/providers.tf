@@ -16,10 +16,8 @@ terraform {
     }
   }
 
+  # The .envrc of the layer supplies TF_HTTP_ADDRESS, TF_HTTP_LOCK_ADDRESS, and TF_HTTP_UNLOCK_ADDRESS.
   backend "http" {
-    address        = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-ai-provider-azure"
-    lock_address   = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-ai-provider-azure/lock"
-    unlock_address = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-ai-provider-azure/lock"
     lock_method    = "POST"
     unlock_method  = "DELETE"
     retry_wait_min = 5

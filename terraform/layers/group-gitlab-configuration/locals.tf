@@ -1,8 +1,7 @@
 
 
 locals {
-  # Resolves the remote state backend base URL hosted under this GitLab project.
-  _state_base = "https://gitlab.com/api/v4/projects/86417732/terraform/state"
+  _state_base = var.gitlab_terraform_state_base
 
   # Job containers connect to SonarQube through the sonarqube compose service endpoint
   # on the sonarqube-ci-net bridge network configured in the runner network mode.

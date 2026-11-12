@@ -416,6 +416,8 @@ Every layer stores state in the GitLab HTTP backend under the project hosting th
 - `terraform/.envrc` loads the identity `administrator` by default.
 - The first apply of `foundation-vault-bastion` MUST run with `eval "$(vault-proxy-env root)"` in the shell. The identity `root` routes `VAULT_ADDR` to `https://127.0.0.1:8200` and authenticates through `~/.vault-token`.
 - `terraform/layers/administration-gitlab-project/.envrc` loads `credential-distributor` via `eval "$(vault-proxy-env credential-distributor)"`.
+- Every layer omits state addresses from its `backend "http"` block. `vault-proxy-env` exports `GITLAB_TERRAFORM_STATE_BASE` from the identity's `state_backend_project_id` in `workstation-topology.yaml`, and each layer's `.envrc` derives `TF_HTTP_ADDRESS`, `TF_HTTP_LOCK_ADDRESS`, and `TF_HTTP_UNLOCK_ADDRESS` from `GITLAB_TERRAFORM_STATE_BASE` and the layer name.
+- Layers reading remote state receive the same base URL via `TF_VAR_gitlab_terraform_state_base` exported by the `.envrc` of each such layer.
 - All environments export `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD` from `secret/parent-group-governance/terraform/state-backend`. The identity `root` reads the secret with the root token, and every other identity reads the secret through the credential-distributor Proxy.
 - The GitLab provider reads a token from the same secret through an ephemeral read, which keeps the token out of the persisted state of the consuming layer.
 
