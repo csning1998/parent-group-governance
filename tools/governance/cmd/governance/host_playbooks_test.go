@@ -20,7 +20,7 @@ type hostFixture struct {
 	log string
 }
 
-func TestApplyAllMenuOption_RunsEveryHostStep(t *testing.T) {
+func TestApplyAllMenuOptionRunsEveryHostStep(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
 
 	err := f.a.buildMenuOptions()[0].run(context.Background())
@@ -32,7 +32,7 @@ func TestApplyAllMenuOption_RunsEveryHostStep(t *testing.T) {
 	}
 }
 
-func TestHostMenuOptions_RunTheirPlaybookAlone(t *testing.T) {
+func TestHostMenuOptionsRunTheirPlaybookAlone(t *testing.T) {
 	cases := map[string]string{
 		"[Host] Apply Workstation SELinux Policy and File Contexts":                "playbooks/workstation_selinux.yaml",
 		"[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites": "playbooks/workstation_libvirt.yaml",
@@ -59,7 +59,7 @@ func TestHostMenuOptions_RunTheirPlaybookAlone(t *testing.T) {
 	}
 }
 
-func TestRunHostVaultAuditPlaybook_InjectsTheOperatorPathsWithoutBecome(t *testing.T) {
+func TestRunHostVaultAuditPlaybookInjectsTheOperatorPathsWithoutBecome(t *testing.T) {
 	f := newHostFixture(t, "", "")
 
 	err := f.a.runHostVaultAuditPlaybook(context.Background())
@@ -77,7 +77,7 @@ func TestRunHostVaultAuditPlaybook_InjectsTheOperatorPathsWithoutBecome(t *testi
 	}
 }
 
-func TestRunHostAll_InjectsTheRepositoryAndTheGitLabOrigin(t *testing.T) {
+func TestRunHostAllInjectsTheRepositoryAndTheGitLabOrigin(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
 
 	err := f.a.runHostAll(context.Background())
@@ -100,7 +100,7 @@ func TestRunHostAll_InjectsTheRepositoryAndTheGitLabOrigin(t *testing.T) {
 	}
 }
 
-func TestRunHostAll_KeepsAnExistingLocalCA(t *testing.T) {
+func TestRunHostAllKeepsAnExistingLocalCA(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
 	caFile := filepath.Join(f.a.root, "vault", "tls", "ca-ml-dsa-87.pem")
 	err := os.MkdirAll(filepath.Dir(caFile), 0o755)
@@ -116,12 +116,16 @@ func TestRunHostAll_KeepsAnExistingLocalCA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runHostAll: %v", err)
 	}
-	if data, _ := os.ReadFile(caFile); string(data) != "example existing CA" {
+	data, err := os.ReadFile(caFile)
+	if err != nil {
+		t.Fatalf("read the CA certificate: %v", err)
+	}
+	if string(data) != "example existing CA" {
 		t.Errorf("CA certificate = %q, want the existing CA untouched", data)
 	}
 }
 
-func TestRunHostAll_RunsEveryStepInBootstrapOrder(t *testing.T) {
+func TestRunHostAllRunsEveryStepInBootstrapOrder(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
 
 	err := f.a.runHostAll(context.Background())
@@ -147,7 +151,7 @@ func TestRunHostAll_RunsEveryStepInBootstrapOrder(t *testing.T) {
 	}
 }
 
-func TestRunHostPlaybooks_BlankPasswordRunsNoPlaybook(t *testing.T) {
+func TestRunHostStepsBlankPasswordRunsNoPlaybook(t *testing.T) {
 	f := newHostFixture(t, "", "")
 
 	err := f.a.runHostAll(context.Background())
@@ -162,7 +166,7 @@ func TestRunHostPlaybooks_BlankPasswordRunsNoPlaybook(t *testing.T) {
 	}
 }
 
-func TestRunHostPlaybooks_StopsAtTheFirstFailure(t *testing.T) {
+func TestRunHostStepsStopsAtTheFirstFailure(t *testing.T) {
 	f := newHostFixture(t, "example-become", "workstation_libvirt")
 
 	err := f.a.runHostAll(context.Background())

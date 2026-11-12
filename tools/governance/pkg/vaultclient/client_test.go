@@ -90,7 +90,7 @@ func TestInspectStatusReturnsBeforeDefaultClientTimeout(t *testing.T) {
 	}
 }
 
-func TestNewClient_InvalidTLSConfig(t *testing.T) {
+func TestNewClientInvalidTLSConfig(t *testing.T) {
 	cfg := vaultclient.Config{
 		Address:    "https://127.0.0.1:8200",
 		CACertPath: "/nonexistent/path/ca.pem",
@@ -101,7 +101,7 @@ func TestNewClient_InvalidTLSConfig(t *testing.T) {
 	}
 }
 
-func TestNewClient_ValidConfig(t *testing.T) {
+func TestNewClientValidConfig(t *testing.T) {
 	cfg := vaultclient.Config{
 		Address: "http://127.0.0.1:8200",
 		Token:   "s.testtoken",

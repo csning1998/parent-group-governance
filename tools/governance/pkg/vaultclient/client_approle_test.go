@@ -35,7 +35,7 @@ func newMockAppRoleServer(t *testing.T, mount, wantRoleID, wantSecretID string, 
 }
 
 // TestAppRoleAuth_SuccessScenarios covers token exchange on the default and on a custom mount path.
-func TestAppRoleAuth_SuccessScenarios(t *testing.T) {
+func TestAppRoleAuthSuccessScenarios(t *testing.T) {
 	tests := []struct {
 		name       string
 		mount      string
@@ -69,7 +69,7 @@ func TestAppRoleAuth_SuccessScenarios(t *testing.T) {
 }
 
 // TestAppRoleAuth_ClientInputValidation covers rejection of invalid inputs prior to issuing network requests.
-func TestAppRoleAuth_ClientInputValidation(t *testing.T) {
+func TestAppRoleAuthClientInputValidation(t *testing.T) {
 	validClient, err := vaultclient.NewClient(vaultclient.Config{Address: "http://127.0.0.1:8200"})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
@@ -102,7 +102,7 @@ func TestAppRoleAuth_ClientInputValidation(t *testing.T) {
 }
 
 // TestAppRoleAuth_ServerErrorScenarios covers error responses and an auth block which lacks a client token.
-func TestAppRoleAuth_ServerErrorScenarios(t *testing.T) {
+func TestAppRoleAuthServerErrorScenarios(t *testing.T) {
 	tests := []struct {
 		name string
 		resp mockJWTResponse

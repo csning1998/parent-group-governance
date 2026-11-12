@@ -34,9 +34,8 @@ func newHostTelemetryApp(t *testing.T) (*app, *issuedVault) {
 	return a, vault
 }
 
-// TestBuildHostTelemetryPlaybook_InjectsTheSegmentAndCoversTheAddress asserts the injected segment, the libvirt
-// inputs which the terminator frontend of the address needs, and the publish certificate which names the address.
-func TestBuildHostTelemetryPlaybook_InjectsTheSegmentAndCoversTheAddress(t *testing.T) {
+// TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress verifies the injected scrape network variables and confirms the publish listener certificate SAN includes the scrape IP.
+func TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress(t *testing.T) {
 	a, vault := newHostTelemetryApp(t)
 	vault.secrets["registry/platform/network/allocation"] = map[string]any{
 		"host_telemetry_scrape_cidr":    "192.0.2.0/24",
@@ -85,7 +84,7 @@ func readPublishCert(t *testing.T, tlsDir string) *x509.Certificate {
 	return cert
 }
 
-func TestBuildHostTelemetryPlaybook_ReportsAnUnpublishedSegment(t *testing.T) {
+func TestBuildHostTelemetryPlaybookReportsAnUnpublishedSegment(t *testing.T) {
 	a, _ := newHostTelemetryApp(t)
 
 	_, err := a.buildHostTelemetryPlaybook(context.Background())

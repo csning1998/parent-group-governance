@@ -57,7 +57,7 @@ func TestClearInitRootToken(t *testing.T) {
 	})
 }
 
-func TestGenerateRoot_ReportsAClientFailure(t *testing.T) {
+func TestGenerateRootReportsAClientFailure(t *testing.T) {
 	p := newGenerateRootPaths(t, "http://127.0.0.1:1", "key1\n")
 	op := newTestOperator(t, p, "http://127.0.0.1:1")
 	err := op.GenerateRoot(context.Background())
@@ -66,7 +66,7 @@ func TestGenerateRoot_ReportsAClientFailure(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_ReportsADecodeFailure(t *testing.T) {
+func TestGenerateRootReportsADecodeFailure(t *testing.T) {
 	const otp = "0123456789abcdefghijklmnopqrstuv"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -87,7 +87,7 @@ func TestGenerateRoot_ReportsADecodeFailure(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_ReportsAStatusFailure(t *testing.T) {
+func TestGenerateRootReportsAStatusFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -100,7 +100,7 @@ func TestGenerateRoot_ReportsAStatusFailure(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_ReportsATokenFileFailure(t *testing.T) {
+func TestGenerateRootReportsATokenFileFailure(t *testing.T) {
 	skipWhenRoot(t)
 	const token = "hvs.example-break-glass-token000"
 	srv, _ := generateRootServer(t, false, 1, token)
@@ -116,7 +116,7 @@ func TestGenerateRoot_ReportsATokenFileFailure(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_ReportsAnInitFailure(t *testing.T) {
+func TestGenerateRootReportsAnInitFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			_ = json.NewEncoder(w).Encode(map[string]any{"started": false})
@@ -133,7 +133,7 @@ func TestGenerateRoot_ReportsAnInitFailure(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_ReportsAnUpdateFailure(t *testing.T) {
+func TestGenerateRootReportsAnUpdateFailure(t *testing.T) {
 	const otp = "0123456789abcdefghijklmnopqrstuv"
 	var cancelled atomic.Bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +158,7 @@ func TestGenerateRoot_ReportsAnUpdateFailure(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_ReportsMissingUnsealKeys(t *testing.T) {
+func TestGenerateRootReportsMissingUnsealKeys(t *testing.T) {
 	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
 	op := newTestOperator(t, p, "http://127.0.0.1:8200")
 	err := op.GenerateRoot(context.Background())
@@ -167,7 +167,7 @@ func TestGenerateRoot_ReportsMissingUnsealKeys(t *testing.T) {
 	}
 }
 
-func TestRevokeRoot_ClearsAnAbsentInitFile(t *testing.T) {
+func TestRevokeRootClearsAnAbsentInitFile(t *testing.T) {
 	var revoked atomic.Bool
 	target := tokenServer(t, []string{"root"}, &revoked)
 	successor := tokenServer(t, []string{"successor-policy"}, new(atomic.Bool))
@@ -186,7 +186,7 @@ func TestRevokeRoot_ClearsAnAbsentInitFile(t *testing.T) {
 	}
 }
 
-func TestRevokeRoot_ReportsATargetClientFailure(t *testing.T) {
+func TestRevokeRootReportsATargetClientFailure(t *testing.T) {
 	successor := tokenServer(t, []string{"successor-policy"}, new(atomic.Bool))
 	p := prepareTestPaths(t)
 	if err := vaultclient.PersistTokenFile(p.Home, "s.root"); err != nil {
@@ -199,7 +199,7 @@ func TestRevokeRoot_ReportsATargetClientFailure(t *testing.T) {
 	}
 }
 
-func TestRevokeRoot_ReportsASuccessorClientFailure(t *testing.T) {
+func TestRevokeRootReportsASuccessorClientFailure(t *testing.T) {
 	p := prepareTestPaths(t)
 	if err := vaultclient.PersistTokenFile(p.Home, "s.root"); err != nil {
 		t.Fatal(err)
@@ -215,7 +215,7 @@ func TestRevokeRoot_ReportsASuccessorClientFailure(t *testing.T) {
 	}
 }
 
-func TestRevokeRoot_ReportsARevocationFailure(t *testing.T) {
+func TestRevokeRootReportsARevocationFailure(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/auth/token/lookup-self" {
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"policies": []string{"root"}}})
@@ -241,7 +241,7 @@ func TestRevokeRoot_ReportsARevocationFailure(t *testing.T) {
 	}
 }
 
-func TestRevokeRoot_ReportsATokenFileWhichCannotBeRemoved(t *testing.T) {
+func TestRevokeRootReportsATokenFileWhichCannotBeRemoved(t *testing.T) {
 	skipWhenRoot(t)
 	var home string
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -273,7 +273,7 @@ func TestRevokeRoot_ReportsATokenFileWhichCannotBeRemoved(t *testing.T) {
 	}
 }
 
-func TestRevokeRoot_ReportsAnInitFileFailure(t *testing.T) {
+func TestRevokeRootReportsAnInitFileFailure(t *testing.T) {
 	skipWhenRoot(t)
 	var initPath string
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

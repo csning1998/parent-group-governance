@@ -54,16 +54,25 @@ func (v *issuedVault) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"errors":[]}`, http.StatusNotFound)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"data": data, "metadata": map[string]any{"version": 1}}})
+		writeJSON(w, map[string]any{"data": map[string]any{"data": data, "metadata": map[string]any{"version": 1}}})
 		return
 	}
 	var body struct {
 		Data map[string]any `json:"data"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	v.secrets[key] = body.Data
 	v.writes = append(v.writes, key)
-	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"version": 2}})
+	writeJSON(w, map[string]any{"data": map[string]any{"version": 2}})
+}
+
+// writeJSON answers with value. An encoding failure reaches the client under test as a malformed response body,
+// which the test then reports.
+func writeJSON(w http.ResponseWriter, value any) {
+	_ = json.NewEncoder(w).Encode(value)
 }
 
 // issuedServices records the GitLab and SonarQube requests of one test and answers each with a fixed success.
@@ -76,22 +85,25 @@ type issuedServices struct {
 func (s *issuedServices) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_ = r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	s.requests = append(s.requests, r.Method+" "+r.URL.EscapedPath())
 	switch r.URL.Path {
 	case "/api/user_tokens/generate":
-		_ = json.NewEncoder(w).Encode(map[string]string{"token": "squ_issued"})
+		writeJSON(w, map[string]string{"token": "squ_issued"})
 	case "/api/user_tokens/search":
 		entries := make([]map[string]string, 0, len(s.tokens))
 		for _, name := range s.tokens {
 			entries = append(entries, map[string]string{"name": name, "type": "GLOBAL_ANALYSIS_TOKEN"})
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"userTokens": entries})
+		writeJSON(w, map[string]any{"userTokens": entries})
 	case "/user/runners":
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": 9171, "token": "glrt-issued"})
+		writeJSON(w, map[string]any{"id": 9171, "token": "glrt-issued"})
 	default:
-		_, _ = w.Write([]byte(`{}`))
+		writeJSON(w, map[string]any{})
 	}
 }
 

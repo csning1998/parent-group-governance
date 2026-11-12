@@ -17,7 +17,7 @@ func writeTopology(t *testing.T, content string) string {
 	return path
 }
 
-func TestLoad_DerivesEndpoint(t *testing.T) {
+func TestLoadDerivesEndpoint(t *testing.T) {
 	path := writeTopology(t, `vault_bastion:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
@@ -34,7 +34,7 @@ operator_vault_proxy:
 	}
 }
 
-func TestLoad_RejectsIncompleteBastionVault(t *testing.T) {
+func TestLoadRejectsIncompleteBastionVault(t *testing.T) {
 	cases := map[string]string{
 		"no publish address": "vault_bastion:\n  loopback_address: \"127.0.0.1\"\n  api_port: 8200\n",
 		"hostname":           "vault_bastion:\n  loopback_address: \"localhost\"\n  publish_address: \"172.16.0.1\"\n  api_port: 8200\n",
@@ -51,21 +51,21 @@ func TestLoad_RejectsIncompleteBastionVault(t *testing.T) {
 	}
 }
 
-func TestLoad_FailsWithoutFile(t *testing.T) {
+func TestLoadFailsWithoutFile(t *testing.T) {
 	_, err := Load(filepath.Join(t.TempDir(), FileName))
 	if err == nil {
 		t.Error("Load error = nil, want a failure on a missing topology file")
 	}
 }
 
-func TestLoad_RejectsMalformedYAML(t *testing.T) {
+func TestLoadRejectsMalformedYAML(t *testing.T) {
 	_, err := Load(writeTopology(t, "vault_bastion: [unterminated\n"))
 	if err == nil {
 		t.Error("Load error = nil, want a parse failure")
 	}
 }
 
-func TestResolveProxyEndpoint_LocatesTheIdentityOfAnAccess(t *testing.T) {
+func TestResolveProxyEndpointLocatesTheIdentityOfAnAccess(t *testing.T) {
 	path := writeTopology(t, `vault_bastion:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
@@ -101,7 +101,7 @@ operator_vault_proxy:
 	}
 }
 
-func TestResolveProxyEndpoint_RequiresTheIdentityOfTheAccess(t *testing.T) {
+func TestResolveProxyEndpointRequiresTheIdentityOfTheAccess(t *testing.T) {
 	topo := VaultTopology{OperatorVaultProxy: OperatorVaultProxy{Identities: map[string]ProxyIdentity{
 		"credential-distributor-example-governance": {ListenPort: 1},
 		"example-tenant": {ListenPort: 2},
@@ -152,7 +152,7 @@ operator_vault_proxy:
 	}
 }
 
-// TestResolveIdentityRole asserts the access tier, owner code, and state backend path which the identity name determines.
+// TestResolveIdentityRole asserts the access tier, owner code, and state backend path determined by the identity name.
 func TestResolveIdentityRole(t *testing.T) {
 	proxy := OperatorVaultProxy{GovernanceOwnerCode: "example-governance"}
 	cases := map[string]IdentityRole{
@@ -163,9 +163,11 @@ func TestResolveIdentityRole(t *testing.T) {
 		"example-tenant":                        {AccessTier: "tenant", OwnerCode: "example-tenant", StateBackendPath: "example-tenant/terraform/state-backend"},
 	}
 	for name, want := range cases {
-		if got := proxy.ResolveIdentityRole(name); got != want {
-			t.Errorf("ResolveIdentityRole(%s) = %+v, want %+v", name, got, want)
-		}
+		t.Run(name, func(t *testing.T) {
+			if got := proxy.ResolveIdentityRole(name); got != want {
+				t.Errorf("ResolveIdentityRole(%s) = %+v, want %+v", name, got, want)
+			}
+		})
 	}
 }
 
