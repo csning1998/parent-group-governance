@@ -15,8 +15,10 @@ readonly -a cli_binaries=(
 origin_project_path="$(git remote get-url origin)"
 origin_project_path="${origin_project_path#*://*/}"
 origin_project_path="${origin_project_path#*:}"
+origin_project_path="${origin_project_path#/}"
+origin_project_path="${origin_project_path%/}"
 origin_project_path="${origin_project_path%.git}"
-sonar_project_key="$(printf '%s' "${origin_project_path}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | cut -c1-63)"
+sonar_project_key="$(printf '%s' "${origin_project_path}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | cut -b1-63 | sed 's/^-*//;s/-*$//')"
 readonly sonar_project_key
 readonly sonar_token_path="parent-group-governance/sonarqube/ci-analysis-bot"
 readonly sonar_token_field="sonarqube_ci_token"
