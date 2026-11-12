@@ -146,8 +146,8 @@ resource "azuread_application_federated_identity_credential" "this" {
   application_id = azuread_application.this[0].id
   display_name   = count.index == 0 ? "fic-project-${var.gitlab_project.code}" : substr("fic-${var.gitlab_project.code}-${count.index}", 0, 120)
   description    = "GitLab SaaS Workload Identity Federation for ${local.azure_subjects[count.index]}"
-  audiences      = var.azure_federation.audiences
-  issuer         = "https://gitlab.com"
+  audiences      = coalescelist(var.azure_federation.audiences, [var.gitlab_url])
+  issuer         = var.gitlab_url
   subject        = local.azure_subjects[count.index]
 }
 

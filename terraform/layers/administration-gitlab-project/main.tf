@@ -16,6 +16,8 @@ module "provisioner_gitlab_project" {
 module "workload_identity_federation" {
   source = "../../modules/provisioner-workload-identity-federation"
 
+  gitlab_url = var.gitlab_url
+
   gitlab_project = {
     id   = module.provisioner_gitlab_project.project_id
     path = module.provisioner_gitlab_project.full_path

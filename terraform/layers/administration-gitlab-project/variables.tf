@@ -26,6 +26,16 @@ variable "gitlab_project" {
   }
 }
 
+variable "gitlab_url" {
+  description = "Specifies the https URL of the GitLab instance, which vault-proxy-env exports from the origin remote of parent-group-governance."
+  type        = string
+
+  validation {
+    condition     = can(regex("^https://[^/]+$", var.gitlab_url))
+    error_message = "gitlab_url must be https://<host> without a trailing path."
+  }
+}
+
 variable "gitlab_terraform_state_base" {
   description = "Specifies the GitLab Terraform state API URL of the project hosting every state of this repository, without a trailing slash."
   type        = string

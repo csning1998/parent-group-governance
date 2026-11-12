@@ -31,6 +31,7 @@ mock_provider "google" {
 }
 
 variables {
+  gitlab_url = "https://gitlab.example.com"
   gitlab_project = {
     id   = 1001
     path = "example-group/example-app"
@@ -380,8 +381,13 @@ run "azure_trust_is_derived_from_the_project" {
   }
 
   assert {
-    condition     = azuread_application_federated_identity_credential.this[0].display_name == "fic-project-example-app" && azuread_application_federated_identity_credential.this[0].issuer == "https://gitlab.com" && azuread_application_federated_identity_credential.this[0].subject == "project_path:example-group/example-app:ref_type:branch:ref:main"
-    error_message = "the federated identity credential must target GitLab SaaS and the main branch of the project path"
+    condition     = azuread_application_federated_identity_credential.this[0].display_name == "fic-project-example-app" && azuread_application_federated_identity_credential.this[0].subject == "project_path:example-group/example-app:ref_type:branch:ref:main"
+    error_message = "the federated identity credential must target the main branch of the project path"
+  }
+
+  assert {
+    condition     = azuread_application_federated_identity_credential.this[0].issuer == "https://gitlab.example.com" && azuread_application_federated_identity_credential.this[0].audiences == tolist(["https://gitlab.example.com"])
+    error_message = "the federated identity credential must trust the GitLab instance of var.gitlab_url as the issuer and the audience"
   }
 }
 
