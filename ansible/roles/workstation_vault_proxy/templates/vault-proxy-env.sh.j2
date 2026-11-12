@@ -43,12 +43,33 @@ else
 fi
 
 {% set state_read = 'vault kv get -mount=' ~ operator_vault_proxy.state_backend.vault_kv_mount ~ ' -field=' ~ operator_vault_proxy.state_backend.vault_kv_field %}
-{% set governance_path = operator_vault_proxy.identities.administrator.state_backend_path %}
-# Prints the KV path of the GitLab token of $1, empty for an identity which runs no Terraform.
+{% set governance_owner = operator_vault_proxy.governance_owner_code %}
+{% set project_ids = operator_vault_proxy.state_backend.project_ids %}
+{# Derives the owner code from the identity naming rules in workstation-topology-specification.md. #}
+{% macro owner_of(name) -%}
+{% if name in ['administrator', 'credential-rotator'] %}{{ governance_owner }}{% elif name.startswith('credential-distributor-') %}{{ name[23:] }}{% elif name.startswith('consumer-') %}{{ name[9:] }}{% else %}{{ name }}{% endif %}
+{%- endmacro %}
+{% set governance_path = governance_owner ~ '/terraform/state-backend' %}
+# Outputs the KV v2 secret path storing the GitLab state token for $1, or an empty string for credential-rotator
+# because the rotator identity does not execute Terraform.
 state_backend_path() {
   case "$1" in
-{% for name, spec in operator_vault_proxy.identities.items() if spec.state_backend_path is defined %}
-    {{ name }}) echo "{{ spec.state_backend_path }}" ;;
+{% for name in operator_vault_proxy.identities if name != 'credential-rotator' %}
+    {{ name }}) echo "{{ owner_of(name) }}/terraform/state-backend" ;;
+{% endfor %}
+    *) echo "" ;;
+  esac
+}
+
+{% set state_base_prefix = workstation_vault_proxy_gitlab_url ~ '/api/v4/projects/' %}
+# Outputs the GitLab HTTP state base URL for the owner of $1, or an empty string for an owner without a registered project ID.
+state_backend_base() {
+  case "$1" in
+{% if governance_owner in project_ids %}
+    root) echo "{{ state_base_prefix }}{{ project_ids[governance_owner] }}/terraform/state" ;;
+{% endif %}
+{% for name in operator_vault_proxy.identities if name != 'credential-rotator' and owner_of(name) in project_ids %}
+    {{ name }}) echo "{{ state_base_prefix }}{{ project_ids[owner_of(name)] }}/terraform/state" ;;
 {% endfor %}
     *) echo "" ;;
   esac
@@ -85,3 +106,7 @@ else
 fi
 echo "export TF_HTTP_USERNAME={{ operator_vault_proxy.state_backend.terraform_http_username }}"
 echo "export TF_HTTP_PASSWORD='${state_token}'"
+state_base="$(state_backend_base "${identity}")"
+[ -z "${state_base}" ] || echo "export GITLAB_TERRAFORM_STATE_BASE=${state_base}"
+echo "export GITLAB_URL={{ workstation_vault_proxy_gitlab_url }}"
+echo "export GITLAB_TOP_LEVEL_GROUP_PATH={{ workstation_vault_proxy_gitlab_top_level_group_path }}"

@@ -188,7 +188,7 @@ func runVaultKVSuccessCase(t *testing.T, useTLS bool, p mockServerParams, setup 
 // Static Token Provider Tests
 
 // TestStatic_TokenBehavior covers Static token provider behaviors for valid and empty values.
-func TestStatic_TokenBehavior(t *testing.T) {
+func TestStaticTokenBehavior(t *testing.T) {
 	tests := []struct {
 		name      string
 		staticVal tokensource.Static
@@ -225,7 +225,7 @@ func TestStatic_TokenBehavior(t *testing.T) {
 // VaultKV Configuration Tests
 
 // TestVaultKV_ConfigValidationBehavior covers parameter validation behaviors upon NewVaultKV construction.
-func TestVaultKV_ConfigValidationBehavior(t *testing.T) {
+func TestVaultKVConfigValidationBehavior(t *testing.T) {
 	valid := newDefaultVaultKVConfig("https://vault.example.com")
 
 	tests := []struct {
@@ -304,7 +304,7 @@ func TestVaultKV_ConfigValidationBehavior(t *testing.T) {
 // VaultKV Retrieval Tests
 
 // TestVaultKV_RetrievalSuccessScenarios covers standard, custom CA TLS, custom auth mount, and custom transport preservation scenarios in a matrix.
-func TestVaultKV_RetrievalSuccessScenarios(t *testing.T) {
+func TestVaultKVRetrievalSuccessScenarios(t *testing.T) {
 	tests := []struct {
 		name         string
 		useTLS       bool
@@ -379,7 +379,7 @@ func TestVaultKV_RetrievalSuccessScenarios(t *testing.T) {
 }
 
 // TestVaultKV_ConcurrentAccess covers parallel token retrieval across multiple workers.
-func TestVaultKV_ConcurrentAccess(t *testing.T) {
+func TestVaultKVConcurrentAccess(t *testing.T) {
 	server := newMockVaultKVServer(t, mockServerParams{
 		loginToken: "concurrent-token",
 		secretData: map[string]any{"api_key": "concurrent-val"},
@@ -417,7 +417,7 @@ func TestVaultKV_ConcurrentAccess(t *testing.T) {
 }
 
 // TestVaultKV_ServerErrorScenarios covers failure behaviors when Vault server returns non-200 or invalid payloads.
-func TestVaultKV_ServerErrorScenarios(t *testing.T) {
+func TestVaultKVServerErrorScenarios(t *testing.T) {
 	tests := []struct {
 		name          string
 		serverParams  mockServerParams
@@ -499,7 +499,7 @@ func TestVaultKV_ServerErrorScenarios(t *testing.T) {
 }
 
 // TestVaultKV_ContextCancellation covers handling when caller cancels context during retrieval.
-func TestVaultKV_ContextCancellation(t *testing.T) {
+func TestVaultKVContextCancellation(t *testing.T) {
 	server := newMockVaultKVServer(t, mockServerParams{
 		delay:      100 * time.Millisecond,
 		loginToken: "delayed-token",

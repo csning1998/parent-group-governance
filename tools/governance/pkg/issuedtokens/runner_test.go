@@ -26,11 +26,12 @@ func (f *fakeRunnerCreator) CreateGroupRunner(_ context.Context, r gitlabapi.Gro
 }
 
 var groupRunnerConfig = GitLabGroupRunnerConfig{
-	Description: "parent-group-governance-shared-podman-runner",
+	Description: "example-governance-shared-podman-runner",
 	TagList:     []string{"podman", "local", "sonarqube-network"},
-	GitLabURL:   "https://gitlab.com",
 	ConfigPath:  "gitlab-runner-configs/config.toml",
 }
+
+const exampleGitLabURL = "https://gitlab.example.com"
 
 // TestGroupRunnerRegistrationRun asserts the written config.toml, the refusal of an existing file, and both failure paths.
 func TestGroupRunnerRegistrationRun(t *testing.T) {
@@ -65,7 +66,7 @@ func TestGroupRunnerRegistrationRun(t *testing.T) {
 			}
 			creator := &fakeRunnerCreator{err: tc.createErr}
 
-			id, err := GroupRunnerRegistration{Config: groupRunnerConfig, GroupID: "137791469", ConfigPath: path, GitLab: creator}.Run(context.Background())
+			id, err := GroupRunnerRegistration{Config: groupRunnerConfig, GitLabURL: exampleGitLabURL, GroupID: "1001", ConfigPath: path, GitLab: creator}.Run(context.Background())
 			assertRunnerRegistration(t, tc, path, id, err, creator)
 		})
 	}
@@ -123,7 +124,7 @@ func assertRunnerRegistration(t *testing.T, tc runnerRegistrationCase, path stri
 
 func assertRequestedRunner(t *testing.T, got gitlabapi.GroupRunner) {
 	t.Helper()
-	if got.GroupID != "137791469" || !got.Locked || !got.RunUntagged || strings.Join(got.TagList, ",") != "podman,local,sonarqube-network" {
+	if got.GroupID != "1001" || !got.Locked || !got.RunUntagged || strings.Join(got.TagList, ",") != "podman,local,sonarqube-network" {
 		t.Fatalf("requested %+v", got)
 	}
 }
@@ -154,8 +155,8 @@ func assertRunnerConfig(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	for _, line := range []string{
-		`name         = "parent-group-governance-shared-podman-runner"`,
-		`url          = "https://gitlab.com"`,
+		`name         = "example-governance-shared-podman-runner"`,
+		`url          = "` + exampleGitLabURL + `"`,
 		`token        = "glrt-issued"`,
 	} {
 		if !strings.Contains(string(content), line) {
@@ -169,7 +170,7 @@ func TestWriteRunnerConfig(t *testing.T) {
 	path := filepath.Join(t.TempDir(), groupRunnerConfig.ConfigPath)
 	writeEarlierRunnerConfig(t, path)
 
-	err := writeRunnerConfig(path, groupRunnerConfig, "glrt-issued")
+	err := writeRunnerConfig(path, groupRunnerConfig, exampleGitLabURL, "glrt-issued")
 	if !errors.Is(err, ErrRunnerConfigExists) {
 		t.Fatalf("got %v, want %v", err, ErrRunnerConfigExists)
 	}

@@ -11,7 +11,7 @@ import (
 
 const labelApplyAll = "[Host] Apply All Workstation Prerequisites"
 
-func TestBuildMenuOptions_NamesTheServiceAdminPasswords(t *testing.T) {
+func TestBuildMenuOptionsNamesTheServiceAdminPasswords(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard), credentials: []credentials.Credential{{Key: "example-admin-password"}}}
 	labels := menuLabels(a.buildMenuOptions())
 
@@ -25,7 +25,7 @@ func TestBuildMenuOptions_NamesTheServiceAdminPasswords(t *testing.T) {
 	}
 }
 
-func TestBuildMenuOptions_OffersEachHostStepAlone(t *testing.T) {
+func TestBuildMenuOptionsOffersEachHostStepAlone(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard)}
 	labels := menuLabels(a.buildMenuOptions())
 
@@ -40,7 +40,7 @@ func TestBuildMenuOptions_OffersEachHostStepAlone(t *testing.T) {
 	}
 }
 
-func TestBuildMenuOptions_OpensWithApplyAllAndEndsWithQuit(t *testing.T) {
+func TestBuildMenuOptionsOpensWithApplyAllAndEndsWithQuit(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard)}
 	options := a.buildMenuOptions()
 

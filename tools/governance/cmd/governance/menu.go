@@ -26,6 +26,8 @@ func (a *app) buildMenuOptions() []menuOption {
 		{"[Host] Apply Workstation SELinux Policy and File Contexts", func(ctx context.Context) error { return a.runHostSELinuxPlaybook(ctx) }},
 		{"[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites", func(ctx context.Context) error { return a.runHostLibvirtPlaybook(ctx) }},
 		{"[Host] Apply Workstation Vault Proxies", func(ctx context.Context) error { return a.runHostVaultProxyPlaybook(ctx) }},
+		{"[Host] Apply Workstation Vault Audit Check", func(ctx context.Context) error { return a.runHostVaultAuditPlaybook(ctx) }},
+		{"[Host] Apply Host Telemetry Scrape Network", func(ctx context.Context) error { return a.runHostTelemetryPlaybook(ctx) }},
 		{"[Vault] Set up TLS for Bastion Vault", func(ctx context.Context) error { return a.generateVaultTLS(ctx) }},
 		{"[Vault] Initialize Bastion Vault", func(ctx context.Context) error { return a.initVault(ctx) }},
 		{"[Vault] Enable KV-v2 Engine", func(ctx context.Context) error { return a.enableVaultKV(ctx) }},

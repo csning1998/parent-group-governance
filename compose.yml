@@ -34,7 +34,7 @@ services:
       - ./vault/vault.hcl:/opt/vault/vault.hcl
       - ./vault/data:/opt/vault/data
       - ./vault/tls:/opt/vault/tls
-      # foundation-vault-bastion writes the file audit device here. Vault refuses requests which no audit device records.
+      # Mounts the host directory receiving the file audit log configured by foundation-vault-bastion.
       - ./vault/audit:/opt/vault/audit
     user: "${HOST_UID}:${HOST_GID}"
     cap_add:
@@ -86,6 +86,39 @@ services:
       - ./vault/tls/ca-ml-dsa-87.pem:/etc/haproxy/tls/ca-ml-dsa-87.pem:ro
       - ./vault/tls/terminator-client.pem:/etc/haproxy/tls/terminator-client.pem:ro
       - ./vault/tls/terminator-client-key.pem:/etc/haproxy/tls/terminator-client-key.pem:ro
+    user: "${HOST_UID}:${HOST_GID}"
+    network_mode: "host"
+    userns_mode: keep-id
+    restart: always
+
+  # The telemetry terminator serves the metrics on the host telemetry scrape address in a separate HAProxy process.
+  vault-telemetry-terminator:
+    image: localhost/parent-group-governance-vault-terminator:latest
+    container_name: parent-group-governance-vault-bastion-telemetry-terminator
+    init: true
+    profiles: ["host-telemetry"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        i=0
+        while [ "$$i" -lt 150 ]
+        do
+          if ip -4 addr show to "$$TERMINATOR_SCRAPE_ADDRESS" 2>/dev/null | grep -q "inet $$TERMINATOR_SCRAPE_ADDRESS/"
+          then
+            exec haproxy -db -f /etc/haproxy/haproxy.cfg
+          fi
+          i=$$((i + 1))
+          sleep 0.2
+        done
+        echo "timed out waiting for $$TERMINATOR_SCRAPE_ADDRESS in the host namespace" >&2
+        exit 1
+    env_file:
+      - ./vault/terminator/terminator.env
+    volumes:
+      - ./vault/terminator/haproxy-telemetry.cfg:/etc/haproxy/haproxy.cfg:ro
+      - ./vault/tls/publish.pem:/etc/haproxy/tls/publish.pem:ro
+      - ./vault/tls/publish-key.pem:/etc/haproxy/tls/publish-key.pem:ro
+      - ./vault/tls/ca-ml-dsa-87.pem:/etc/haproxy/tls/ca-ml-dsa-87.pem:ro
     user: "${HOST_UID}:${HOST_GID}"
     network_mode: "host"
     userns_mode: keep-id

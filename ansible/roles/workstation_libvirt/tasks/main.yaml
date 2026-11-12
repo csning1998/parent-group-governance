@@ -15,8 +15,10 @@
       - vault_bastion is mapping
       - vault_bastion.publish_address is string
       - vault_bastion.api_port is integer
+      - workstation_libvirt_publish_network.netmask == "255.255.255.0"
     fail_msg: >-
-      vault_bastion is undefined. The playbook MUST load workstation-topology.yaml of the repository root.
+      vault_bastion is undefined, or the publish network netmask differs from 255.255.255.0. The playbook MUST load
+      workstation-topology.yaml of the repository root, and source_cidr derives the /24 publish segment alone.
 
 # workstation-backup owns every boot trust object. The TPM binding of the disk encryption is meaningless
 # without Secure Boot, hence the trust root refuses the host instead of writing the firmware state.

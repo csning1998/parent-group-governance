@@ -92,8 +92,8 @@ run "custom_squash_and_pipeline_gate" {
   command = plan
 
   variables {
-    name                                  = "second-brain"
-    namespace_id                          = 83198964
+    name                                  = "example-notes"
+    namespace_id                          = 1000001
     squash_commit_template                = "%%{title} (!%%{issue_iid})"
     only_allow_merge_if_pipeline_succeeds = false
   }
@@ -113,8 +113,8 @@ run "internal_visibility" {
   command = plan
 
   variables {
-    name         = "credentials"
-    namespace_id = 86417732
+    name         = "example-credentials"
+    namespace_id = 1000001
     visibility   = "internal"
   }
 

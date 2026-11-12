@@ -1,0 +1,6 @@
+<network>
+  <name>{{ host_telemetry_scrape.network_name }}</name>
+  <forward mode="route"/>
+  <bridge stp="on" delay="0"/>
+  <ip address="{{ workstation_host_telemetry_scrape_address }}" prefix="{{ workstation_host_telemetry_scrape_cidr.split('/')[1] }}"/>
+</network>

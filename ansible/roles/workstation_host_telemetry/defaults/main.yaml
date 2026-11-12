@@ -1,0 +1,8 @@
+---
+# Public contract. The CLI reads the allocated scrape subnet and host gateway IP from the Vault registry after
+# foundation-vault-bastion is applied and injects both variables into the playbook run.
+workstation_host_telemetry_scrape_cidr: ""
+workstation_host_telemetry_scrape_address: ""
+# Combines the HAProxy Vault metrics port with the host exporter ports declared in workstation-topology.yaml.
+workstation_host_telemetry_scrape_ports: >-
+  {{ [vault_bastion.metrics_port] + (host_telemetry_scrape.host_exporter_ports | default([])) }}

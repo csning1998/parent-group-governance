@@ -66,11 +66,11 @@ gcloud config set project "${GCP_PROJECT_ID}"
 
 ### Step B. Export State Backend Credentials
 
-The operator exports the HTTP state backend credentials from Bastion Vault.
+The `.envrc` of the layer loads the administrator identity through direnv. `vault-proxy-env` exports `TF_HTTP_USERNAME`, `TF_HTTP_PASSWORD`, and `GITLAB_TERRAFORM_STATE_BASE`, and the `.envrc` derives the state addresses of the layer.
 
 ```bash
-export TF_HTTP_USERNAME='gitlab-ci-token'
-export TF_HTTP_PASSWORD=$(VAULT_ADDR='https://172.16.0.1:8200' VAULT_CACERT="$HOME/GitLab/csning1998-lab/parent-group-governance/vault/tls/ca-ec-p384.pem" VAULT_TOKEN=$(cat $HOME/.vault-token) vault kv get -field=token secret/parent-group-governance/terraform/state-backend)
+cd terraform/layers/group-ai-provider-google-cloud
+direnv allow
 ```
 
 ### Step C. Execute Terraform Layer Deployment
@@ -78,7 +78,6 @@ export TF_HTTP_PASSWORD=$(VAULT_ADDR='https://172.16.0.1:8200' VAULT_CACERT="$HO
 The operator initializes the Terraform layer and applies the root federation pool and provider.
 
 ```bash
-cd terraform/layers/group-ai-provider-google-cloud
 terraform init
 terraform plan
 terraform apply

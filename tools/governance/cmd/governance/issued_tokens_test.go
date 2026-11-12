@@ -54,16 +54,25 @@ func (v *issuedVault) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"errors":[]}`, http.StatusNotFound)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"data": data, "metadata": map[string]any{"version": 1}}})
+		writeJSON(w, map[string]any{"data": map[string]any{"data": data, "metadata": map[string]any{"version": 1}}})
 		return
 	}
 	var body struct {
 		Data map[string]any `json:"data"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	v.secrets[key] = body.Data
 	v.writes = append(v.writes, key)
-	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"version": 2}})
+	writeJSON(w, map[string]any{"data": map[string]any{"version": 2}})
+}
+
+// writeJSON answers with value. An encoding failure reaches the client under test as a malformed response body,
+// which the test then reports.
+func writeJSON(w http.ResponseWriter, value any) {
+	_ = json.NewEncoder(w).Encode(value)
 }
 
 // issuedServices records the GitLab and SonarQube requests of one test and answers each with a fixed success.
@@ -76,22 +85,25 @@ type issuedServices struct {
 func (s *issuedServices) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_ = r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	s.requests = append(s.requests, r.Method+" "+r.URL.EscapedPath())
 	switch r.URL.Path {
 	case "/api/user_tokens/generate":
-		_ = json.NewEncoder(w).Encode(map[string]string{"token": "squ_issued"})
+		writeJSON(w, map[string]string{"token": "squ_issued"})
 	case "/api/user_tokens/search":
 		entries := make([]map[string]string, 0, len(s.tokens))
 		for _, name := range s.tokens {
 			entries = append(entries, map[string]string{"name": name, "type": "GLOBAL_ANALYSIS_TOKEN"})
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"userTokens": entries})
+		writeJSON(w, map[string]any{"userTokens": entries})
 	case "/user/runners":
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": 9171, "token": "glrt-issued"})
+		writeJSON(w, map[string]any{"id": 9171, "token": "glrt-issued"})
 	default:
-		_, _ = w.Write([]byte(`{}`))
+		writeJSON(w, map[string]any{})
 	}
 }
 
@@ -126,6 +138,9 @@ func newIssuedTokensApp(t *testing.T, projects []string) (*app, *issuedVault, *i
 		topology:     issuedTopology(t, vaultSrv.URL, projects),
 		credentials:  []credentials.Credential{{Key: "sonarqube-admin-password", AdminUsername: "admin", Spec: secretrotate.Spec{Mount: "secret", Path: "parent-group-governance/sonarqube/admin-account", Field: "sonarqube_admin_password"}}},
 		issuedTokens: issuedConfig(servicesSrv.URL),
+		resolveOrigin: func(context.Context) (gitlabOrigin, error) {
+			return gitlabOrigin{WebURL: "https://gitlab.example.com", APIURL: servicesSrv.URL, TopLevelGroup: "example-group"}, nil
+		},
 	}
 	return a, vault, services
 }
@@ -143,17 +158,13 @@ func issuedTopology(t *testing.T, vaultURL string, projects []string) topology.V
 	return topology.VaultTopology{
 		BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200},
 		OperatorVaultProxy: topology.OperatorVaultProxy{
-			UserConfigDir:    issuedProxyDir,
-			PlaceholderToken: "proxy-supplied",
-			StateBackend:     topology.StateBackend{VaultKVMount: "secret", VaultKVField: "token"},
+			GovernanceOwnerCode: "parent-group-governance",
+			UserConfigDir:       issuedProxyDir,
+			PlaceholderToken:    "proxy-supplied",
+			StateBackend:        topology.StateBackend{VaultKVMount: "secret", VaultKVField: "token"},
 			Identities: map[string]topology.ProxyIdentity{
-				issuedAdminIdentity: {ListenPort: port, AccessTier: string(topology.AccessRoleAdministrator)},
-				"credential-distributor": {
-					AccessTier:                   "credential-distributor",
-					OwnerCode:                    "parent-group-governance",
-					StateBackendPath:             "parent-group-governance/terraform/state-backend",
-					CodeReviewerVariableProjects: projects,
-				},
+				issuedAdminIdentity: {ListenPort: port},
+				"credential-distributor-parent-group-governance": {CodeReviewerVariableProjects: projects},
 			},
 		},
 	}
@@ -161,9 +172,7 @@ func issuedTopology(t *testing.T, vaultURL string, projects []string) topology.V
 
 func issuedConfig(servicesURL string) issuedtokens.Config {
 	return issuedtokens.Config{
-		GitLabAPIURL:         servicesURL,
-		GitLabTokenOwnerCode: "parent-group-governance",
-		GitLabGroupRegistry:  issuedtokens.VaultField{Mount: "registry", Path: "platform/gitlab-group/top-level", Field: "group_id"},
+		GitLabGroupRegistry: issuedtokens.VaultField{Mount: "registry", Path: "platform/gitlab-group/top-level", Field: "group_id"},
 		SonarQubeAnalysisToken: issuedtokens.SonarQubeAnalysisTokenConfig{
 			UserTokensEndpoint:     servicesURL + "/api/user_tokens",
 			AdminPasswordKey:       "sonarqube-admin-password",
@@ -174,7 +183,6 @@ func issuedConfig(servicesURL string) issuedtokens.Config {
 		GitLabGroupRunner: issuedtokens.GitLabGroupRunnerConfig{
 			Description: "shared-runner",
 			TagList:     []string{"podman"},
-			GitLabURL:   "https://gitlab.com",
 			ConfigPath:  "gitlab-runner-configs/config.toml",
 		},
 		CodeReviewerVariables: issuedtokens.CodeReviewerVariablesConfig{BotTokens: []issuedtokens.ReviewerBotToken{
@@ -252,7 +260,7 @@ func TestRegisterGitLabGroupRunner(t *testing.T) {
 			t.Fatal(err)
 		}
 		content, err := os.ReadFile(filepath.Join(a.root, "gitlab-runner-configs/config.toml"))
-		if err != nil || !strings.Contains(string(content), `token        = "glrt-issued"`) {
+		if err != nil || !strings.Contains(string(content), `token        = "glrt-issued"`) || !strings.Contains(string(content), `url          = "https://gitlab.example.com"`) {
 			t.Fatalf("config.toml = %q, %v", content, err)
 		}
 		assertRequestsInclude(t, services.recorded(), "POST /user/runners")
@@ -273,20 +281,20 @@ func TestPublishCodeReviewerVariables(t *testing.T) {
 		wantErr       string
 		wantRequests  []string
 	}{
-		"writes both variables into the listed project": {
-			projects:     []string{"personal/second-brain"},
-			wantRequests: []string{"PUT /projects/personal%2Fsecond-brain/variables/REVIEW_MR_REVIEWER", "PUT /projects/personal%2Fsecond-brain/variables/TAG_PUSH_TOKEN"},
+		"writes both variables into the listed project below the top-level group": {
+			projects:     []string{"example-subgroup/example-project"},
+			wantRequests: []string{"PUT /projects/example-group%2Fexample-subgroup%2Fexample-project/variables/REVIEW_MR_REVIEWER", "PUT /projects/example-group%2Fexample-subgroup%2Fexample-project/variables/TAG_PUSH_TOKEN"},
 		},
 		"refuses an empty project list": {
 			wantErr: "lists code_reviewer_variable_projects",
 		},
 		"reports a missing GitLab token": {
-			projects:   []string{"personal/second-brain"},
+			projects:   []string{"example-subgroup/example-project"},
 			dropSecret: "secret/parent-group-governance/terraform/state-backend",
 			wantErr:    "read secret/parent-group-governance/terraform/state-backend",
 		},
 		"refuses an empty bot token list": {
-			projects:      []string{"personal/second-brain"},
+			projects:      []string{"example-subgroup/example-project"},
 			emptyBotToken: true,
 			wantErr:       "lists no bot_tokens",
 		},

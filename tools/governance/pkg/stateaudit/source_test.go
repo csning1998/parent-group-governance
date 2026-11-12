@@ -39,12 +39,14 @@ func TestDiscoverLayers(t *testing.T) {
 }
 `)
 	writeLayer(t, layersDir, "group-foundation", "terraform {\n  backend \"http\" {\n    address = \"https://gitlab.com/api/v4/projects/1/terraform/state/group-foundation\"\n  }\n}\n")
+	writeLayer(t, layersDir, "group-gitlab-configuration", "terraform {\n  backend \"http\" {\n    lock_method = \"POST\"\n  }\n}\n")
 	writeLayer(t, layersDir, "local-only", "terraform {\n  backend \"local\" {}\n}\n")
 	writeLayer(t, layersDir, "empty", "")
 
-	got, err := DiscoverLayers(layersDir)
+	got, err := DiscoverLayers(layersDir, "https://gitlab.com/api/v4/projects/2/terraform/state")
 	want := []Layer{
 		{Name: "group-foundation", Address: "https://gitlab.com/api/v4/projects/1/terraform/state/group-foundation"},
+		{Name: "group-gitlab-configuration", Address: "https://gitlab.com/api/v4/projects/2/terraform/state/group-gitlab-configuration"},
 		{Name: "group-topology", Address: "https://gitlab.com/api/v4/projects/1/terraform/state/group-topology"},
 	}
 	if err != nil || !slices.Equal(got, want) {
@@ -54,18 +56,27 @@ func TestDiscoverLayers(t *testing.T) {
 
 func TestDiscoverLayersRejectsInvalidBackend(t *testing.T) {
 	for name, content := range map[string]string{
-		"syntax error":    "terraform {\n",
-		"computed":        "terraform {\n  backend \"http\" {\n    address = local.base\n  }\n}\n",
-		"missing address": "terraform {\n  backend \"http\" {\n    lock_method = \"POST\"\n  }\n}\n",
+		"syntax error": "terraform {\n",
+		"computed":     "terraform {\n  backend \"http\" {\n    address = local.base\n  }\n}\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			layersDir := t.TempDir()
 			writeLayer(t, layersDir, "broken", content)
-			_, err := DiscoverLayers(layersDir)
+			_, err := DiscoverLayers(layersDir, "https://gitlab.com/api/v4/projects/2/terraform/state")
 			if err == nil || !strings.Contains(err.Error(), "broken") {
 				t.Errorf("DiscoverLayers error = %v, want an error which names the layer", err)
 			}
 		})
+	}
+}
+
+func TestDiscoverLayersRequiresStateBase(t *testing.T) {
+	layersDir := t.TempDir()
+	writeLayer(t, layersDir, "group-topology", "terraform {\n  backend \"http\" {\n    lock_method = \"POST\"\n  }\n}\n")
+
+	_, err := DiscoverLayers(layersDir, "")
+	if !errors.Is(err, ErrStateBaseMissing) || !strings.Contains(err.Error(), "group-topology") {
+		t.Errorf("DiscoverLayers error = %v, want ErrStateBaseMissing which names the layer", err)
 	}
 }
 
@@ -74,7 +85,7 @@ func newBackend(t *testing.T) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, password, ok := r.BasicAuth()
-		if !ok || user != "gitlab-ci-token" || password != "backend-secret" {
+		if !ok || user != "some-gitlab-ci-token" || password != "some-backend-secret" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -95,7 +106,7 @@ func newBackend(t *testing.T) *httptest.Server {
 
 func TestHTTPSource(t *testing.T) {
 	server := newBackend(t)
-	source := HTTPSource{Client: server.Client(), Username: "gitlab-ci-token", Password: "backend-secret"}
+	source := HTTPSource{Client: server.Client(), Username: "some-gitlab-ci-token", Password: "some-backend-secret"}
 
 	current, err := source.FetchCurrent(context.Background(), server.URL+"/state/a")
 	if err != nil || string(current) != `{"version": 4, "serial": 3}` {
@@ -113,10 +124,10 @@ func TestHTTPSource(t *testing.T) {
 
 func TestHTTPSourceReportsRejectedCredentials(t *testing.T) {
 	server := newBackend(t)
-	source := HTTPSource{Client: server.Client(), Username: "gitlab-ci-token", Password: "wrong-secret"}
+	source := HTTPSource{Client: server.Client(), Username: "some-gitlab-ci-token", Password: "some-wrong-secret"}
 
 	_, err := source.FetchCurrent(context.Background(), server.URL+"/state/a")
-	if err == nil || !strings.Contains(err.Error(), "401") || strings.Contains(err.Error(), "wrong-secret") {
+	if err == nil || !strings.Contains(err.Error(), "401") || strings.Contains(err.Error(), "some-wrong-secret") {
 		t.Errorf("FetchCurrent error = %v, want the status 401 without the password", err)
 	}
 }
@@ -124,7 +135,7 @@ func TestHTTPSourceReportsRejectedCredentials(t *testing.T) {
 // TestHTTPSourceReportsAStateWhichNeverExisted covers GitLab, which answers 204 for a layer without any apply.
 func TestHTTPSourceReportsAStateWhichNeverExisted(t *testing.T) {
 	server := newBackend(t)
-	source := HTTPSource{Client: server.Client(), Username: "gitlab-ci-token", Password: "backend-secret"}
+	source := HTTPSource{Client: server.Client(), Username: "some-gitlab-ci-token", Password: "some-backend-secret"}
 
 	_, err := source.FetchCurrent(context.Background(), server.URL+"/state/never-applied")
 	if !errors.Is(err, ErrStateMissing) {

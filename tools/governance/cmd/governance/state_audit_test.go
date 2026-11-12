@@ -13,7 +13,7 @@ import (
 
 const labelStateAudit = "[Terraform] Audit State Secrets"
 
-func TestBuildMenuOptions_OffersStateAudit(t *testing.T) {
+func TestBuildMenuOptionsOffersStateAudit(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard)}
 	options := a.buildMenuOptions()
 	index := slices.IndexFunc(options, func(o menuOption) bool { return o.label == labelStateAudit })

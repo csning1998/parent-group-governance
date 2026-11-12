@@ -20,7 +20,7 @@ type hostFixture struct {
 	log string
 }
 
-func TestApplyAllMenuOption_RunsEveryHostStep(t *testing.T) {
+func TestApplyAllMenuOptionRunsEveryHostStep(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
 
 	err := f.a.buildMenuOptions()[0].run(context.Background())
@@ -32,11 +32,12 @@ func TestApplyAllMenuOption_RunsEveryHostStep(t *testing.T) {
 	}
 }
 
-func TestHostMenuOptions_RunTheirPlaybookAlone(t *testing.T) {
+func TestHostMenuOptionsRunTheirPlaybookAlone(t *testing.T) {
 	cases := map[string]string{
 		"[Host] Apply Workstation SELinux Policy and File Contexts":                "playbooks/workstation_selinux.yaml",
 		"[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites": "playbooks/workstation_libvirt.yaml",
 		"[Host] Apply Workstation Vault Proxies":                                   "playbooks/workstation_vault_proxy.yaml",
+		"[Host] Apply Workstation Vault Audit Check":                               "playbooks/workstation_vault_audit.yaml",
 	}
 	for label, playbook := range cases {
 		t.Run(label, func(t *testing.T) {
@@ -58,7 +59,48 @@ func TestHostMenuOptions_RunTheirPlaybookAlone(t *testing.T) {
 	}
 }
 
-func TestRunHostAll_KeepsAnExistingLocalCA(t *testing.T) {
+func TestRunHostVaultAuditPlaybookInjectsTheOperatorPathsWithoutBecome(t *testing.T) {
+	f := newHostFixture(t, "", "")
+
+	err := f.a.runHostVaultAuditPlaybook(context.Background())
+	if err != nil {
+		t.Fatalf("runHostVaultAuditPlaybook: %v", err)
+	}
+	calls := f.calls(t)
+	if len(calls) != 1 {
+		t.Fatalf("calls = %q, want one run without a become password prompt", calls)
+	}
+	for _, want := range []string{"workstation_vault_audit_home", f.a.home, "workstation_vault_audit_repository", f.a.root} {
+		if !strings.Contains(calls[0], want) {
+			t.Errorf("call %q, want the extra var fragment %s", calls[0], want)
+		}
+	}
+}
+
+func TestRunHostAllInjectsTheRepositoryAndTheGitLabOrigin(t *testing.T) {
+	f := newHostFixture(t, "example-become", "")
+
+	err := f.a.runHostAll(context.Background())
+	if err != nil {
+		t.Fatalf("runHostAll: %v", err)
+	}
+	calls := f.calls(t)
+	if len(calls) != 3 {
+		t.Fatalf("calls = %q, want the SELinux, libvirt, and Vault Proxy runs", calls)
+	}
+	for _, want := range []string{"workstation_selinux_repository", f.a.root} {
+		if !strings.Contains(calls[0], want) {
+			t.Errorf("SELinux call %q, want the extra var fragment %s", calls[0], want)
+		}
+	}
+	for _, want := range []string{"workstation_vault_proxy_gitlab_url", "https://gitlab.example.com", "workstation_vault_proxy_gitlab_top_level_group_path", "example-group"} {
+		if !strings.Contains(calls[2], want) {
+			t.Errorf("Vault Proxy call %q, want the extra var fragment %s", calls[2], want)
+		}
+	}
+}
+
+func TestRunHostAllKeepsAnExistingLocalCA(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
 	caFile := filepath.Join(f.a.root, "vault", "tls", "ca-ml-dsa-87.pem")
 	err := os.MkdirAll(filepath.Dir(caFile), 0o755)
@@ -74,12 +116,16 @@ func TestRunHostAll_KeepsAnExistingLocalCA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runHostAll: %v", err)
 	}
-	if data, _ := os.ReadFile(caFile); string(data) != "example existing CA" {
+	data, err := os.ReadFile(caFile)
+	if err != nil {
+		t.Fatalf("read the CA certificate: %v", err)
+	}
+	if string(data) != "example existing CA" {
 		t.Errorf("CA certificate = %q, want the existing CA untouched", data)
 	}
 }
 
-func TestRunHostAll_RunsEveryStepInBootstrapOrder(t *testing.T) {
+func TestRunHostAllRunsEveryStepInBootstrapOrder(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
 
 	err := f.a.runHostAll(context.Background())
@@ -105,7 +151,7 @@ func TestRunHostAll_RunsEveryStepInBootstrapOrder(t *testing.T) {
 	}
 }
 
-func TestRunHostPlaybooks_BlankPasswordRunsNoPlaybook(t *testing.T) {
+func TestRunHostStepsBlankPasswordRunsNoPlaybook(t *testing.T) {
 	f := newHostFixture(t, "", "")
 
 	err := f.a.runHostAll(context.Background())
@@ -120,7 +166,7 @@ func TestRunHostPlaybooks_BlankPasswordRunsNoPlaybook(t *testing.T) {
 	}
 }
 
-func TestRunHostPlaybooks_StopsAtTheFirstFailure(t *testing.T) {
+func TestRunHostStepsStopsAtTheFirstFailure(t *testing.T) {
 	f := newHostFixture(t, "example-become", "workstation_libvirt")
 
 	err := f.a.runHostAll(context.Background())
@@ -164,6 +210,9 @@ func newHostFixture(t *testing.T, becomeAnswer, failOn string) *hostFixture {
 			topology:   topology.VaultTopology{BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200}},
 			out:        ui.New(io.Discard, io.Discard),
 			in:         bufio.NewReader(strings.NewReader(becomeAnswer + "\n")),
+			resolveOrigin: func(context.Context) (gitlabOrigin, error) {
+				return gitlabOrigin{WebURL: "https://gitlab.example.com", APIURL: "https://gitlab.example.com/api/v4", TopLevelGroup: "example-group"}, nil
+			},
 		},
 		log: log,
 	}

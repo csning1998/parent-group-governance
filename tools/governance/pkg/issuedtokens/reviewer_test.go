@@ -56,32 +56,32 @@ var (
 func TestCodeReviewerVariablesPublicationRun(t *testing.T) {
 	cases := map[string]publicationCase{
 		"every listed project receives every variable": {
-			projects:  []string{"csning1998-lab/parent-group-governance", "csning1998-lab/gitlab-ci-with-code-reviewer"},
+			projects:  []string{"example-group/example-governance", "example-group/example-reviewer"},
 			wantReads: 2,
 			wantWrites: []string{
-				"csning1998-lab/parent-group-governance REVIEW_MR_REVIEWER=reviewer-token",
-				"csning1998-lab/parent-group-governance CLAUDE_MR_REVIEWER=reviewer-token",
-				"csning1998-lab/parent-group-governance GEMINI_MR_REVIEWER=reviewer-token",
-				"csning1998-lab/parent-group-governance TAG_PUSH_TOKEN=tag-token",
-				"csning1998-lab/gitlab-ci-with-code-reviewer REVIEW_MR_REVIEWER=reviewer-token",
-				"csning1998-lab/gitlab-ci-with-code-reviewer CLAUDE_MR_REVIEWER=reviewer-token",
-				"csning1998-lab/gitlab-ci-with-code-reviewer GEMINI_MR_REVIEWER=reviewer-token",
-				"csning1998-lab/gitlab-ci-with-code-reviewer TAG_PUSH_TOKEN=tag-token",
+				"example-group/example-governance REVIEW_MR_REVIEWER=reviewer-token",
+				"example-group/example-governance CLAUDE_MR_REVIEWER=reviewer-token",
+				"example-group/example-governance GEMINI_MR_REVIEWER=reviewer-token",
+				"example-group/example-governance TAG_PUSH_TOKEN=tag-token",
+				"example-group/example-reviewer REVIEW_MR_REVIEWER=reviewer-token",
+				"example-group/example-reviewer CLAUDE_MR_REVIEWER=reviewer-token",
+				"example-group/example-reviewer GEMINI_MR_REVIEWER=reviewer-token",
+				"example-group/example-reviewer TAG_PUSH_TOKEN=tag-token",
 			},
 		},
 		"absent projects stop the publication before any read or write": {
-			projects:    []string{"csning1998-lab/parent-group-governance", "personal/absent-one", "personal/absent-two"},
+			projects:    []string{"example-group/example-governance", "personal/absent-one", "personal/absent-two"},
 			wantErr:     ErrMissingProjects,
 			wantMissing: []string{"personal/absent-one", "personal/absent-two"},
 		},
 		"a failed Vault read writes nothing": {
-			projects:  []string{"csning1998-lab/parent-group-governance"},
+			projects:  []string{"example-group/example-governance"},
 			vaultErr:  errors.New("permission denied"),
 			wantErr:   errors.New("permission denied"),
 			wantReads: 1,
 		},
 		"an empty bot token list writes nothing": {
-			projects:      []string{"csning1998-lab/parent-group-governance"},
+			projects:      []string{"example-group/example-governance"},
 			emptyBotToken: true,
 			wantErr:       ErrNoBotTokens,
 		},
@@ -90,8 +90,8 @@ func TestCodeReviewerVariablesPublicationRun(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			vault := &fakeSecretReader{values: map[VaultField]string{reviewerBotField: "reviewer-token", tagBotField: "tag-token"}, err: tc.vaultErr}
 			gitlab := &fakeProjectVariables{present: map[string]bool{
-				"csning1998-lab/parent-group-governance":      true,
-				"csning1998-lab/gitlab-ci-with-code-reviewer": true,
+				"example-group/example-governance": true,
+				"example-group/example-reviewer":   true,
 			}}
 			config := reviewerConfig
 			if tc.emptyBotToken {

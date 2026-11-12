@@ -60,13 +60,13 @@ func AuditStates(ctx context.Context, cfg Config) (Report, error) {
 	return report, nil
 }
 
-// BuildConfigFromEnv builds the configuration of terraformDir from the TF_HTTP credentials of getenv.
+// BuildConfigFromEnv constructs an audit Config for terraformDir using TF_HTTP credentials and GITLAB_TERRAFORM_STATE_BASE from getenv.
 func BuildConfigFromEnv(terraformDir string, getenv func(string) string, history bool) (Config, error) {
 	username, password := getenv("TF_HTTP_USERNAME"), getenv("TF_HTTP_PASSWORD")
 	if username == "" || password == "" {
 		return Config{}, ErrCredentialsMissing
 	}
-	layers, err := DiscoverLayers(filepath.Join(terraformDir, "layers"))
+	layers, err := DiscoverLayers(filepath.Join(terraformDir, "layers"), getenv("GITLAB_TERRAFORM_STATE_BASE"))
 	if err != nil {
 		return Config{}, err
 	}

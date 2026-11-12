@@ -4,6 +4,9 @@
 workstation_vault_proxy_operator_user: ""
 # The absolute path of vault/tls in the repository, which holds the ML-DSA-87 CA certificate and key.
 workstation_vault_proxy_ca_dir: ""
+# GitLab base URL and root group path derived from the repository origin remote and rendered into vault-proxy-env.
+workstation_vault_proxy_gitlab_url: ""
+workstation_vault_proxy_gitlab_top_level_group_path: ""
 
 # Days of validity of each issued certificate, and the remaining days below which the role issues a new one.
 workstation_vault_proxy_cert:

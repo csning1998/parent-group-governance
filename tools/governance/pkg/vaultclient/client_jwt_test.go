@@ -75,7 +75,7 @@ func newMockJWTServer(t *testing.T, mount, wantRole, wantJWT string, resp mockJW
 }
 
 // TestJWTAuth_SuccessScenarios covers successful token exchange across various trust domains and mount paths.
-func TestJWTAuth_SuccessScenarios(t *testing.T) {
+func TestJWTAuthSuccessScenarios(t *testing.T) {
 	tests := []struct {
 		name        string
 		mount       string
@@ -134,7 +134,7 @@ func TestJWTAuth_SuccessScenarios(t *testing.T) {
 }
 
 // TestJWTAuth_ClientInputValidation covers rejection of invalid client configurations prior to issuing network requests.
-func TestJWTAuth_ClientInputValidation(t *testing.T) {
+func TestJWTAuthClientInputValidation(t *testing.T) {
 	validClient, err := vaultclient.NewClient(vaultclient.Config{Address: "http://127.0.0.1:8200"})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
@@ -197,7 +197,7 @@ func TestJWTAuth_ClientInputValidation(t *testing.T) {
 }
 
 // TestJWTAuth_ServerErrorScenarios covers HTTP status codes and error responses from the Vault backend.
-func TestJWTAuth_ServerErrorScenarios(t *testing.T) {
+func TestJWTAuthServerErrorScenarios(t *testing.T) {
 	tests := []struct {
 		name       string
 		statusCode int

@@ -33,8 +33,11 @@ type StateSource interface {
 	FetchVersion(ctx context.Context, address string, serial int) ([]byte, error)
 }
 
-// DiscoverLayers returns every layer below layersDir with backend "http".
-func DiscoverLayers(layersDir string) ([]Layer, error) {
+// ErrStateBaseMissing indicates an HTTP backend block without a literal address while the fallback state base URL is empty.
+var ErrStateBaseMissing = errors.New("stateaudit: the backend \"http\" omits the address and GITLAB_TERRAFORM_STATE_BASE is empty")
+
+// DiscoverLayers enumerates HTTP backend layers under layersDir, deriving omitted state URLs from stateBase and the layer directory name.
+func DiscoverLayers(layersDir, stateBase string) ([]Layer, error) {
 	dirs, err := filepath.Glob(filepath.Join(layersDir, "*"))
 	if err != nil {
 		return nil, fmt.Errorf("stateaudit: list %s: %w", layersDir, err)
@@ -46,27 +49,35 @@ func DiscoverLayers(layersDir string) ([]Layer, error) {
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		address, err := readBackendAddress(parser, dir)
+		name := filepath.Base(dir)
+		address, found, err := readBackendAddress(parser, dir)
 		if err != nil {
-			return nil, fmt.Errorf("stateaudit: layer %s: %w", filepath.Base(dir), err)
+			return nil, fmt.Errorf("stateaudit: layer %s: %w", name, err)
 		}
-		if address != "" {
-			layers = append(layers, Layer{Name: filepath.Base(dir), Address: address})
+		if !found {
+			continue
 		}
+		if address == "" {
+			if stateBase == "" {
+				return nil, fmt.Errorf("%w: layer %s", ErrStateBaseMissing, name)
+			}
+			address = stateBase + "/" + name
+		}
+		layers = append(layers, Layer{Name: name, Address: address})
 	}
 	return layers, nil
 }
 
-// readBackendAddress returns the literal address of backend "http" in dir, or "" when dir declares none.
-func readBackendAddress(parser *hclparse.Parser, dir string) (string, error) {
+// readBackendAddress inspects HCL files in dir, reporting whether an HTTP backend block exists alongside its literal address attribute.
+func readBackendAddress(parser *hclparse.Parser, dir string) (string, bool, error) {
 	files, err := filepath.Glob(filepath.Join(dir, "*.tf"))
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	for _, file := range files {
 		parsed, diags := parser.ParseHCLFile(file)
 		if diags.HasErrors() {
-			return "", fmt.Errorf("parse %s: %w", file, diags)
+			return "", false, fmt.Errorf("parse %s: %w", file, diags)
 		}
 		body, ok := parsed.Body.(*hclsyntax.Body)
 		if !ok {
@@ -75,11 +86,12 @@ func readBackendAddress(parser *hclparse.Parser, dir string) (string, error) {
 		for _, block := range body.Blocks {
 			backend := findHTTPBackend(block)
 			if backend != nil {
-				return readLiteralAddress(backend)
+				address, err := readLiteralAddress(backend)
+				return address, true, err
 			}
 		}
 	}
-	return "", nil
+	return "", false, nil
 }
 
 func findHTTPBackend(block *hclsyntax.Block) *hclsyntax.Block {
@@ -97,7 +109,7 @@ func findHTTPBackend(block *hclsyntax.Block) *hclsyntax.Block {
 func readLiteralAddress(backend *hclsyntax.Block) (string, error) {
 	attr, ok := backend.Body.Attributes["address"]
 	if !ok {
-		return "", errors.New("backend \"http\" declares no address")
+		return "", nil
 	}
 	value, diags := attr.Expr.Value(nil)
 	if diags.HasErrors() || value.Type() != cty.String || value.AsString() == "" {

@@ -12,7 +12,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/secretrotate"
 )
 
-func TestInitVault_ProceedsWhenEveryServiceAcceptsTheFactoryDefault(t *testing.T) {
+func TestInitVaultProceedsWhenEveryServiceAcceptsTheFactoryDefault(t *testing.T) {
 	a := &app{
 		root:        t.TempDir(),
 		home:        t.TempDir(),
@@ -26,7 +26,7 @@ func TestInitVault_ProceedsWhenEveryServiceAcceptsTheFactoryDefault(t *testing.T
 	}
 }
 
-func TestInitVault_RefusesAServiceWhichRejectsTheFactoryDefault(t *testing.T) {
+func TestInitVaultRefusesAServiceWhichRejectsTheFactoryDefault(t *testing.T) {
 	a := &app{
 		root:        t.TempDir(),
 		home:        t.TempDir(),

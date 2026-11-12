@@ -54,11 +54,12 @@ resource "google_iam_workload_identity_pool_provider" "gitlab_saas" {
     "attribute.ref_type"       = "assertion.ref_type"
   }
 
-  attribute_condition = "assertion.namespace_path.startsWith(\"csning1998-lab\")"
+  # The separator after the group path rejects a sibling group whose name starts with the group path.
+  attribute_condition = "assertion.namespace_path == \"${var.gitlab_top_level_group_path}\" || assertion.namespace_path.startsWith(\"${var.gitlab_top_level_group_path}/\")"
 
   oidc {
-    issuer_uri        = "https://gitlab.com"
-    allowed_audiences = ["https://gitlab.com"]
+    issuer_uri        = var.gitlab_url
+    allowed_audiences = [var.gitlab_url]
   }
 
   lifecycle {

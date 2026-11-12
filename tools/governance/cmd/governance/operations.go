@@ -5,14 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/apenella/go-ansible/v2/pkg/playbook"
 	vaultapi "github.com/hashicorp/vault/api"
 
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ansibleops"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
@@ -22,7 +19,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
 
-// accessAdministrator and accessCredentialRotator name the operator identities of workstation-topology.yaml which this CLI uses.
+// accessAdministrator and accessCredentialRotator name the operator identities of workstation-topology.yaml used by this CLI.
 const (
 	accessAdministrator     = topology.AccessRoleAdministrator
 	accessCredentialRotator = topology.AccessRoleCredentialRotator
@@ -33,30 +30,8 @@ const msgCancelled = "Cancelled."
 // serviceReadyTimeout bounds the wait for the services of service_admin_passwords, which start with the Bastion Vault.
 const serviceReadyTimeout = 5 * time.Minute
 
-// errRetainedServiceState reports a service which retains a rotated password, which a fresh Bastion Vault cannot hold.
-var errRetainedServiceState = errors.New("a service retains a rotated password, which a fresh Bastion Vault cannot hold")
-
-// hostPlaybook is one workstation playbook with the extra vars which the CLI injects.
-type hostPlaybook struct {
-	file      string
-	extraVars map[string]any
-	doneMsg   string
-}
-
-func (a *app) buildLibvirtPlaybook() (hostPlaybook, error) {
-	facts, err := config.DetectHostFacts()
-	if err != nil {
-		return hostPlaybook{}, err
-	}
-	return hostPlaybook{
-		file: "playbooks/workstation_libvirt.yaml",
-		extraVars: map[string]any{
-			"workstation_libvirt_operator_user":     facts.CurrentUname,
-			"workstation_libvirt_vault_config_path": filepath.Join(a.root, "vault", "vault.hcl"),
-		},
-		doneMsg: "Workstation libvirt prerequisites for Bastion Vault applied.",
-	}, nil
-}
+// errRetainedServiceState indicates a target service rejecting its factory default password before Vault initialization.
+var errRetainedServiceState = errors.New("a service retains a rotated password absent from a fresh Bastion Vault")
 
 // buildProxyConfig resolves the Vault Proxy configuration for the requested role.
 // Because the local proxy manages identity credentials, the CLI does not handle raw tokens.
@@ -66,29 +41,6 @@ func (a *app) buildProxyConfig(role topology.AccessRole) (vaultclient.Config, er
 		return vaultclient.Config{}, err
 	}
 	return vaultclient.Config{Address: ep.Address, CACertPath: ep.CACert, ClientCert: ep.ClientCert, ClientKey: ep.ClientKey, Token: ep.Token}, nil
-}
-
-func (a *app) buildSELinuxPlaybook() (hostPlaybook, error) {
-	return hostPlaybook{
-		file:      "playbooks/workstation_selinux.yaml",
-		extraVars: map[string]any{"workstation_selinux_home": a.home},
-		doneMsg:   "Workstation SELinux policy and file contexts applied.",
-	}, nil
-}
-
-func (a *app) buildVaultProxyPlaybook() (hostPlaybook, error) {
-	facts, err := config.DetectHostFacts()
-	if err != nil {
-		return hostPlaybook{}, err
-	}
-	return hostPlaybook{
-		file: "playbooks/workstation_vault_proxy.yaml",
-		extraVars: map[string]any{
-			"workstation_vault_proxy_operator_user": facts.CurrentUname,
-			"workstation_vault_proxy_ca_dir":        a.newVaultPaths().TLSDir(),
-		},
-		doneMsg: "Workstation Vault Proxies applied.",
-	}, nil
 }
 
 func (a *app) enableVaultKV(ctx context.Context) error {
@@ -123,17 +75,6 @@ func (a *app) issueVaultTLS() error {
 	return nil
 }
 
-// executePlaybook runs one workstation playbook with injected become password.
-func (a *app) executePlaybook(ctx context.Context, pb hostPlaybook, becomePass string) error {
-	opts := &playbook.AnsiblePlaybookOptions{Inventory: "inventory/localhost.yaml", ExtraVars: pb.extraVars}
-	extraEnv := map[string]string{"ANSIBLE_BECOME_PASS": becomePass}
-	if err := ansibleops.RunPlaybook(ctx, a.ansibleDir, a.ansibleDir, pb.file, opts, extraEnv); err != nil {
-		return fmt.Errorf("ansible-playbook %s: %w", pb.file, err)
-	}
-	a.out.Print(ui.OK, pb.doneMsg)
-	return nil
-}
-
 func (a *app) generateRootToken(ctx context.Context) error {
 	if !a.out.PromptConfirm(a.in, "Generate a break-glass root token from the stored unseal keys? Type 'Y' or 'y' to confirm: ") {
 		a.out.Print(ui.Info, msgCancelled)
@@ -158,8 +99,8 @@ func (a *app) generateVaultTLS(_ context.Context) error {
 	return a.issueVaultTLS()
 }
 
-// initVault refuses a fresh Bastion Vault while a declared service rejects its factory default password, since no
-// tool recovers the rotated password from the hash which the service stores.
+// initVault aborts when a configured service rejects its factory default password because the service stores only an
+// irreversible password hash once Bastion Vault state is wiped.
 func (a *app) initVault(ctx context.Context) error {
 	waitCtx, cancel := context.WithTimeout(ctx, serviceReadyTimeout)
 	defer cancel()
@@ -256,79 +197,6 @@ func (a *app) rotateCredential(ctx context.Context, key string) error {
 	log := func(msg string) { a.out.Print(ui.OK, msg) }
 	_, err = secretrotate.Rotate(ctx, client, cred.Spec, log)
 	return err
-}
-
-// runHostAll applies workstation prerequisites in bootstrap order: SELinux, local CA generation,
-// libvirt configuration, and Vault Proxy deployment. The operator enters privilege escalation credentials once.
-func (a *app) runHostAll(ctx context.Context) error {
-	becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
-	if err != nil {
-		return fmt.Errorf("read ANSIBLE_BECOME_PASS: %w", err)
-	}
-	if becomePass == "" {
-		a.out.Print(ui.Info, msgCancelled)
-		return nil
-	}
-	selinuxPB, err := a.buildSELinuxPlaybook()
-	if err != nil {
-		return err
-	}
-	if err := a.executePlaybook(ctx, selinuxPB, becomePass); err != nil {
-		return err
-	}
-
-	if err := a.ensureLocalCA(ctx); err != nil {
-		return err
-	}
-
-	libvirtPB, err := a.buildLibvirtPlaybook()
-	if err != nil {
-		return err
-	}
-	if err := a.executePlaybook(ctx, libvirtPB, becomePass); err != nil {
-		return err
-	}
-
-	proxyPB, err := a.buildVaultProxyPlaybook()
-	if err != nil {
-		return err
-	}
-	return a.executePlaybook(ctx, proxyPB, becomePass)
-}
-
-func (a *app) runHostLibvirtPlaybook(ctx context.Context) error {
-	return a.runHostPlaybooks(ctx, a.buildLibvirtPlaybook)
-}
-
-// runHostPlaybooks prompts once for the privilege escalation password, where a blank answer cancels, and resolves
-// and runs each step in order against the local inventory.
-func (a *app) runHostPlaybooks(ctx context.Context, steps ...func() (hostPlaybook, error)) error {
-	becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
-	if err != nil {
-		return fmt.Errorf("read ANSIBLE_BECOME_PASS: %w", err)
-	}
-	if becomePass == "" {
-		a.out.Print(ui.Info, msgCancelled)
-		return nil
-	}
-	for _, step := range steps {
-		pb, err := step()
-		if err != nil {
-			return err
-		}
-		if err := a.executePlaybook(ctx, pb, becomePass); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (a *app) runHostSELinuxPlaybook(ctx context.Context) error {
-	return a.runHostPlaybooks(ctx, a.buildSELinuxPlaybook)
-}
-
-func (a *app) runHostVaultProxyPlaybook(ctx context.Context) error {
-	return a.runHostPlaybooks(ctx, a.buildVaultProxyPlaybook)
 }
 
 func (a *app) unsealVault(ctx context.Context) error {

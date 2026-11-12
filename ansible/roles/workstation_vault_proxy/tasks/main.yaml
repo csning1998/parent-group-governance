@@ -6,12 +6,14 @@
       - workstation_vault_proxy_operator_user | length > 0
       - workstation_vault_proxy_operator_user != "root"
       - workstation_vault_proxy_ca_dir is match('^/.+/vault/tls$')
+      - workstation_vault_proxy_gitlab_url is match('^https://[^/]+$')
+      - workstation_vault_proxy_gitlab_top_level_group_path is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
       - vault_bastion is mapping
       - operator_vault_proxy is mapping
       - operator_vault_proxy.identities is mapping
     fail_msg: >-
-      workstation_vault_proxy needs the operator account and the vault/tls directory, which the CLI injects,
-      and workstation-topology.yaml, which the playbook loads.
+      workstation_vault_proxy needs the operator account, the vault/tls directory, and the GitLab instance and
+      top-level group of origin, which the CLI injects, and workstation-topology.yaml, which the playbook loads.
 
 - name: "Section A. Resolve the operator account and the Proxy directories"
   ansible.builtin.include_tasks: A-operator.yaml

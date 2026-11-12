@@ -28,6 +28,7 @@ type RunnerCreator interface {
 // GroupRunnerRegistration creates the group runner and writes the runner authentication token into config.toml.
 type GroupRunnerRegistration struct {
 	Config     GitLabGroupRunnerConfig
+	GitLabURL  string // target GitLab instance URL written into config.toml
 	GroupID    string
 	ConfigPath string
 	GitLab     RunnerCreator
@@ -50,7 +51,7 @@ func (r GroupRunnerRegistration) Run(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err := writeRunnerConfig(r.ConfigPath, r.Config, created.Token); err != nil {
+	if err := writeRunnerConfig(r.ConfigPath, r.Config, r.GitLabURL, created.Token); err != nil {
 		return created.ID, fmt.Errorf("issuedtokens: runner %d exists in GitLab while %s stays unwritten, delete the runner before a retry: %w", created.ID, r.ConfigPath, err)
 	}
 	return created.ID, nil
@@ -58,13 +59,13 @@ func (r GroupRunnerRegistration) Run(ctx context.Context) (int, error) {
 
 // writeRunnerConfig links a complete 0600 temporary file to path and refuses a path created after the existence check.
 // A hard link fails on an existing target while a rename replaces the target and loses the token of the earlier runner.
-func writeRunnerConfig(path string, cfg GitLabGroupRunnerConfig, token string) error {
+func writeRunnerConfig(path string, cfg GitLabGroupRunnerConfig, gitlabURL, token string) error {
 	tmpl, err := template.New("config.toml").Parse(runnerConfigTemplate)
 	if err != nil {
 		return err
 	}
 	var rendered bytes.Buffer
-	if err := tmpl.Execute(&rendered, struct{ Name, URL, Token string }{cfg.Description, cfg.GitLabURL, token}); err != nil {
+	if err := tmpl.Execute(&rendered, struct{ Name, URL, Token string }{cfg.Description, gitlabURL, token}); err != nil {
 		return err
 	}
 	dir := filepath.Dir(path)

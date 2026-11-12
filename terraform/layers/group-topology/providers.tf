@@ -12,10 +12,9 @@ terraform {
     }
   }
 
+  # State and lock URLs are omitted to avoid hardcoding the GitLab project ID in HCL. The layer .envrc supplies
+  # TF_HTTP_ADDRESS, TF_HTTP_LOCK_ADDRESS, and TF_HTTP_UNLOCK_ADDRESS.
   backend "http" {
-    address        = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-topology"
-    lock_address   = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-topology/lock"
-    unlock_address = "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-topology/lock"
     lock_method    = "POST"
     unlock_method  = "DELETE"
     retry_wait_min = 5

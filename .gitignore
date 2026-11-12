@@ -34,6 +34,7 @@ vault/vault.hcl
 vault/vault.env
 vault/terminator/haproxy.cfg
 vault/terminator/terminator.env
+vault/terminator/haproxy-telemetry.cfg
 tls/
 terraform/layers/foundation-vault-bastion/tls
 

@@ -48,14 +48,14 @@ func TestAwaitFactoryDefault(t *testing.T) {
 	}
 }
 
-func TestAwaitFactoryDefault_RequiresAFactoryDefault(t *testing.T) {
+func TestAwaitFactoryDefaultRequiresAFactoryDefault(t *testing.T) {
 	spec := Spec{Verify: func(context.Context, string) (bool, error) { return true, nil }}
 	if _, err := AwaitFactoryDefault(context.Background(), spec, time.Millisecond); err == nil {
 		t.Error("AwaitFactoryDefault succeeded without a factory default")
 	}
 }
 
-func TestAwaitFactoryDefault_RequiresAVerification(t *testing.T) {
+func TestAwaitFactoryDefaultRequiresAVerification(t *testing.T) {
 	spec := Spec{FactoryDefaultPassword: "example-default"}
 	if _, err := AwaitFactoryDefault(context.Background(), spec, time.Millisecond); err == nil {
 		t.Error("AwaitFactoryDefault succeeded without a verification")

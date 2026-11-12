@@ -1,4 +1,14 @@
 
+variable "gitlab_url" {
+  description = "Specifies the https URL of the GitLab instance which issues the CI job ID tokens. An empty azure_federation.audiences defaults to this URL."
+  type        = string
+
+  validation {
+    condition     = can(regex("^https://[^/]+$", var.gitlab_url))
+    error_message = "gitlab_url must be https://<host> without a trailing path."
+  }
+}
+
 variable "gitlab_project" {
   description = "Specifies GitLab project metadata for workload identity federation bindings."
   type = object({
@@ -84,7 +94,7 @@ variable "azure_federation" {
     cognitive_account_id = string
     openai_endpoint      = string
     application_name     = optional(string)
-    audiences            = optional(list(string), ["https://gitlab.com"])
+    audiences            = optional(list(string), [])
     subjects             = optional(list(string))
     roles                = optional(list(string), ["Cognitive Services OpenAI User"])
   })

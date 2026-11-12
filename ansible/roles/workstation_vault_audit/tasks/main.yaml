@@ -1,12 +1,15 @@
 ---
-- name: "Section 0. Require the operator home extra var"
+- name: "Section 0. Require the operator home and repository extra vars"
   ansible.builtin.assert:
     that:
       - workstation_vault_audit_home is string
       - workstation_vault_audit_home | length > 0
       - workstation_vault_audit_home != "/root"
+      - workstation_vault_audit_repository is string
+      - workstation_vault_audit_repository is abs
     fail_msg: >-
-      workstation_vault_audit_home must be the operator home directory. The CLI injects this extra var.
+      workstation_vault_audit_home must be the operator home directory, and workstation_vault_audit_repository must be
+      the absolute path of the repository checkout. The CLI injects both extra vars.
 
 # The parent vault/ directory carries container_file_t, and the audit directory inherits the label.
 - name: "Section A. Create the directories"

@@ -1,13 +1,15 @@
 ---
-- name: "Section 0. Require operator home extra var"
+- name: "Section 0. Require the operator home and repository extra vars"
   ansible.builtin.assert:
     that:
       - workstation_selinux_home is string
       - workstation_selinux_home | length > 0
       - workstation_selinux_home != "/root"
+      - workstation_selinux_repository is string
+      - workstation_selinux_repository is abs
     fail_msg: >-
-      workstation_selinux_home must be the operator home directory.
-      become: true gathers facts as root. The CLI injects this extra var.
+      workstation_selinux_home must be the operator home directory, and workstation_selinux_repository must be the
+      absolute path of the repository checkout. become: true gathers facts as root. The CLI injects both extra vars.
 
 # A parent with NoNewPrivs=1 requires process2 nnp_transition on runtime hops.
 - name: "Section A. Install local policy module"

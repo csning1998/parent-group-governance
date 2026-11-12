@@ -15,7 +15,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
 
-func TestDecodeRootToken_RejectsMalformedInput(t *testing.T) {
+func TestDecodeRootTokenRejectsMalformedInput(t *testing.T) {
 	for name, encoded := range map[string]string{"not base64": "!!!", "length mismatch": base64.RawStdEncoding.EncodeToString([]byte("short"))} {
 		if _, err := decodeRootToken(encoded, "0123456789"); err == nil {
 			t.Errorf("decodeRootToken(%s) error = nil, want a rejection", name)
@@ -23,7 +23,7 @@ func TestDecodeRootToken_RejectsMalformedInput(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_CancelsBelowTheThreshold(t *testing.T) {
+func TestGenerateRootCancelsBelowTheThreshold(t *testing.T) {
 	srv, cancelled := generateRootServer(t, false, 3, "hvs.example-break-glass-token000")
 	p := newGenerateRootPaths(t, srv.URL, "key1\nkey2\n")
 	op := newTestOperator(t, p, srv.URL)
@@ -36,7 +36,7 @@ func TestGenerateRoot_CancelsBelowTheThreshold(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_RefusesAnAttemptInProgress(t *testing.T) {
+func TestGenerateRootRefusesAnAttemptInProgress(t *testing.T) {
 	srv, _ := generateRootServer(t, true, 3, "hvs.example-break-glass-token000")
 	p := newGenerateRootPaths(t, srv.URL, "key1\n")
 	op := newTestOperator(t, p, srv.URL)
@@ -46,7 +46,7 @@ func TestGenerateRoot_RefusesAnAttemptInProgress(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_RefusesAnExistingTokenFile(t *testing.T) {
+func TestGenerateRootRefusesAnExistingTokenFile(t *testing.T) {
 	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
 	if err := vaultclient.PersistTokenFile(p.Home, "s.existing"); err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func TestGenerateRoot_RefusesAnExistingTokenFile(t *testing.T) {
 	}
 }
 
-func TestGenerateRoot_WritesTheDecodedToken(t *testing.T) {
+func TestGenerateRootWritesTheDecodedToken(t *testing.T) {
 	const token = "hvs.example-break-glass-token000"
 	srv, _ := generateRootServer(t, false, 3, token)
 	p := newGenerateRootPaths(t, srv.URL, "key1\nkey2\nkey3\nkey4\nkey5\n")
@@ -72,7 +72,7 @@ func TestGenerateRoot_WritesTheDecodedToken(t *testing.T) {
 	assertMode(t, p.RootTokenFile(), 0o600)
 }
 
-func TestRevokeRoot_KeepsRootWithoutASuccessorLogin(t *testing.T) {
+func TestRevokeRootKeepsRootWithoutASuccessorLogin(t *testing.T) {
 	var revoked atomic.Bool
 	target := tokenServer(t, []string{"root"}, &revoked)
 	successor := tokenServer(t, []string{"default"}, new(atomic.Bool))
@@ -91,7 +91,7 @@ func TestRevokeRoot_KeepsRootWithoutASuccessorLogin(t *testing.T) {
 	}
 }
 
-func TestRevokeRoot_RefusesATokenOtherThanRoot(t *testing.T) {
+func TestRevokeRootRefusesATokenOtherThanRoot(t *testing.T) {
 	var revoked atomic.Bool
 	target := tokenServer(t, []string{"default"}, &revoked)
 	successor := tokenServer(t, []string{"successor-policy"}, new(atomic.Bool))
@@ -107,7 +107,7 @@ func TestRevokeRoot_RefusesATokenOtherThanRoot(t *testing.T) {
 	}
 }
 
-func TestRevokeRoot_RequiresATokenFile(t *testing.T) {
+func TestRevokeRootRequiresATokenFile(t *testing.T) {
 	p := Paths{ProjectRoot: t.TempDir(), Home: t.TempDir()}
 	op := newTestOperator(t, p, "http://127.0.0.1:8200")
 	if err := op.RevokeRoot(context.Background(), vaultclient.Config{}, "successor-policy"); !errors.Is(err, ErrNoRootToken) {
@@ -115,7 +115,7 @@ func TestRevokeRoot_RequiresATokenFile(t *testing.T) {
 	}
 }
 
-func TestRevokeRoot_RevokesOnceTheSuccessorIdentityLogsIn(t *testing.T) {
+func TestRevokeRootRevokesOnceTheSuccessorIdentityLogsIn(t *testing.T) {
 	var revoked atomic.Bool
 	target := tokenServer(t, []string{"root"}, &revoked)
 	successor := tokenServer(t, []string{"default", "successor-policy"}, new(atomic.Bool))

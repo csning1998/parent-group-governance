@@ -1843,9 +1843,9 @@ _Section 2 Item E_ 說明了兩個介面各自在哪裡觸發 `BootstrapEnv`，�
 
 指令樹以功能劃分為六組子指令命名空間：
 
-1. `host`（別名 `ansible`）：開發機前置環境維護。包含 `apply-all`（別名 `all`）、`apply-selinux`（別名 `selinux`）、`apply-libvirt`（別名 `libvirt`）、`apply-vault-proxy`（別名 `vault-proxy`）與 `verify`（別名 `verify-tools`）。
+1. `host`（別名 `ansible`）：開發機前置環境維護。包含 `apply-all`（別名 `all`）、`apply-selinux`（別名 `selinux`）、`apply-libvirt`（別名 `libvirt`）、`apply-vault-proxy`（別名 `vault-proxy`）、`apply-vault-audit`（別名 `vault-audit`）、`apply-host-telemetry`（別名 `host-telemetry`）與 `verify`（別名 `verify-tools`）。
 2. `vault`：Bastion Vault 生命週期管理。包含 `generate-tls`（別名 `tls-generate`）、`init`、`enable-kv`、`unseal`、`revoke-root`（別名 `revoke-root-token`）、`generate-root`（別名 `generate-root-token`），以及掛在 `vault rotate` 與 `vault reconcile` 底下的憑證動態子指令。為維持既有指令相容性，`vault` 根節點亦保留隱藏的憑證輪替別名。
-3. `credentials`：憑證專屬命名空間，掛載 `credentials rotate <key>`、`credentials reconcile <key>`，以及 `credentials issue` 底下的 `sonarqube-analysis-token`、`gitlab-group-runner` 與 `code-reviewer-variables`。三個 `issue` 子指令都經 `administrator` 的 Vault Proxy 讀寫 Bastion Vault，並以 `service_issued_tokens.gitlab_token_owner_code` 對應的 state backend 權杖呼叫 GitLab API。
+3. `credentials`：憑證專屬命名空間，掛載 `credentials rotate <key>`、`credentials reconcile <key>`，以及 `credentials issue` 底下的 `sonarqube-analysis-token`、`gitlab-group-runner` 與 `code-reviewer-variables`。三個 `issue` 子指令都經 `administrator` 的 Vault Proxy 讀寫 Bastion Vault，並以 `credential-distributor-<governance_owner_code>` 的 state backend 權杖呼叫 GitLab API。GitLab API URL、runner 的 GitLab URL 與最上層群組都由 `internal/gitremote` 從 repository 的 origin remote 推導，`code_reviewer_variable_projects` 的每一項是最上層群組底下的相對路徑，CLI 補上群組前綴。
 4. `terraform`：Terraform 治理操作，掛載 `terraform audit-state`（別名 `audit`、`state-audit`）。
 5. `audit-state-secrets`：隱藏之頂層機密稽核指令，供腳本直接調用。
 6. `env`：環境檢查（`env verify` 為隱藏指令）。
@@ -1912,17 +1912,19 @@ type menuOption struct {
 3. `[Host] Apply Workstation SELinux Policy and File Contexts` (`runHostSELinuxPlaybook`)
 4. `[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites` (`runHostLibvirtPlaybook`)
 5. `[Host] Apply Workstation Vault Proxies` (`runHostVaultProxyPlaybook`)
-6. `[Vault] Set up TLS for Bastion Vault` (`generateVaultTLS`)
-7. `[Vault] Initialize Bastion Vault` (`initVault`)
-8. `[Vault] Enable KV-v2 Engine` (`enableVaultKV`)
-9. `[Vault] Unseal Bastion Vault` (`unsealVault`)
-10. `[Vault] Revoke Root Token After Bootstrap` (`revokeRootToken`)
-11. `[Vault] Generate Root Token for Break-Glass` (`generateRootToken`)
-12. 憑證存在時追加：
+6. `[Host] Apply Workstation Vault Audit Check` (`runHostVaultAuditPlaybook`)
+7. `[Host] Apply Host Telemetry Scrape Network` (`runHostTelemetryPlaybook`)
+8. `[Vault] Set up TLS for Bastion Vault` (`generateVaultTLS`)
+9. `[Vault] Initialize Bastion Vault` (`initVault`)
+10. `[Vault] Enable KV-v2 Engine` (`enableVaultKV`)
+11. `[Vault] Unseal Bastion Vault` (`unsealVault`)
+12. `[Vault] Revoke Root Token After Bootstrap` (`revokeRootToken`)
+13. `[Vault] Generate Root Token for Break-Glass` (`generateRootToken`)
+14. 憑證存在時追加：
     - `[Credentials] Rotate Service Admin Passwords` (`runRotateCredentialMenu`)
     - `[Credentials] Reconcile Service Admin Passwords with the Live Service` (`runReconcileCredentialMenu`)
-13. `[Terraform] Audit State Secrets` (`runStateAuditMenu`)
-14. `Quit` (`nil`)
+15. `[Terraform] Audit State Secrets` (`runStateAuditMenu`)
+16. `Quit` (`nil`)
 
 用 `nil` 當結束的標記，而不是另外設一個布林欄位或用字串比對標籤，讓「選到這一項要做什麼」與「這一項是不是結束」用同一個欄位表達，判斷只需要 `chosen.run == nil` 一個條件。
 
@@ -2008,7 +2010,7 @@ return lastErr
 
 ### Item C. 操作實作
 
-`operations.go` 是兩個介面共用的業務邏輯收斂點，負責管理開發機環境準備、Vault 初始化防禦、權限代理與憑證操作：
+`operations.go` 與 `host_playbooks.go` 是兩個介面共用的業務邏輯收斂點。`operations.go` 負責 Vault 初始化防禦、權限代理與憑證操作，`host_playbooks.go` 負責開發機環境準備：
 
 #### 1. Bastion Vault 初始化防禦（`initVault`）
 
@@ -2046,15 +2048,15 @@ return op.Init(ctx)
 
 若有服務明確拒絕出廠密碼（`!fresh`），代表該服務在先前的運作中已經被輪替過並持有新密碼，但即將初始化的 Bastion Vault 是一座全新且空白的保險箱，無法復原被服務持久化留存的密碼雜湊。如果這時允許執行 `vault init`，線上服務的密碼就會徹底脫節變成孤兒。因此程式會直接回傳 `errRetainedServiceState` 拒絕初始化，強制要求維運人員依 _Section 4 Item D_ 重建服務容器回到出廠狀態後再行操作。
 
-#### 2. Workstation Playbook 流程與一鍵串接（`runHostPlaybooks` 與 `runHostAll`）
+#### 2. Workstation Playbook 流程與一鍵串接（`runHostSteps` 與 `runHostAll`）
 
 開發機前置環境由三支 Playbook 組裝而成：
 
-- `buildSELinuxPlaybook`：執行 `playbooks/workstation_selinux.yaml`，注入 `workstation_selinux_home: a.home`。
+- `buildSELinuxPlaybook`：執行 `playbooks/workstation_selinux.yaml`，注入 `workstation_selinux_home: a.home` 與 `workstation_selinux_repository: a.root`。role 以 repository 的上層目錄作為同一群組其他 repository 的根目錄，不寫死任何路徑。
 - `buildLibvirtPlaybook`：執行 `playbooks/workstation_libvirt.yaml`，注入 `workstation_libvirt_operator_user`（透過 `config.DetectHostFacts()` 取得）與 `workstation_libvirt_vault_config_path`（指向 `vault/vault.hcl`）。
-- `buildVaultProxyPlaybook`：執行 `playbooks/workstation_vault_proxy.yaml`，注入 `workstation_vault_proxy_operator_user` 與 `workstation_vault_proxy_ca_dir`（指向 `vault/tls`）。
+- `buildVaultProxyPlaybook`：執行 `playbooks/workstation_vault_proxy.yaml`，注入 `workstation_vault_proxy_operator_user`、`workstation_vault_proxy_ca_dir`（指向 `vault/tls`），以及 origin remote 推導出的 `workstation_vault_proxy_gitlab_url` 與 `workstation_vault_proxy_gitlab_top_level_group_path`。`vault-proxy-env` 把後兩者匯出為 `GITLAB_URL` 與 `GITLAB_TOP_LEVEL_GROUP_PATH`。
 
-這三支 playbook 由 `runHostPlaybooks` 統一調度。它在最前端一次性索取提權密碼，留白視為取消：
+每個步驟是一個 `hostStep`，`playbookStep` 把一支 playbook 包成步驟，由 `runHostSteps` 統一調度。它在最前端一次性索取提權密碼，留白視為取消：
 
 ```go
 becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
@@ -2069,12 +2071,16 @@ if becomePass == "" {
 
 留白等同取消，而不是帶著空密碼去跑 playbook，因為空密碼一定會在第一個提權任務失敗，屆時錯誤訊息出現在 Ansible 的輸出裡，遠不如在這裡直接停下來清楚。
 
-`runHostAll` 則依據前置引導的先後順序，一鍵串聯全部環境配置：
+`runHostAll` 以 `runHostSteps` 依據前置引導的先後順序，一鍵串聯全部環境配置：
 
 1. 套用 SELinux 政策與檔案上下文（`buildSELinuxPlaybook`）。
 2. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca-ml-dsa-87.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA、兩張 listener 憑證與終結點的客戶端憑證。CA 已存在時，只以 `vaultops.EnsureTerminatorClientCert` 補上缺少的終結點客戶端憑證。
 3. 配置 Libvirt 虛擬網路，並產生 Bastion Vault 與 TLS 終結點的設定檔（`buildLibvirtPlaybook`）。這一步會斷言終結點掛載的 `publish.pem`、`publish-key.pem`、`ca-ml-dsa-87.pem`、`terminator-client.pem` 與 `terminator-client-key.pem` 已存在，所以排在本機憑證中心之後。
 4. 部署本機 Vault Proxies（`buildVaultProxyPlaybook`），Proxy 的客戶端憑證由本機 CA 簽發。
+
+`buildHostTelemetryPlaybook` 經 `administrator` 的 Vault Proxy 讀取 `host_telemetry_scrape.registry` 指向的 249 網段與主機位址，以 `vaultops.EnsurePublishCertCovers` 讓 `publish.pem` 的 SAN 包含該位址，再執行 `playbooks/workstation_host_telemetry.yaml`，注入網段、位址，以及 libvirt role 渲染 `haproxy-telemetry.cfg` 所需的 `workstation_libvirt_operator_user` 與 `workstation_libvirt_vault_config_path`。網段由 `foundation-vault-bastion` 計算並寫入 registry，這支 playbook 因此不在 `runHostAll` 內。
+
+`buildVaultAuditPlaybook` 執行 `playbooks/workstation_vault_audit.yaml`，注入 `workstation_vault_audit_home: a.home` 與 `workstation_vault_audit_repository: a.root`。audit 檢查的 systemd unit 安裝在操作者的 user manager，playbook 宣告 `become: false`，所以 `runHostVaultAuditPlaybook` 不索取提權密碼。audit device 由 `foundation-vault-bastion` 建立，這支 playbook 因此不在 `runHostAll` 內，依部署順序在該 layer apply 之後單獨執行。
 
 #### 3. 身分代理與安全輪替（`buildProxyConfig`、`newRotationClient`、`revokeRootToken`）
 
@@ -2297,7 +2303,7 @@ _Section 6 Item A_ 已經記錄了銷毀偵測本身的兩層邊界。除此之�
 
 ### Item B. 讀取 state
 
-`DiscoverLayers` 從每個 layer 的 `backend "http"` 讀出 state 位址，位址必須是字串字面值。`HTTPSource` 以 `TF_HTTP_USERNAME` 與 `TF_HTTP_PASSWORD` 直接讀取 backend，不經過 `terraform` CLI，因此 layer 不需要先執行 `terraform init`，state 也不會寫入磁碟。
+`DiscoverLayers` 從每個 layer 的 `backend "http"` 讀出 state 位址，位址必須是字串字面值。`backend "http"` 省略位址時，`DiscoverLayers` 以 `GITLAB_TERRAFORM_STATE_BASE` 加上 layer 名稱組成位址，`GITLAB_TERRAFORM_STATE_BASE` 為空則回傳 `ErrStateBaseMissing`。`HTTPSource` 以 `TF_HTTP_USERNAME` 與 `TF_HTTP_PASSWORD` 直接讀取 backend，不經過 `terraform` CLI，因此 layer 不需要先執行 `terraform init`，state 也不會寫入磁碟。
 
 歷史版本模式（`--history`）先讀取目前 state 的 `serial`，再由 `serial - 1` 往回讀到 1，每一版位於 `<位址>/versions/<serial>`。backend 已經刪除的版本回應 404，稽核略過該版本。
 
