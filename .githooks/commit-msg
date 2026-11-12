@@ -4,9 +4,33 @@
 
 set -e
 
-IMAGE="registry.gitlab.com/csning1998-lab/gitlab-ci-with-code-reviewer/reviewer:1.8.2"
 MSG_FILE="$1"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# The image follows the GitLab host and top-level group of origin and the reviewer tag of .gitlab-ci.yml.
+# The registry host assumes the registry.<GitLab host> convention, and REVIEWER_IMAGE overrides the whole reference.
+origin="$(git remote get-url origin)"
+case "${origin}" in
+    *://*)
+        authority_path="${origin#*://}"
+        host="${authority_path%%/*}"
+        host="${host##*@}"
+        host="${host%%:*}"
+        project_path="${authority_path#*/}"
+        ;;
+    *)
+        host="${origin#*@}"
+        host="${host%%:*}"
+        project_path="${origin#*:}"
+        ;;
+esac
+top_level_group="${project_path%%/*}"
+reviewer_tag="$(sed -n 's|.*reviewer_image: .*/reviewer:\([0-9][0-9.]*\).*|\1|p' "${REPO_ROOT}/.gitlab-ci.yml" | head -n 1)"
+if [ -z "${REVIEWER_IMAGE:-}" ] && [ -z "${reviewer_tag}" ]; then
+    echo "commit-msg: .gitlab-ci.yml declares no reviewer_image tag, set REVIEWER_IMAGE." >&2
+    exit 1
+fi
+IMAGE="${REVIEWER_IMAGE:-registry.${host}/${top_level_group}/gitlab-ci-with-code-reviewer/reviewer:${reviewer_tag}}"
 
 # Relabel .git for container access when SELinux is enforcing.
 if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then

@@ -11,7 +11,13 @@ readonly cli_module="governance"
 readonly -a cli_binaries=(
     governance
 )
-readonly sonar_project_key="csning1998-lab-parent-group-governance"
+# The project key reproduces CI_PROJECT_PATH_SLUG of the origin project path, which the CI job passes as the key.
+origin_project_path="$(git remote get-url origin)"
+origin_project_path="${origin_project_path#*://*/}"
+origin_project_path="${origin_project_path#*:}"
+origin_project_path="${origin_project_path%.git}"
+sonar_project_key="$(printf '%s' "${origin_project_path}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' | cut -c1-63)"
+readonly sonar_project_key
 readonly sonar_token_path="parent-group-governance/sonarqube/ci-analysis-bot"
 readonly sonar_token_field="sonarqube_ci_token"
 readonly scanner_image="docker.io/sonarsource/sonar-scanner-cli:12.1.0.3225_8.0.1"
@@ -56,7 +62,7 @@ elif [[ -n "$(git status --porcelain -- tools terraform ansible)" ]]; then
 elif ! command -v vault-proxy-env >/dev/null; then
     echo "skipped: vault-proxy-env is missing, run the first menu item of ./governance in parent-group-governance" >&2
 # Token resolution MUST isolate proxy environment evaluation to prevent variable leaks and capture execution failures.
-elif ! sonar_token=$(proxy_env=$(vault-proxy-env credential-distributor) && eval "${proxy_env}" &&
+elif ! sonar_token=$(proxy_env=$(vault-proxy-env credential-distributor-parent-group-governance) && eval "${proxy_env}" &&
     vault kv get -mount=secret -field="${sonar_token_field}" "${sonar_token_path}"); then
     echo "skipped: the Bastion Vault returned no ${sonar_token_field} at secret/${sonar_token_path}" >&2
 else
