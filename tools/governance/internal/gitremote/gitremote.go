@@ -9,16 +9,16 @@ import (
 	"strings"
 )
 
-// ErrUnsupportedRemote reports an origin URL which names no host or no project below a group.
+// ErrUnsupportedRemote indicates an origin URL lacking a host authority or a group path prefix.
 var ErrUnsupportedRemote = errors.New("gitremote: the origin URL names no GitLab host and project path below a group")
 
-// Remote is the GitLab host and the project path of an origin URL.
+// Remote holds the GitLab hostname and project path parsed from a Git remote URL.
 type Remote struct {
 	Host        string
 	ProjectPath string
 }
 
-// Parse splits an scp-like, ssh, or https origin URL into the host and the project path.
+// Parse extracts the GitLab hostname and project path from an SSH or HTTPS remote URL.
 func Parse(url string) (Remote, error) {
 	var authority, path string
 	scheme, rest, hasScheme := strings.Cut(url, "://")
@@ -56,7 +56,7 @@ func (r Remote) APIURL() string {
 	return r.WebURL() + "/api/v4"
 }
 
-// TopLevelGroup returns the first segment of the project path.
+// TopLevelGroup returns the root namespace segment of the project path.
 func (r Remote) TopLevelGroup() string {
 	group, _, _ := strings.Cut(r.ProjectPath, "/")
 	return group

@@ -33,10 +33,10 @@ type StateSource interface {
 	FetchVersion(ctx context.Context, address string, serial int) ([]byte, error)
 }
 
-// ErrStateBaseMissing reports a layer whose backend "http" omits the address while the state base URL is empty.
+// ErrStateBaseMissing indicates an HTTP backend block without a literal address while the fallback state base URL is empty.
 var ErrStateBaseMissing = errors.New("stateaudit: the backend \"http\" omits the address and GITLAB_TERRAFORM_STATE_BASE is empty")
 
-// DiscoverLayers returns every layer below layersDir with backend "http", appending the layer name to stateBase when the backend omits the address.
+// DiscoverLayers enumerates HTTP backend layers under layersDir, deriving omitted state URLs from stateBase and the layer directory name.
 func DiscoverLayers(layersDir, stateBase string) ([]Layer, error) {
 	dirs, err := filepath.Glob(filepath.Join(layersDir, "*"))
 	if err != nil {
@@ -68,7 +68,7 @@ func DiscoverLayers(layersDir, stateBase string) ([]Layer, error) {
 	return layers, nil
 }
 
-// readBackendAddress reports whether dir declares backend "http" and returns its literal address, or "" when the backend omits the address.
+// readBackendAddress inspects HCL files in dir, reporting whether an HTTP backend block exists alongside its literal address attribute.
 func readBackendAddress(parser *hclparse.Parser, dir string) (string, bool, error) {
 	files, err := filepath.Glob(filepath.Join(dir, "*.tf"))
 	if err != nil {

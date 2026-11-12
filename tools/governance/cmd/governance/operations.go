@@ -78,7 +78,7 @@ func (a *app) buildSELinuxPlaybook() (hostPlaybook, error) {
 	}, nil
 }
 
-// buildVaultProxyPlaybook injects the GitLab instance and the top-level group of origin, which vault-proxy-env exports.
+// buildVaultProxyPlaybook resolves the GitLab origin endpoints and injects the endpoints for rendering into vault-proxy-env.
 func (a *app) buildVaultProxyPlaybook(ctx context.Context) (hostPlaybook, error) {
 	facts, err := config.DetectHostFacts()
 	if err != nil {
@@ -340,7 +340,7 @@ func (a *app) runHostVaultProxyPlaybook(ctx context.Context) error {
 	return a.runHostPlaybooks(ctx, func() (hostPlaybook, error) { return a.buildVaultProxyPlaybook(ctx) })
 }
 
-// buildHostTelemetryPlaybook injects the host telemetry scrape segment, which the registry holds after foundation-vault-bastion.
+// buildHostTelemetryPlaybook reads the allocated scrape subnet from the Vault registry and prepares the host telemetry playbook.
 func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, error) {
 	kv, err := a.newAdministratorKV()
 	if err != nil {
@@ -355,7 +355,7 @@ func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, err
 	if err != nil {
 		return hostPlaybook{}, err
 	}
-	// The terminator serves the metrics on the address with the publish certificate, which therefore names the address.
+	// Reissues the publish listener certificate to include the scrape IP in its SAN before HAProxy binds the metrics frontend.
 	if _, err := vaultops.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(address)); err != nil {
 		return hostPlaybook{}, err
 	}
@@ -390,7 +390,7 @@ func (a *app) buildVaultAuditPlaybook() hostPlaybook {
 	}
 }
 
-// runHostVaultAuditPlaybook runs without the become password, since the audit units live in the user manager.
+// runHostVaultAuditPlaybook omits privilege escalation because the audit systemd units are managed under the operator user session.
 func (a *app) runHostVaultAuditPlaybook(ctx context.Context) error {
 	return a.executePlaybook(ctx, a.buildVaultAuditPlaybook(), "")
 }

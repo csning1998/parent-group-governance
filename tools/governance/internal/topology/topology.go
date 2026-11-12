@@ -50,19 +50,18 @@ func (b BastionVault) APIEndpoint() string {
 type ProxyIdentity struct {
 	ListenPort int `yaml:"listen_port"` // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)
 
-	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // project paths below the top-level group which receive code reviewer CI/CD variables
+	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // relative project paths under the root group receiving code reviewer CI/CD variables
 }
 
-// IdentityRole is the access tier, owner code, and state backend path which the name of an identity determines.
+// IdentityRole holds the access tier, owner code, and KV v2 state token path derived from an identity name.
 type IdentityRole struct {
 	AccessTier       string
 	OwnerCode        string
-	StateBackendPath string // empty for the credential-rotator, which runs no Terraform
+	StateBackendPath string // omitted for credential-rotator because the rotator identity does not execute Terraform
 }
 
-// ResolveIdentityRole derives the role of the identity name from the naming rule of workstation-topology.yaml.
-// The administrator and the credential-rotator carry the governance owner code, a credential-distributor or consumer
-// name joins the tier and the owner code, and every other name is a tenant named after its owner code.
+// ResolveIdentityRole derives the access tier, owner code, and state token path from the identity naming convention
+// defined in workstation-topology-specification.md.
 func (o OperatorVaultProxy) ResolveIdentityRole(name string) IdentityRole {
 	role := IdentityRole{AccessTier: accessTierTenant, OwnerCode: name}
 	switch {
@@ -79,7 +78,7 @@ func (o OperatorVaultProxy) ResolveIdentityRole(name string) IdentityRole {
 	return role
 }
 
-// ListCodeReviewerVariableProjects returns the sorted and deduplicated project paths of every identity below topLevelGroup.
+// ListCodeReviewerVariableProjects returns sorted and deduplicated full project paths prefixed with topLevelGroup.
 func (v VaultTopology) ListCodeReviewerVariableProjects(topLevelGroup string) []string {
 	var paths []string
 	for _, identity := range v.OperatorVaultProxy.Identities {
@@ -99,7 +98,7 @@ type StateBackend struct {
 
 // OperatorVaultProxy holds client connection parameters and identity mappings for operator Vault proxies.
 type OperatorVaultProxy struct {
-	GovernanceOwnerCode string `yaml:"governance_owner_code"` // owner code of this repository, which the administrator and the credential-rotator carry
+	GovernanceOwnerCode string `yaml:"governance_owner_code"` // repository owner code assigned to the administrator and credential-rotator identities
 
 	CertAuthMount    string                   `yaml:"cert_auth_mount"`   // Vault TLS certificate auth mount path matching CN operator-<identity>
 	UserConfigDir    string                   `yaml:"user_config_dir"`   // directory relative to user $HOME storing mTLS client certs and systemd units
@@ -141,7 +140,7 @@ type ProxyEndpoint struct {
 	Token      string // dummy placeholder token (proxy-supplied), which the proxy replaces via mTLS
 }
 
-// HostTelemetryRegistry locates the host telemetry scrape segment, which foundation-vault-bastion publishes in the registry.
+// HostTelemetryRegistry specifies the Vault KV v2 coordinates at which foundation-vault-bastion publishes the scrape subnet.
 type HostTelemetryRegistry struct {
 	Mount        string `yaml:"vault_kv_mount"`
 	Path         string `yaml:"vault_kv_path"`
@@ -149,7 +148,7 @@ type HostTelemetryRegistry struct {
 	AddressField string `yaml:"address_field"`
 }
 
-// HostTelemetryScrape declares the registry location of the segment on which observability scrapers reach the host.
+// HostTelemetryScrape holds the Vault registry reference for the host telemetry scrape network.
 type HostTelemetryScrape struct {
 	Registry HostTelemetryRegistry `yaml:"registry"`
 }
@@ -158,7 +157,7 @@ type HostTelemetryScrape struct {
 type VaultTopology struct {
 	BastionVault        BastionVault        `yaml:"vault_bastion"`         // Bastion Vault network listener bindings
 	OperatorVaultProxy  OperatorVaultProxy  `yaml:"operator_vault_proxy"`  // local operator mTLS proxies configuration
-	HostTelemetryScrape HostTelemetryScrape `yaml:"host_telemetry_scrape"` // host segment of the observability scrapers
+	HostTelemetryScrape HostTelemetryScrape `yaml:"host_telemetry_scrape"` // observability scrape network configuration
 }
 
 // ResolveProxyEndpoint resolves the proxy connection parameters of the single identity with access role.

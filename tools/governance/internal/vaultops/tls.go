@@ -82,8 +82,8 @@ func GenerateTLS(dir string, listeners Listeners) error {
 	return issueTerminatorClientCert(dir)
 }
 
-// EnsurePublishCertCovers reissues the publish listener certificate with address added to the SAN, signed by the
-// EC P-384 CA, when the certificate lacks address. The result reports whether the call reissued the certificate.
+// EnsurePublishCertCovers checks whether the publish listener certificate SAN contains address, reissuing the
+// certificate under the EC P-384 CA when absent and reporting whether reissuance occurred.
 func EnsurePublishCertCovers(dir string, address net.IP) (bool, error) {
 	if address == nil {
 		return false, errors.New("vaultops: the publish certificate needs a valid IP address to cover")
@@ -125,7 +125,7 @@ func readCertificate(path string) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-// loadSigningCA reads the CA certificate <name>.pem and the PKCS #8 key <name>-key.pem which issueSelfSignedRootCA wrote.
+// loadSigningCA loads the PEM certificate and PKCS #8 private key pair of the named local CA.
 func loadSigningCA(dir, name string) (signingCA, error) {
 	cert, err := readCertificate(filepath.Join(dir, name+".pem"))
 	if err != nil {

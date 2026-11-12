@@ -31,10 +31,10 @@ type app struct {
 	out          *ui.Printer
 	in           *bufio.Reader
 
-	resolveOrigin func(context.Context) (gitlabOrigin, error) // GitLab instance and top-level group of the origin remote
+	resolveOrigin func(context.Context) (gitlabOrigin, error) // injectable resolver for GitLab endpoints derived from the origin remote
 }
 
-// gitlabOrigin is the GitLab instance and the top-level group which the origin remote of the repository names.
+// gitlabOrigin holds the GitLab web URL, REST API URL, and root group path derived from the repository origin remote.
 type gitlabOrigin struct {
 	WebURL        string
 	APIURL        string

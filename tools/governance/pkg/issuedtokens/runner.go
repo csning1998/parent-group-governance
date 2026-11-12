@@ -28,7 +28,7 @@ type RunnerCreator interface {
 // GroupRunnerRegistration creates the group runner and writes the runner authentication token into config.toml.
 type GroupRunnerRegistration struct {
 	Config     GitLabGroupRunnerConfig
-	GitLabURL  string // GitLab instance URL which the runner polls
+	GitLabURL  string // target GitLab instance URL written into config.toml
 	GroupID    string
 	ConfigPath string
 	GitLab     RunnerCreator
