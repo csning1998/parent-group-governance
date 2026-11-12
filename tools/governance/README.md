@@ -2297,7 +2297,7 @@ _Section 6 Item A_ 已經記錄了銷毀偵測本身的兩層邊界。除此之�
 
 ### Item B. 讀取 state
 
-`DiscoverLayers` 從每個 layer 的 `backend "http"` 讀出 state 位址，位址必須是字串字面值。`HTTPSource` 以 `TF_HTTP_USERNAME` 與 `TF_HTTP_PASSWORD` 直接讀取 backend，不經過 `terraform` CLI，因此 layer 不需要先執行 `terraform init`，state 也不會寫入磁碟。
+`DiscoverLayers` 從每個 layer 的 `backend "http"` 讀出 state 位址，位址必須是字串字面值。`backend "http"` 省略位址時，`DiscoverLayers` 以 `GITLAB_TERRAFORM_STATE_BASE` 加上 layer 名稱組成位址，`GITLAB_TERRAFORM_STATE_BASE` 為空則回傳 `ErrStateBaseMissing`。`HTTPSource` 以 `TF_HTTP_USERNAME` 與 `TF_HTTP_PASSWORD` 直接讀取 backend，不經過 `terraform` CLI，因此 layer 不需要先執行 `terraform init`，state 也不會寫入磁碟。
 
 歷史版本模式（`--history`）先讀取目前 state 的 `serial`，再由 `serial - 1` 往回讀到 1，每一版位於 `<位址>/versions/<serial>`。backend 已經刪除的版本回應 404，稽核略過該版本。
 
