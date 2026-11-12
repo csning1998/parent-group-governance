@@ -120,11 +120,11 @@ func assertRecordedRequests(t *testing.T, requests []recordedRequest, want []str
 func TestUpsertProjectVariable(t *testing.T) {
 	srv, requests := newRecordingServer(t, http.StatusOK)
 
-	err := New(srv.URL, "pat").UpsertProjectVariable(context.Background(), "csning1998-lab/parent-group-governance", Variable{Key: "TAG_PUSH_TOKEN", Value: "tag-token"})
+	err := New(srv.URL, "pat").UpsertProjectVariable(context.Background(), "example-group/example-governance", Variable{Key: "TAG_PUSH_TOKEN", Value: "tag-token"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "PUT /projects/csning1998-lab%2Fparent-group-governance/variables/TAG_PUSH_TOKEN"
+	want := "PUT /projects/example-group%2Fexample-governance/variables/TAG_PUSH_TOKEN"
 	if got := (*requests)[0].method + " " + (*requests)[0].path; got != want {
 		t.Fatalf("got %s, want %s", got, want)
 	}
@@ -163,7 +163,7 @@ func TestHasProject(t *testing.T) {
 
 // TestCreateGroupRunner asserts the group runner form and the rejection of a response without a token.
 func TestCreateGroupRunner(t *testing.T) {
-	runner := GroupRunner{GroupID: "137791469", Description: "shared-runner", TagList: []string{"podman", "local"}, Locked: true, RunUntagged: true}
+	runner := GroupRunner{GroupID: "1001", Description: "shared-runner", TagList: []string{"podman", "local"}, Locked: true, RunUntagged: true}
 	cases := map[string]struct {
 		response string
 		want     CreatedRunner
@@ -203,7 +203,7 @@ func newGroupRunnerServer(t *testing.T, response string) *httptest.Server {
 
 func checkGroupRunnerForm(t *testing.T, form url.Values) {
 	t.Helper()
-	if form.Get("runner_type") != "group_type" || form.Get("group_id") != "137791469" || form.Get("tag_list") != "podman,local" || form.Get("locked") != "true" || form.Get("run_untagged") != "true" {
+	if form.Get("runner_type") != "group_type" || form.Get("group_id") != "1001" || form.Get("tag_list") != "podman,local" || form.Get("locked") != "true" || form.Get("run_untagged") != "true" {
 		t.Fatalf("got form %v", form)
 	}
 }

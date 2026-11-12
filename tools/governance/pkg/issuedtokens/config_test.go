@@ -19,8 +19,6 @@ func TestLoad(t *testing.T) {
 func testLoadParsesTheSection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "workstation-topology.yaml")
 	content := `service_issued_tokens:
-  gitlab_api_url: "https://gitlab.com/api/v4"
-  gitlab_token_owner_code: "parent-group-governance"
   gitlab_group_registry:
     vault_kv_mount: "registry"
     vault_kv_path: "platform/gitlab-group/top-level"
@@ -31,7 +29,7 @@ func testLoadParsesTheSection(t *testing.T) {
     token_name_prefix: "gitlab-ci-analysis"
     vault:
       vault_kv_mount: "secret"
-      vault_kv_path: "parent-group-governance/sonarqube/ci-analysis-bot"
+      vault_kv_path: "example-governance/sonarqube/ci-analysis-bot"
       vault_kv_field: "sonarqube_ci_token"
     gitlab_group_variable_key: "SONAR_TOKEN"
 `
@@ -43,7 +41,7 @@ func testLoadParsesTheSection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.GitLabTokenOwnerCode != "parent-group-governance" || got.GitLabGroupRegistry != (VaultField{Mount: "registry", Path: "platform/gitlab-group/top-level", Field: "group_id"}) {
+	if got.GitLabGroupRegistry != (VaultField{Mount: "registry", Path: "platform/gitlab-group/top-level", Field: "group_id"}) {
 		t.Fatalf("got %+v", got)
 	}
 	sonar := got.SonarQubeAnalysisToken

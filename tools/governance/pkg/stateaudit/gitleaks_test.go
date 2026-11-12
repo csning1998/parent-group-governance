@@ -45,7 +45,7 @@ func TestGitleaksDetectorPassesPublicValues(t *testing.T) {
 	}
 	for key, value := range map[string]string{
 		"url":         "http://sonarqube:9000",
-		"address":     "https://gitlab.com/api/v4/projects/86417732/terraform/state/group-topology",
+		"address":     "https://gitlab.example.com/api/v4/projects/1002/terraform/state/group-topology",
 		"name":        "platform-cluster-issuer",
 		"mount_path":  "gitlab-saas-ci-job-jwt-provider",
 		"description": "Routed libvirt guests reach DHCP, DNS, and the Bastion Vault listener of the host.",

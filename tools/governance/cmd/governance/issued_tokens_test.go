@@ -126,6 +126,9 @@ func newIssuedTokensApp(t *testing.T, projects []string) (*app, *issuedVault, *i
 		topology:     issuedTopology(t, vaultSrv.URL, projects),
 		credentials:  []credentials.Credential{{Key: "sonarqube-admin-password", AdminUsername: "admin", Spec: secretrotate.Spec{Mount: "secret", Path: "parent-group-governance/sonarqube/admin-account", Field: "sonarqube_admin_password"}}},
 		issuedTokens: issuedConfig(servicesSrv.URL),
+		resolveOrigin: func(context.Context) (gitlabOrigin, error) {
+			return gitlabOrigin{WebURL: "https://gitlab.example.com", APIURL: servicesSrv.URL, TopLevelGroup: "example-group"}, nil
+		},
 	}
 	return a, vault, services
 }
@@ -143,17 +146,13 @@ func issuedTopology(t *testing.T, vaultURL string, projects []string) topology.V
 	return topology.VaultTopology{
 		BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200},
 		OperatorVaultProxy: topology.OperatorVaultProxy{
-			UserConfigDir:    issuedProxyDir,
-			PlaceholderToken: "proxy-supplied",
-			StateBackend:     topology.StateBackend{VaultKVMount: "secret", VaultKVField: "token"},
+			GovernanceOwnerCode: "parent-group-governance",
+			UserConfigDir:       issuedProxyDir,
+			PlaceholderToken:    "proxy-supplied",
+			StateBackend:        topology.StateBackend{VaultKVMount: "secret", VaultKVField: "token"},
 			Identities: map[string]topology.ProxyIdentity{
-				issuedAdminIdentity: {ListenPort: port, AccessTier: string(topology.AccessRoleAdministrator)},
-				"credential-distributor": {
-					AccessTier:                   "credential-distributor",
-					OwnerCode:                    "parent-group-governance",
-					StateBackendPath:             "parent-group-governance/terraform/state-backend",
-					CodeReviewerVariableProjects: projects,
-				},
+				issuedAdminIdentity: {ListenPort: port},
+				"credential-distributor-parent-group-governance": {CodeReviewerVariableProjects: projects},
 			},
 		},
 	}
@@ -161,9 +160,7 @@ func issuedTopology(t *testing.T, vaultURL string, projects []string) topology.V
 
 func issuedConfig(servicesURL string) issuedtokens.Config {
 	return issuedtokens.Config{
-		GitLabAPIURL:         servicesURL,
-		GitLabTokenOwnerCode: "parent-group-governance",
-		GitLabGroupRegistry:  issuedtokens.VaultField{Mount: "registry", Path: "platform/gitlab-group/top-level", Field: "group_id"},
+		GitLabGroupRegistry: issuedtokens.VaultField{Mount: "registry", Path: "platform/gitlab-group/top-level", Field: "group_id"},
 		SonarQubeAnalysisToken: issuedtokens.SonarQubeAnalysisTokenConfig{
 			UserTokensEndpoint:     servicesURL + "/api/user_tokens",
 			AdminPasswordKey:       "sonarqube-admin-password",
@@ -174,7 +171,6 @@ func issuedConfig(servicesURL string) issuedtokens.Config {
 		GitLabGroupRunner: issuedtokens.GitLabGroupRunnerConfig{
 			Description: "shared-runner",
 			TagList:     []string{"podman"},
-			GitLabURL:   "https://gitlab.com",
 			ConfigPath:  "gitlab-runner-configs/config.toml",
 		},
 		CodeReviewerVariables: issuedtokens.CodeReviewerVariablesConfig{BotTokens: []issuedtokens.ReviewerBotToken{
@@ -252,7 +248,7 @@ func TestRegisterGitLabGroupRunner(t *testing.T) {
 			t.Fatal(err)
 		}
 		content, err := os.ReadFile(filepath.Join(a.root, "gitlab-runner-configs/config.toml"))
-		if err != nil || !strings.Contains(string(content), `token        = "glrt-issued"`) {
+		if err != nil || !strings.Contains(string(content), `token        = "glrt-issued"`) || !strings.Contains(string(content), `url          = "https://gitlab.example.com"`) {
 			t.Fatalf("config.toml = %q, %v", content, err)
 		}
 		assertRequestsInclude(t, services.recorded(), "POST /user/runners")
@@ -273,20 +269,20 @@ func TestPublishCodeReviewerVariables(t *testing.T) {
 		wantErr       string
 		wantRequests  []string
 	}{
-		"writes both variables into the listed project": {
-			projects:     []string{"personal/second-brain"},
-			wantRequests: []string{"PUT /projects/personal%2Fsecond-brain/variables/REVIEW_MR_REVIEWER", "PUT /projects/personal%2Fsecond-brain/variables/TAG_PUSH_TOKEN"},
+		"writes both variables into the listed project below the top-level group": {
+			projects:     []string{"example-subgroup/example-project"},
+			wantRequests: []string{"PUT /projects/example-group%2Fexample-subgroup%2Fexample-project/variables/REVIEW_MR_REVIEWER", "PUT /projects/example-group%2Fexample-subgroup%2Fexample-project/variables/TAG_PUSH_TOKEN"},
 		},
 		"refuses an empty project list": {
 			wantErr: "lists code_reviewer_variable_projects",
 		},
 		"reports a missing GitLab token": {
-			projects:   []string{"personal/second-brain"},
+			projects:   []string{"example-subgroup/example-project"},
 			dropSecret: "secret/parent-group-governance/terraform/state-backend",
 			wantErr:    "read secret/parent-group-governance/terraform/state-backend",
 		},
 		"refuses an empty bot token list": {
-			projects:      []string{"personal/second-brain"},
+			projects:      []string{"example-subgroup/example-project"},
 			emptyBotToken: true,
 			wantErr:       "lists no bot_tokens",
 		},

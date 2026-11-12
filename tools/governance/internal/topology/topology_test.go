@@ -74,12 +74,10 @@ operator_vault_proxy:
   user_config_dir: ".config/vault-proxy"
   placeholder_token: "proxy-supplied"
   identities:
-    credential-distributor:
+    credential-distributor-example-governance:
       listen_port: 8210
-      access_tier: "credential-distributor"
     credential-rotator:
       listen_port: 8213
-      access_tier: "credential-rotator"
 `)
 	topo, err := Load(path)
 	if err != nil {
@@ -103,10 +101,10 @@ operator_vault_proxy:
 	}
 }
 
-func TestResolveProxyEndpoint_RequiresExactlyOneIdentity(t *testing.T) {
+func TestResolveProxyEndpoint_RequiresTheIdentityOfTheAccess(t *testing.T) {
 	topo := VaultTopology{OperatorVaultProxy: OperatorVaultProxy{Identities: map[string]ProxyIdentity{
-		"first":  {ListenPort: 1, AccessTier: "credential-rotator"},
-		"second": {ListenPort: 2, AccessTier: "credential-rotator"},
+		"credential-distributor-example-governance": {ListenPort: 1},
+		"example-tenant": {ListenPort: 2},
 	}}}
 	for _, access := range []AccessRole{AccessRoleCredentialRotator, AccessRoleAdministrator} {
 		if _, err := topo.ResolveProxyEndpoint("/home/u", access); err == nil {
@@ -115,27 +113,20 @@ func TestResolveProxyEndpoint_RequiresExactlyOneIdentity(t *testing.T) {
 	}
 }
 
-// stateBackendTopology defines fixture topology containing distributor and consumer identities with state backend mappings.
+// stateBackendTopology defines fixture topology containing distributor and consumer identities of two owners.
 const stateBackendTopology = `vault_bastion:
   loopback_address: "127.0.0.1"
   publish_address: "172.16.0.1"
   api_port: 8200
 operator_vault_proxy:
+  governance_owner_code: "example-governance"
   state_backend:
     vault_kv_mount: "secret"
     vault_kv_field: "token"
   identities:
-    credential-distributor:
-      access_tier: "credential-distributor"
-      owner_code: "parent-group-governance"
-      state_backend_path: "parent-group-governance/terraform/state-backend"
-    consumer-parent-group-governance:
-      access_tier: "consumer"
-      owner_code: "parent-group-governance"
-      state_backend_path: "parent-group-governance/terraform/consumer-state-backend"
-    credential-distributor-personal:
-      access_tier: "credential-distributor"
-      owner_code: "personal"
+    credential-distributor-example-governance: {}
+    consumer-example-governance: {}
+    credential-distributor-example-tenant: {}
 `
 
 // TestListCodeReviewerVariableProjects asserts byte-order sorting and deduplication across configured project paths.
@@ -147,18 +138,34 @@ func TestListCodeReviewerVariableProjects(t *testing.T) {
 operator_vault_proxy:
   identities:
     credential-distributor-personal:
-      code_reviewer_variable_projects: ["personal/second-brain", "personal/LaTeX_Documents"]
-    credential-distributor:
-      code_reviewer_variable_projects: ["csning1998-lab/parent-group-governance", "personal/second-brain"]
-    administrator:
-      access_tier: "administrator"
+      code_reviewer_variable_projects: ["example-subgroup/project-b", "example-subgroup/Project_A"]
+    credential-distributor-example-governance:
+      code_reviewer_variable_projects: ["example-governance", "example-subgroup/project-b"]
+    administrator: {}
 `))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	want := []string{"csning1998-lab/parent-group-governance", "personal/LaTeX_Documents", "personal/second-brain"}
-	if got := topo.ListCodeReviewerVariableProjects(); !slices.Equal(got, want) {
+	want := []string{"example-group/example-governance", "example-group/example-subgroup/Project_A", "example-group/example-subgroup/project-b"}
+	if got := topo.ListCodeReviewerVariableProjects("example-group"); !slices.Equal(got, want) {
 		t.Errorf("ListCodeReviewerVariableProjects() = %v, want %v", got, want)
+	}
+}
+
+// TestResolveIdentityRole asserts the access tier, owner code, and state backend path which the identity name determines.
+func TestResolveIdentityRole(t *testing.T) {
+	proxy := OperatorVaultProxy{GovernanceOwnerCode: "example-governance"}
+	cases := map[string]IdentityRole{
+		"administrator":                         {AccessTier: "administrator", OwnerCode: "example-governance", StateBackendPath: "example-governance/terraform/state-backend"},
+		"credential-rotator":                    {AccessTier: "credential-rotator", OwnerCode: "example-governance"},
+		"credential-distributor-example-tenant": {AccessTier: "credential-distributor", OwnerCode: "example-tenant", StateBackendPath: "example-tenant/terraform/state-backend"},
+		"consumer-example-tenant":               {AccessTier: "consumer", OwnerCode: "example-tenant", StateBackendPath: "example-tenant/terraform/state-backend"},
+		"example-tenant":                        {AccessTier: "tenant", OwnerCode: "example-tenant", StateBackendPath: "example-tenant/terraform/state-backend"},
+	}
+	for name, want := range cases {
+		if got := proxy.ResolveIdentityRole(name); got != want {
+			t.Errorf("ResolveIdentityRole(%s) = %+v, want %+v", name, got, want)
+		}
 	}
 }
 
@@ -173,12 +180,15 @@ func TestResolveStateBackendToken(t *testing.T) {
 		want      KVField
 		wantErr   bool
 	}{
-		"distributor identity matching the owner code": {
-			ownerCode: "parent-group-governance",
-			want:      KVField{Mount: "secret", Path: "parent-group-governance/terraform/state-backend", Field: "token"},
+		"the governance distributor": {
+			ownerCode: "example-governance",
+			want:      KVField{Mount: "secret", Path: "example-governance/terraform/state-backend", Field: "token"},
 		},
-		"a distributor without a state_backend_path": {ownerCode: "personal", wantErr: true},
-		"an owner code without a distributor":        {ownerCode: "platform-foundation", wantErr: true},
+		"the distributor of another owner": {
+			ownerCode: "example-tenant",
+			want:      KVField{Mount: "secret", Path: "example-tenant/terraform/state-backend", Field: "token"},
+		},
+		"an owner code without a distributor": {ownerCode: "example-absent", wantErr: true},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -25,7 +26,11 @@ const (
 	AccessRoleCredentialRotator AccessRole = "credential-rotator"
 )
 
-const accessTierCredentialDistributor = "credential-distributor"
+const (
+	accessTierCredentialDistributor = "credential-distributor"
+	accessTierConsumer              = "consumer"
+	accessTierTenant                = "tenant"
+)
 
 // BastionVault is the listener topology of the Bastion Vault server.
 type BastionVault struct {
@@ -43,19 +48,44 @@ func (b BastionVault) APIEndpoint() string {
 
 // ProxyIdentity defines one operator proxy instance listening on loopback and mapping to a Vault cert role.
 type ProxyIdentity struct {
-	ListenPort       int    `yaml:"listen_port"`        // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)
-	AccessTier       string `yaml:"access_tier"`        // logical privilege tier of the operator role (credential-distributor, consumer, tenant, administrator, credential-rotator)
-	OwnerCode        string `yaml:"owner_code"`         // repository owner code of a distributor or consumer identity
-	StateBackendPath string `yaml:"state_backend_path"` // KV v2 secret path storing the GitLab state backend token for this owner
+	ListenPort int `yaml:"listen_port"` // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)
 
-	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // target GitLab projects designated to receive code reviewer CI/CD variables
+	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // project paths below the top-level group which receive code reviewer CI/CD variables
 }
 
-// ListCodeReviewerVariableProjects returns sorted and deduplicated project paths aggregated across all proxy identities.
-func (v VaultTopology) ListCodeReviewerVariableProjects() []string {
+// IdentityRole is the access tier, owner code, and state backend path which the name of an identity determines.
+type IdentityRole struct {
+	AccessTier       string
+	OwnerCode        string
+	StateBackendPath string // empty for the credential-rotator, which runs no Terraform
+}
+
+// ResolveIdentityRole derives the role of the identity name from the naming rule of workstation-topology.yaml.
+// The administrator and the credential-rotator carry the governance owner code, a credential-distributor or consumer
+// name joins the tier and the owner code, and every other name is a tenant named after its owner code.
+func (o OperatorVaultProxy) ResolveIdentityRole(name string) IdentityRole {
+	role := IdentityRole{AccessTier: accessTierTenant, OwnerCode: name}
+	switch {
+	case name == string(AccessRoleAdministrator) || name == string(AccessRoleCredentialRotator):
+		role = IdentityRole{AccessTier: name, OwnerCode: o.GovernanceOwnerCode}
+	case strings.HasPrefix(name, accessTierCredentialDistributor+"-"):
+		role = IdentityRole{AccessTier: accessTierCredentialDistributor, OwnerCode: strings.TrimPrefix(name, accessTierCredentialDistributor+"-")}
+	case strings.HasPrefix(name, accessTierConsumer+"-"):
+		role = IdentityRole{AccessTier: accessTierConsumer, OwnerCode: strings.TrimPrefix(name, accessTierConsumer+"-")}
+	}
+	if role.AccessTier != string(AccessRoleCredentialRotator) {
+		role.StateBackendPath = role.OwnerCode + "/terraform/state-backend"
+	}
+	return role
+}
+
+// ListCodeReviewerVariableProjects returns the sorted and deduplicated project paths of every identity below topLevelGroup.
+func (v VaultTopology) ListCodeReviewerVariableProjects(topLevelGroup string) []string {
 	var paths []string
 	for _, identity := range v.OperatorVaultProxy.Identities {
-		paths = append(paths, identity.CodeReviewerVariableProjects...)
+		for _, project := range identity.CodeReviewerVariableProjects {
+			paths = append(paths, topLevelGroup+"/"+project)
+		}
 	}
 	slices.Sort(paths)
 	return slices.Compact(paths)
@@ -69,6 +99,8 @@ type StateBackend struct {
 
 // OperatorVaultProxy holds client connection parameters and identity mappings for operator Vault proxies.
 type OperatorVaultProxy struct {
+	GovernanceOwnerCode string `yaml:"governance_owner_code"` // owner code of this repository, which the administrator and the credential-rotator carry
+
 	CertAuthMount    string                   `yaml:"cert_auth_mount"`   // Vault TLS certificate auth mount path matching CN operator-<identity>
 	UserConfigDir    string                   `yaml:"user_config_dir"`   // directory relative to user $HOME storing mTLS client certs and systemd units
 	PlaceholderToken string                   `yaml:"placeholder_token"` // dummy token string required by client headers, which the proxy strips and replaces
@@ -86,13 +118,14 @@ type KVField struct {
 // ResolveStateBackendToken returns the KV v2 location of the GitLab token for the given ownerCode distributor.
 func (v VaultTopology) ResolveStateBackendToken(ownerCode string) (KVField, error) {
 	var paths []string
-	for _, identity := range v.OperatorVaultProxy.Identities {
-		if identity.AccessTier == accessTierCredentialDistributor && identity.OwnerCode == ownerCode {
-			paths = append(paths, identity.StateBackendPath)
+	for name := range v.OperatorVaultProxy.Identities {
+		role := v.OperatorVaultProxy.ResolveIdentityRole(name)
+		if role.AccessTier == accessTierCredentialDistributor && role.OwnerCode == ownerCode {
+			paths = append(paths, role.StateBackendPath)
 		}
 	}
-	if len(paths) != 1 || paths[0] == "" {
-		return KVField{}, fmt.Errorf("topology: operator_vault_proxy MUST declare exactly one %s identity with owner_code %s and a state_backend_path, found %v", accessTierCredentialDistributor, ownerCode, paths)
+	if len(paths) != 1 {
+		return KVField{}, fmt.Errorf("topology: operator_vault_proxy MUST declare the identity %s-%s, found %d", accessTierCredentialDistributor, ownerCode, len(paths))
 	}
 	backend := v.OperatorVaultProxy.StateBackend
 	return KVField{Mount: backend.VaultKVMount, Path: paths[0], Field: backend.VaultKVField}, nil
@@ -108,17 +141,31 @@ type ProxyEndpoint struct {
 	Token      string // dummy placeholder token (proxy-supplied), which the proxy replaces via mTLS
 }
 
+// HostTelemetryRegistry locates the host telemetry scrape segment, which foundation-vault-bastion publishes in the registry.
+type HostTelemetryRegistry struct {
+	Mount        string `yaml:"vault_kv_mount"`
+	Path         string `yaml:"vault_kv_path"`
+	CIDRField    string `yaml:"cidr_field"`
+	AddressField string `yaml:"address_field"`
+}
+
+// HostTelemetryScrape declares the registry location of the segment on which observability scrapers reach the host.
+type HostTelemetryScrape struct {
+	Registry HostTelemetryRegistry `yaml:"registry"`
+}
+
 // VaultTopology represents the Bastion Vault and operator proxy network endpoints declared in workstation-topology.yaml.
 type VaultTopology struct {
-	BastionVault       BastionVault       `yaml:"vault_bastion"`        // Bastion Vault network listener bindings
-	OperatorVaultProxy OperatorVaultProxy `yaml:"operator_vault_proxy"` // local operator mTLS proxies configuration
+	BastionVault        BastionVault        `yaml:"vault_bastion"`         // Bastion Vault network listener bindings
+	OperatorVaultProxy  OperatorVaultProxy  `yaml:"operator_vault_proxy"`  // local operator mTLS proxies configuration
+	HostTelemetryScrape HostTelemetryScrape `yaml:"host_telemetry_scrape"` // host segment of the observability scrapers
 }
 
 // ResolveProxyEndpoint resolves the proxy connection parameters of the single identity with access role.
 func (v VaultTopology) ResolveProxyEndpoint(home string, role AccessRole) (ProxyEndpoint, error) {
 	var names []string
-	for name, identity := range v.OperatorVaultProxy.Identities {
-		if identity.AccessTier == string(role) {
+	for name := range v.OperatorVaultProxy.Identities {
+		if v.OperatorVaultProxy.ResolveIdentityRole(name).AccessTier == string(role) {
 			names = append(names, name)
 		}
 	}

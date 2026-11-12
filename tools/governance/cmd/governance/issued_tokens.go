@@ -56,7 +56,7 @@ func (a *app) newAdministratorKV() (vaultKV, error) {
 
 // newGitLabClient authenticates against the GitLab API using the owner state backend token and resolves the top-level group ID.
 func (a *app) newGitLabClient(ctx context.Context, kv vaultKV) (*gitlabapi.Client, string, error) {
-	location, err := a.topology.ResolveStateBackendToken(a.issuedTokens.GitLabTokenOwnerCode)
+	location, err := a.topology.ResolveStateBackendToken(a.topology.OperatorVaultProxy.GovernanceOwnerCode)
 	if err != nil {
 		return nil, "", err
 	}
@@ -68,7 +68,11 @@ func (a *app) newGitLabClient(ctx context.Context, kv vaultKV) (*gitlabapi.Clien
 	if err != nil {
 		return nil, "", err
 	}
-	return gitlabapi.New(a.issuedTokens.GitLabAPIURL, token), groupID, nil
+	origin, err := a.resolveOrigin(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return gitlabapi.New(origin.APIURL, token), groupID, nil
 }
 
 // issueSonarQubeAnalysisToken rotates the group CI analysis token and revokes prior tokens.
@@ -119,8 +123,12 @@ func (a *app) registerGitLabGroupRunner(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	origin, err := a.resolveOrigin(ctx)
+	if err != nil {
+		return err
+	}
 	path := filepath.Join(a.root, cfg.ConfigPath)
-	id, err := issuedtokens.GroupRunnerRegistration{Config: cfg, GroupID: groupID, ConfigPath: path, GitLab: gitlab}.Run(ctx)
+	id, err := issuedtokens.GroupRunnerRegistration{Config: cfg, GitLabURL: origin.WebURL, GroupID: groupID, ConfigPath: path, GitLab: gitlab}.Run(ctx)
 	if err != nil {
 		return err
 	}
@@ -133,7 +141,11 @@ func (a *app) publishCodeReviewerVariables(ctx context.Context) error {
 	if len(a.issuedTokens.CodeReviewerVariables.BotTokens) == 0 {
 		return fmt.Errorf("service_issued_tokens.code_reviewer_variables lists no bot_tokens")
 	}
-	projects := a.topology.ListCodeReviewerVariableProjects()
+	origin, err := a.resolveOrigin(ctx)
+	if err != nil {
+		return err
+	}
+	projects := a.topology.ListCodeReviewerVariableProjects(origin.TopLevelGroup)
 	if len(projects) == 0 {
 		return fmt.Errorf("no identity of operator_vault_proxy lists code_reviewer_variable_projects")
 	}

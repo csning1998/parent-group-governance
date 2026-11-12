@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/gitremote"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultenv"
@@ -28,6 +30,15 @@ type app struct {
 	env          *config.Env
 	out          *ui.Printer
 	in           *bufio.Reader
+
+	resolveOrigin func(context.Context) (gitlabOrigin, error) // GitLab instance and top-level group of the origin remote
+}
+
+// gitlabOrigin is the GitLab instance and the top-level group which the origin remote of the repository names.
+type gitlabOrigin struct {
+	WebURL        string
+	APIURL        string
+	TopLevelGroup string
 }
 
 func execute(args []string) int {
@@ -63,6 +74,13 @@ func execute(args []string) int {
 		ansibleDir: filepath.Join(root, "ansible"),
 		out:        out,
 		in:         bufio.NewReader(os.Stdin),
+		resolveOrigin: func(ctx context.Context) (gitlabOrigin, error) {
+			remote, err := gitremote.Resolve(ctx, root)
+			if err != nil {
+				return gitlabOrigin{}, err
+			}
+			return gitlabOrigin{WebURL: remote.WebURL(), APIURL: remote.APIURL(), TopLevelGroup: remote.TopLevelGroup()}, nil
+		},
 	}
 
 	topologyPath := filepath.Join(root, topology.FileName)

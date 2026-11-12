@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultops"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/issuedtokens"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/secretrotate"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
@@ -71,21 +73,28 @@ func (a *app) buildProxyConfig(role topology.AccessRole) (vaultclient.Config, er
 func (a *app) buildSELinuxPlaybook() (hostPlaybook, error) {
 	return hostPlaybook{
 		file:      "playbooks/workstation_selinux.yaml",
-		extraVars: map[string]any{"workstation_selinux_home": a.home},
+		extraVars: map[string]any{"workstation_selinux_home": a.home, "workstation_selinux_repository": a.root},
 		doneMsg:   "Workstation SELinux policy and file contexts applied.",
 	}, nil
 }
 
-func (a *app) buildVaultProxyPlaybook() (hostPlaybook, error) {
+// buildVaultProxyPlaybook injects the GitLab instance and the top-level group of origin, which vault-proxy-env exports.
+func (a *app) buildVaultProxyPlaybook(ctx context.Context) (hostPlaybook, error) {
 	facts, err := config.DetectHostFacts()
+	if err != nil {
+		return hostPlaybook{}, err
+	}
+	origin, err := a.resolveOrigin(ctx)
 	if err != nil {
 		return hostPlaybook{}, err
 	}
 	return hostPlaybook{
 		file: "playbooks/workstation_vault_proxy.yaml",
 		extraVars: map[string]any{
-			"workstation_vault_proxy_operator_user": facts.CurrentUname,
-			"workstation_vault_proxy_ca_dir":        a.newVaultPaths().TLSDir(),
+			"workstation_vault_proxy_operator_user":               facts.CurrentUname,
+			"workstation_vault_proxy_ca_dir":                      a.newVaultPaths().TLSDir(),
+			"workstation_vault_proxy_gitlab_url":                  origin.WebURL,
+			"workstation_vault_proxy_gitlab_top_level_group_path": origin.TopLevelGroup,
 		},
 		doneMsg: "Workstation Vault Proxies applied.",
 	}, nil
@@ -289,7 +298,7 @@ func (a *app) runHostAll(ctx context.Context) error {
 		return err
 	}
 
-	proxyPB, err := a.buildVaultProxyPlaybook()
+	proxyPB, err := a.buildVaultProxyPlaybook(ctx)
 	if err != nil {
 		return err
 	}
@@ -328,7 +337,46 @@ func (a *app) runHostSELinuxPlaybook(ctx context.Context) error {
 }
 
 func (a *app) runHostVaultProxyPlaybook(ctx context.Context) error {
-	return a.runHostPlaybooks(ctx, a.buildVaultProxyPlaybook)
+	return a.runHostPlaybooks(ctx, func() (hostPlaybook, error) { return a.buildVaultProxyPlaybook(ctx) })
+}
+
+// buildHostTelemetryPlaybook injects the host telemetry scrape segment, which the registry holds after foundation-vault-bastion.
+func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, error) {
+	kv, err := a.newAdministratorKV()
+	if err != nil {
+		return hostPlaybook{}, err
+	}
+	registry := a.topology.HostTelemetryScrape.Registry
+	cidr, err := kv.ReadField(ctx, issuedtokens.VaultField{Mount: registry.Mount, Path: registry.Path, Field: registry.CIDRField})
+	if err != nil {
+		return hostPlaybook{}, err
+	}
+	address, err := kv.ReadField(ctx, issuedtokens.VaultField{Mount: registry.Mount, Path: registry.Path, Field: registry.AddressField})
+	if err != nil {
+		return hostPlaybook{}, err
+	}
+	// The terminator serves the metrics on the address with the publish certificate, which therefore names the address.
+	if _, err := vaultops.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(address)); err != nil {
+		return hostPlaybook{}, err
+	}
+	facts, err := config.DetectHostFacts()
+	if err != nil {
+		return hostPlaybook{}, err
+	}
+	return hostPlaybook{
+		file: "playbooks/workstation_host_telemetry.yaml",
+		extraVars: map[string]any{
+			"workstation_host_telemetry_scrape_cidr":    cidr,
+			"workstation_host_telemetry_scrape_address": address,
+			"workstation_libvirt_operator_user":         facts.CurrentUname,
+			"workstation_libvirt_vault_config_path":     filepath.Join(a.root, "vault", "vault.hcl"),
+		},
+		doneMsg: "Host telemetry scrape network applied.",
+	}, nil
+}
+
+func (a *app) runHostTelemetryPlaybook(ctx context.Context) error {
+	return a.runHostPlaybooks(ctx, func() (hostPlaybook, error) { return a.buildHostTelemetryPlaybook(ctx) })
 }
 
 func (a *app) buildVaultAuditPlaybook() hostPlaybook {

@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -79,6 +80,75 @@ func GenerateTLS(dir string, listeners Listeners) error {
 		return err
 	}
 	return issueTerminatorClientCert(dir)
+}
+
+// EnsurePublishCertCovers reissues the publish listener certificate with address added to the SAN, signed by the
+// EC P-384 CA, when the certificate lacks address. The result reports whether the call reissued the certificate.
+func EnsurePublishCertCovers(dir string, address net.IP) (bool, error) {
+	if address == nil {
+		return false, errors.New("vaultops: the publish certificate needs a valid IP address to cover")
+	}
+	current, err := readCertificate(filepath.Join(dir, tlsNamePublish+".pem"))
+	if err != nil {
+		return false, err
+	}
+	if slices.ContainsFunc(current.IPAddresses, address.Equal) {
+		return false, nil
+	}
+	ca, err := loadSigningCA(dir, tlsNameECCA)
+	if err != nil {
+		return false, err
+	}
+	template := &x509.Certificate{
+		Subject:     current.Subject,
+		IPAddresses: append(slices.Clone(current.IPAddresses), address),
+	}
+	if err := issueListenerCert(dir, tlsNamePublish, template, ca, generateECP384Key); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func readCertificate(path string) (*x509.Certificate, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("vaultops: read %s: %w", path, err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, fmt.Errorf("vaultops: %s holds no CERTIFICATE block", path)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("vaultops: parse %s: %w", path, err)
+	}
+	return cert, nil
+}
+
+// loadSigningCA reads the CA certificate <name>.pem and the PKCS #8 key <name>-key.pem which issueSelfSignedRootCA wrote.
+func loadSigningCA(dir, name string) (signingCA, error) {
+	cert, err := readCertificate(filepath.Join(dir, name+".pem"))
+	if err != nil {
+		return signingCA{}, err
+	}
+	keyPath := filepath.Join(dir, name+"-key.pem")
+	data, err := os.ReadFile(keyPath)
+	if err != nil {
+		return signingCA{}, fmt.Errorf("vaultops: read %s: %w", keyPath, err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil || block.Type != "PRIVATE KEY" {
+		return signingCA{}, fmt.Errorf("vaultops: %s holds no PRIVATE KEY block", keyPath)
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return signingCA{}, fmt.Errorf("vaultops: parse %s: %w", keyPath, err)
+	}
+	key, ok := parsed.(crypto.Signer)
+	if !ok {
+		return signingCA{}, fmt.Errorf("vaultops: %s holds no signing key", keyPath)
+	}
+	return signingCA{cert: cert, key: key}, nil
 }
 
 // EnsureTerminatorClientCert issues the terminator client certificate when the directory holds none, and reports

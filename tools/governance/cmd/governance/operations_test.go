@@ -43,11 +43,11 @@ func newOperationsApp(t *testing.T, answer string, withLocalCA bool, identities 
 }
 
 func administratorOnly() map[string]topology.ProxyIdentity {
-	return map[string]topology.ProxyIdentity{"example-administrator": {ListenPort: 8212, AccessTier: string(topology.AccessRoleAdministrator)}}
+	return map[string]topology.ProxyIdentity{string(topology.AccessRoleAdministrator): {ListenPort: 8212}}
 }
 
 func rotatorOnly() map[string]topology.ProxyIdentity {
-	return map[string]topology.ProxyIdentity{"example-rotator": {ListenPort: 8213, AccessTier: string(topology.AccessRoleCredentialRotator)}}
+	return map[string]topology.ProxyIdentity{string(topology.AccessRoleCredentialRotator): {ListenPort: 8213}}
 }
 
 func assertOperationError(t *testing.T, err error, want string) {
@@ -94,7 +94,7 @@ func TestNewRotationClientResolvesTheCredentialRotatorIdentity(t *testing.T) {
 		want       string
 	}{
 		{name: "no credential-rotator identity", identities: administratorOnly(), want: "access_tier credential-rotator"},
-		{name: "no client certificate", identities: rotatorOnly(), want: "example-rotator/client.pem"},
+		{name: "no client certificate", identities: rotatorOnly(), want: "credential-rotator/client.pem"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

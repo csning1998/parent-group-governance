@@ -77,6 +77,29 @@ func TestRunHostVaultAuditPlaybook_InjectsTheOperatorPathsWithoutBecome(t *testi
 	}
 }
 
+func TestRunHostAll_InjectsTheRepositoryAndTheGitLabOrigin(t *testing.T) {
+	f := newHostFixture(t, "example-become", "")
+
+	err := f.a.runHostAll(context.Background())
+	if err != nil {
+		t.Fatalf("runHostAll: %v", err)
+	}
+	calls := f.calls(t)
+	if len(calls) != 3 {
+		t.Fatalf("calls = %q, want the SELinux, libvirt, and Vault Proxy runs", calls)
+	}
+	for _, want := range []string{"workstation_selinux_repository", f.a.root} {
+		if !strings.Contains(calls[0], want) {
+			t.Errorf("SELinux call %q, want the extra var fragment %s", calls[0], want)
+		}
+	}
+	for _, want := range []string{"workstation_vault_proxy_gitlab_url", "https://gitlab.example.com", "workstation_vault_proxy_gitlab_top_level_group_path", "example-group"} {
+		if !strings.Contains(calls[2], want) {
+			t.Errorf("Vault Proxy call %q, want the extra var fragment %s", calls[2], want)
+		}
+	}
+}
+
 func TestRunHostAll_KeepsAnExistingLocalCA(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
 	caFile := filepath.Join(f.a.root, "vault", "tls", "ca-ml-dsa-87.pem")
@@ -183,6 +206,9 @@ func newHostFixture(t *testing.T, becomeAnswer, failOn string) *hostFixture {
 			topology:   topology.VaultTopology{BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200}},
 			out:        ui.New(io.Discard, io.Discard),
 			in:         bufio.NewReader(strings.NewReader(becomeAnswer + "\n")),
+			resolveOrigin: func(context.Context) (gitlabOrigin, error) {
+				return gitlabOrigin{WebURL: "https://gitlab.example.com", APIURL: "https://gitlab.example.com/api/v4", TopLevelGroup: "example-group"}, nil
+			},
 		},
 		log: log,
 	}

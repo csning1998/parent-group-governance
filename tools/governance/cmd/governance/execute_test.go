@@ -23,7 +23,7 @@ func TestExecuteQuitsTheRootMenu(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writer.Write([]byte("14\n")); err != nil {
+	if _, err := writer.Write([]byte("15\n")); err != nil {
 		t.Fatal(err)
 	}
 	if err := writer.Close(); err != nil {
