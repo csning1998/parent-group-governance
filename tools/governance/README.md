@@ -2010,7 +2010,7 @@ return lastErr
 
 ### Item C. 操作實作
 
-`operations.go` 是兩個介面共用的業務邏輯收斂點，負責管理開發機環境準備、Vault 初始化防禦、權限代理與憑證操作：
+`operations.go` 與 `host_playbooks.go` 是兩個介面共用的業務邏輯收斂點。`operations.go` 負責 Vault 初始化防禦、權限代理與憑證操作，`host_playbooks.go` 負責開發機環境準備：
 
 #### 1. Bastion Vault 初始化防禦（`initVault`）
 
@@ -2048,7 +2048,7 @@ return op.Init(ctx)
 
 若有服務明確拒絕出廠密碼（`!fresh`），代表該服務在先前的運作中已經被輪替過並持有新密碼，但即將初始化的 Bastion Vault 是一座全新且空白的保險箱，無法復原被服務持久化留存的密碼雜湊。如果這時允許執行 `vault init`，線上服務的密碼就會徹底脫節變成孤兒。因此程式會直接回傳 `errRetainedServiceState` 拒絕初始化，強制要求維運人員依 _Section 4 Item D_ 重建服務容器回到出廠狀態後再行操作。
 
-#### 2. Workstation Playbook 流程與一鍵串接（`runHostPlaybooks` 與 `runHostAll`）
+#### 2. Workstation Playbook 流程與一鍵串接（`runHostSteps` 與 `runHostAll`）
 
 開發機前置環境由三支 Playbook 組裝而成：
 
@@ -2056,7 +2056,7 @@ return op.Init(ctx)
 - `buildLibvirtPlaybook`：執行 `playbooks/workstation_libvirt.yaml`，注入 `workstation_libvirt_operator_user`（透過 `config.DetectHostFacts()` 取得）與 `workstation_libvirt_vault_config_path`（指向 `vault/vault.hcl`）。
 - `buildVaultProxyPlaybook`：執行 `playbooks/workstation_vault_proxy.yaml`，注入 `workstation_vault_proxy_operator_user`、`workstation_vault_proxy_ca_dir`（指向 `vault/tls`），以及 origin remote 推導出的 `workstation_vault_proxy_gitlab_url` 與 `workstation_vault_proxy_gitlab_top_level_group_path`。`vault-proxy-env` 把後兩者匯出為 `GITLAB_URL` 與 `GITLAB_TOP_LEVEL_GROUP_PATH`。
 
-這三支 playbook 由 `runHostPlaybooks` 統一調度。它在最前端一次性索取提權密碼，留白視為取消：
+每個步驟是一個 `hostStep`，`playbookStep` 把一支 playbook 包成步驟，由 `runHostSteps` 統一調度。它在最前端一次性索取提權密碼，留白視為取消：
 
 ```go
 becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
@@ -2071,14 +2071,14 @@ if becomePass == "" {
 
 留白等同取消，而不是帶著空密碼去跑 playbook，因為空密碼一定會在第一個提權任務失敗，屆時錯誤訊息出現在 Ansible 的輸出裡，遠不如在這裡直接停下來清楚。
 
-`runHostAll` 則依據前置引導的先後順序，一鍵串聯全部環境配置：
+`runHostAll` 以 `runHostSteps` 依據前置引導的先後順序，一鍵串聯全部環境配置：
 
 1. 套用 SELinux 政策與檔案上下文（`buildSELinuxPlaybook`）。
 2. 檢查本機憑證中心（`ensureLocalCA`）：檢查 `vault/tls/ca-ml-dsa-87.pem` 是否存在，若缺少 CA 則自動調用 `vaultops.GenerateTLS` 建立本機 CA、兩張 listener 憑證與終結點的客戶端憑證。CA 已存在時，只以 `vaultops.EnsureTerminatorClientCert` 補上缺少的終結點客戶端憑證。
 3. 配置 Libvirt 虛擬網路，並產生 Bastion Vault 與 TLS 終結點的設定檔（`buildLibvirtPlaybook`）。這一步會斷言終結點掛載的 `publish.pem`、`publish-key.pem`、`ca-ml-dsa-87.pem`、`terminator-client.pem` 與 `terminator-client-key.pem` 已存在，所以排在本機憑證中心之後。
 4. 部署本機 Vault Proxies（`buildVaultProxyPlaybook`），Proxy 的客戶端憑證由本機 CA 簽發。
 
-`buildHostTelemetryPlaybook` 經 `administrator` 的 Vault Proxy 讀取 `host_telemetry_scrape.registry` 指向的 249 網段與主機位址，以 `vaultops.EnsurePublishCertCovers` 讓 `publish.pem` 的 SAN 包含該位址，再執行 `playbooks/workstation_host_telemetry.yaml`，注入網段、位址，以及 libvirt role 重新渲染 `haproxy.cfg` 所需的 `workstation_libvirt_operator_user` 與 `workstation_libvirt_vault_config_path`。網段由 `foundation-vault-bastion` 計算並寫入 registry，這支 playbook 因此不在 `runHostAll` 內。
+`buildHostTelemetryPlaybook` 經 `administrator` 的 Vault Proxy 讀取 `host_telemetry_scrape.registry` 指向的 249 網段與主機位址，以 `vaultops.EnsurePublishCertCovers` 讓 `publish.pem` 的 SAN 包含該位址，再執行 `playbooks/workstation_host_telemetry.yaml`，注入網段、位址，以及 libvirt role 渲染 `haproxy-telemetry.cfg` 所需的 `workstation_libvirt_operator_user` 與 `workstation_libvirt_vault_config_path`。網段由 `foundation-vault-bastion` 計算並寫入 registry，這支 playbook 因此不在 `runHostAll` 內。
 
 `buildVaultAuditPlaybook` 執行 `playbooks/workstation_vault_audit.yaml`，注入 `workstation_vault_audit_home: a.home` 與 `workstation_vault_audit_repository: a.root`。audit 檢查的 systemd unit 安裝在操作者的 user manager，playbook 宣告 `become: false`，所以 `runHostVaultAuditPlaybook` 不索取提權密碼。audit device 由 `foundation-vault-bastion` 建立，這支 playbook 因此不在 `runHostAll` 內，依部署順序在該 layer apply 之後單獨執行。
 

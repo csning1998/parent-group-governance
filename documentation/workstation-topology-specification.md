@@ -58,7 +58,7 @@ The `vault_bastion` map configures the network listener endpoints bound by the l
 - Type: `integer` (TCP port number)
 - Default: `8202`
 - Constraint: The port MUST be a valid, unprivileged TCP port (1024-65535).
-- Semantics: TCP port exposing Prometheus telemetry metrics without authentication. Vault binds the port on the loopback address, and the TLS terminator binds the port on the publish address and admits `GET /v1/sys/metrics` alone.
+- Semantics: TCP port exposing Prometheus telemetry metrics without authentication. Vault binds the port on the loopback address, the TLS terminator binds the port on the publish address, and the telemetry terminator binds the port on the host telemetry scrape address. Both terminators admit `GET /v1/sys/metrics` alone.
 
 #### `vault_bastion.publish_backend_port`
 
@@ -73,7 +73,7 @@ The `vault_bastion` map configures the network listener endpoints bound by the l
 - Semantics: The host segment on which the observability scrapers reach the metrics of the host, the third octet 249 of the network allocation (ADR-143). The network allocation facts reside in the Bastion Vault, hence the file declares the registry location of the segment instead of the segment.
 - Child fields:
     - `network_name` (`string`): Name of the routed libvirt network which carries the host address on the segment (`host-telemetry-scrape`).
-    - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, and `address_field` of the segment and the host address, which `foundation-vault-bastion` publishes at `registry/platform/network/allocation`.
+    - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, and `address_field` of the segment and the host address. `foundation-vault-bastion` publishes both at `registry/platform/network/allocation`.
     - `host_exporter_ports` (`list(number)`): Ports of node_exporter and the libvirt exporter on the host. The scrape ports are these ports and `vault_bastion.metrics_port`.
 
 ### Item B. Access Plane: `operator_vault_proxy`
@@ -109,7 +109,7 @@ The `operator_vault_proxy` map configures workstation-local forwarding proxies t
     - `vault_kv_mount` (`string`): KV v2 secrets engine mount path (`secret`).
     - `vault_kv_field` (`string`): JSON field name containing the token string (`token`).
     - `terraform_http_username` (`string`): Basic auth HTTP username required by GitLab HTTP remote state API (`gitlab-ci-token`).
-    - `project_ids` (`map(string)`): ID of the GitLab project storing the state files of each owner code, such as `parent-group-governance: "86417732"`. `vault-proxy-env` exports `GITLAB_TERRAFORM_STATE_BASE` for every identity whose owner the map lists. The GitLab API URL derives from the origin remote of this repository, which the CLI injects into the role `workstation_vault_proxy`.
+    - `project_ids` (`map(string)`): ID of the GitLab project storing the state files of each owner code, such as `parent-group-governance: "86417732"`. `vault-proxy-env` exports `GITLAB_TERRAFORM_STATE_BASE` for every identity whose owner the map lists. The CLI derives the GitLab API URL from the origin remote of this repository and injects the URL into the role `workstation_vault_proxy`.
 
 #### `operator_vault_proxy.governance_owner_code`
 
@@ -123,8 +123,8 @@ The `operator_vault_proxy` map configures workstation-local forwarding proxies t
 - Semantics: Registry of distinct operational identities running as local proxy systemd services. Callers bind their environment using `vault-proxy-env <identity>`.
 - Fields of `IdentitySpec`:
     - `listen_port` (`number`): Loopback port of the Proxy, distinct across identities.
-    - `allowed_read_secret_paths` and `allowed_write_secret_paths` (`list(string)`): KV paths of whole segments, declared by `credential-distributor` alone. Identical lists SHOULD share one YAML anchor.
-    - `allowed_read_registry_paths` (`list(string)`): Registry domains below `platform/`, such as `platform/ai-provider`, declared by `credential-distributor` and `consumer`.
+    - `allowed_read_secret_paths` and `allowed_write_secret_paths` (`list(string)`): KV paths of whole segments declared by `credential-distributor` alone. Identical lists SHOULD share one YAML anchor.
+    - `allowed_read_registry_paths` (`list(string)`): Registry domains below `platform/`, such as `platform/ai-provider` declared by `credential-distributor` and `consumer`.
     - `code_reviewer_variable_projects` (`list(string)`): Project paths below the top-level group, such as `platform-engineering-lab/platform-foundation`, which receive the code reviewer bot variables from `./governance credentials issue code-reviewer-variables`. The CLI prefixes the top-level group of the origin remote. Only `workstation-topology.yaml` grants a project the bot tokens, and a project cannot register itself.
 - Naming: The identity key determines the access tier and the owner code, and the file declares neither field.
     - `administrator` and `credential-rotator` carry the tier of the same name and `governance_owner_code`.
@@ -152,7 +152,7 @@ The `service_admin_passwords` list registers infrastructure services whose initi
 
 ### Item D. Credential Issuance Plane: `service_issued_tokens`
 
-The `service_issued_tokens` object declares the tokens which a service issues. A Terraform-managed write would store each token in the state, hence `./governance credentials issue` writes each token through the administrator Vault Proxy.
+The `service_issued_tokens` object declares the tokens issued by a service. A Terraform-managed write would store each token in the state, hence `./governance credentials issue` writes each token through the administrator Vault Proxy.
 
 The CLI derives the GitLab REST API URL and the runner URL from the origin remote of this repository, and reads the GitLab token of `credential-distributor-<governance_owner_code>` for every API call.
 
@@ -165,7 +165,7 @@ The CLI derives the GitLab REST API URL and the runner URL from the origin remot
     - `gitlab_group_variable_key` (`string`): Group CI/CD variable receiving the token (`SONAR_TOKEN`).
 - `gitlab_group_runner` (`object`):
     - `description` (`string`): Runner description in the group settings and runner name in `config.toml`.
-    - `tag_list` (`list(string)`): Job tags which the runner accepts.
+    - `tag_list` (`list(string)`): Job tags accepted by the runner.
     - `config_path` (`string`): Path of `config.toml` relative to the project root. An existing file refuses the registration.
 - `code_reviewer_variables` (`object`):
     - `bot_tokens` (`list(object)`): Each entry maps one Bastion Vault field (`vault`) to the project variable keys (`variable_keys`) receiving the token. `foundation-vault-bastion` grants the administrator identity read access on each listed path.
@@ -250,7 +250,7 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `service_issued_tokens`                        | Go CLI issued token operations     | `tools/governance/cmd/governance/issued_tokens.go`                   | Drives the three `credentials issue` subcommands.                     |
 | `code_reviewer_variables.bot_tokens`           | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/access-operator-proxy.tf` | Grants the administrator identity read access on each bot token path. |
 | `identities.*.code_reviewer_variable_projects` | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Lists the projects receiving the code reviewer variables.             |
-| `host_telemetry_scrape.registry`               | Go CLI operations                  | `tools/governance/cmd/governance/operations.go`                      | Reads the segment which `apply-host-telemetry` injects.               |
+| `host_telemetry_scrape.registry`               | Go CLI operations                  | `tools/governance/cmd/governance/host_playbooks.go`                  | Reads the segment injected by `apply-host-telemetry`.                 |
 | `host_telemetry_scrape`                        | Ansible workstation_host_telemetry | `ansible/roles/workstation_host_telemetry/tasks/main.yaml`           | Declares the network and the firewalld policy of the segment.         |
 
 ---
