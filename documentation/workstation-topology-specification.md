@@ -11,12 +11,13 @@ This specification defines the declarative configuration model for `workstation-
 
 ## Section 2. Architectural Model
 
-The topology file is organized into four distinct planes:
+The topology file is organized into five distinct planes:
 
 1. **Infrastructure Plane (`vault_bastion`)**: Configures daemon-level network listener interfaces and port bindings for the local Bastion Vault service.
-2. **Access Plane (`operator_vault_proxy`)**: Configures local forwarding proxies mediating operator connections via mTLS client certificates, abstracting Vault token lifecycle management away from human operators and automation callers.
-3. **Credential Lifecycle Plane (`service_admin_passwords`)**: Declares the registry of infrastructure service administrative accounts whose passwords undergo automated rotation by the Go governance CLI.
-4. **Credential Issuance Plane (`service_issued_tokens`)**: Declares the tokens which SonarQube and GitLab issue and `./governance credentials issue` writes into the Bastion Vault, GitLab CI/CD variables, and the runner configuration.
+2. **Observability Plane (`host_telemetry_scrape`)**: Declares the registry location of the host telemetry scrape segment and the exporter ports of the host, which `./governance host apply-host-telemetry` opens to the observability scrapers.
+3. **Access Plane (`operator_vault_proxy`)**: Configures local forwarding proxies mediating operator connections via mTLS client certificates, abstracting Vault token lifecycle management away from human operators and automation callers.
+4. **Credential Lifecycle Plane (`service_admin_passwords`)**: Declares the registry of infrastructure service administrative accounts whose passwords undergo automated rotation by the Go governance CLI.
+5. **Credential Issuance Plane (`service_issued_tokens`)**: Declares the tokens which SonarQube and GitLab issue and `./governance credentials issue` writes into the Bastion Vault, GitLab CI/CD variables, and the runner configuration.
 
 ## Section 3. Schema and Field Reference
 
@@ -66,6 +67,15 @@ The `vault_bastion` map configures the network listener endpoints bound by the l
 - Constraint: The port MUST be a valid, unprivileged TCP port (1024-65535). The port MUST differ from `metrics_port` plus one, since Vault opens a cluster listener one port above every API listener.
 - Semantics: Loopback TCP port of the Vault listener which accepts PROXY protocol v2 from the TLS terminator.
 
+#### `host_telemetry_scrape` (Observability Plane)
+
+- Type: `object`
+- Semantics: The host segment on which the observability scrapers reach the metrics of the host, the third octet 249 of the network allocation (ADR-143). The network allocation facts reside in the Bastion Vault, hence the file declares the registry location of the segment instead of the segment.
+- Child fields:
+    - `network_name` (`string`): Name of the routed libvirt network which carries the host address on the segment (`host-telemetry-scrape`).
+    - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, and `address_field` of the segment and the host address, which `foundation-vault-bastion` publishes at `registry/platform/network/allocation`.
+    - `host_exporter_ports` (`list(number)`): Ports of node_exporter and the libvirt exporter on the host. The scrape ports are these ports and `vault_bastion.metrics_port`.
+
 ### Item B. Access Plane: `operator_vault_proxy`
 
 The `operator_vault_proxy` map configures workstation-local forwarding proxies that authenticate callers via mTLS client certificates and inject valid Vault tokens.
@@ -99,7 +109,12 @@ The `operator_vault_proxy` map configures workstation-local forwarding proxies t
     - `vault_kv_mount` (`string`): KV v2 secrets engine mount path (`secret`).
     - `vault_kv_field` (`string`): JSON field name containing the token string (`token`).
     - `terraform_http_username` (`string`): Basic auth HTTP username required by GitLab HTTP remote state API (`gitlab-ci-token`).
-    - `gitlab_api_url` (`string`): Base URL of the GitLab REST API hosting the state files (`https://gitlab.com/api/v4`).
+    - `project_ids` (`map(string)`): ID of the GitLab project storing the state files of each owner code, such as `parent-group-governance: "86417732"`. `vault-proxy-env` exports `GITLAB_TERRAFORM_STATE_BASE` for every identity whose owner the map lists. The GitLab API URL derives from the origin remote of this repository, which the CLI injects into the role `workstation_vault_proxy`.
+
+#### `operator_vault_proxy.governance_owner_code`
+
+- Type: `string`
+- Semantics: Owner code of this repository (`parent-group-governance`). The identities `administrator` and `credential-rotator` carry the owner code, and the administrator writes below `secret/<governance_owner_code>/`. The field is the single declaration of the governance owner code for Terraform, Ansible, and the CLI.
 
 #### `operator_vault_proxy.identities`
 
@@ -108,14 +123,15 @@ The `operator_vault_proxy` map configures workstation-local forwarding proxies t
 - Semantics: Registry of distinct operational identities running as local proxy systemd services. Callers bind their environment using `vault-proxy-env <identity>`.
 - Fields of `IdentitySpec`:
     - `listen_port` (`number`): Loopback port of the Proxy, distinct across identities.
-    - `access_tier` (`string`): One of `credential-distributor`, `consumer`, `tenant`, `administrator`, and `credential-rotator`.
-    - `owner_code` (`string`): Owner code of the repository which the identity serves. Code MUST read the owner from this field and MUST NOT split the identity key.
-    - `state_backend_path` (`string`): KV path of the GitLab token of the owner below `<owner_code>/`, such as `opgitlab/terraform/state-backend`. Every tier except `credential-rotator` MUST declare the field, and `vault-proxy-env` exports the token as `TF_HTTP_PASSWORD`.
-    - `state_backend_project_id` (`string`): ID of the GitLab project storing the state files of the owner, such as `86417732`. An identity with `state_backend_path` SHOULD declare the field, and `vault-proxy-env` exports the state base URL of the project.
-    - `allowed_read_secret_paths` and `allowed_write_secret_paths` (`list(string)`): KV paths of whole segments, declared by `credential-distributor` alone.
+    - `allowed_read_secret_paths` and `allowed_write_secret_paths` (`list(string)`): KV paths of whole segments, declared by `credential-distributor` alone. Identical lists SHOULD share one YAML anchor.
     - `allowed_read_registry_paths` (`list(string)`): Registry domains below `platform/`, such as `platform/ai-provider`, declared by `credential-distributor` and `consumer`.
-    - `code_reviewer_variable_projects` (`list(string)`): Full GitLab project paths of the owner, such as `csning1998-lab/parent-group-governance`, which receive the code reviewer bot variables from `./governance credentials issue code-reviewer-variables`. Only `workstation-topology.yaml` grants a project the bot tokens, and a project cannot register itself.
-- Naming: `administrator` and `credential-rotator` carry the tier name, a tenant carries its owner code, and a `credential-distributor` or `consumer` identity carries `<access_tier>-<owner_code>`. The governance `credential-distributor` keeps the bare tier name until every repository runs with its own identity.
+    - `code_reviewer_variable_projects` (`list(string)`): Project paths below the top-level group, such as `platform-engineering-lab/platform-foundation`, which receive the code reviewer bot variables from `./governance credentials issue code-reviewer-variables`. The CLI prefixes the top-level group of the origin remote. Only `workstation-topology.yaml` grants a project the bot tokens, and a project cannot register itself.
+- Naming: The identity key determines the access tier and the owner code, and the file declares neither field.
+    - `administrator` and `credential-rotator` carry the tier of the same name and `governance_owner_code`.
+    - `credential-distributor-<owner code>` and `consumer-<owner code>` carry the tier of the prefix and the owner code after the prefix.
+    - Every other key is a tenant, and the key equals the owner code of the tenant.
+    - Every identity except `credential-rotator` reads the GitLab token of its owner at `<owner code>/terraform/state-backend`, and `vault-proxy-env` exports the token as `TF_HTTP_PASSWORD`.
+    - The Go package `internal/topology`, the locals of `access-operator-proxy.tf`, and the template `vault-proxy-env.sh.j2` implement the same rule.
 
 ### Item C. Credential Lifecycle Plane: `service_admin_passwords`
 
@@ -138,8 +154,8 @@ The `service_admin_passwords` list registers infrastructure services whose initi
 
 The `service_issued_tokens` object declares the tokens which a service issues. A Terraform-managed write would store each token in the state, hence `./governance credentials issue` writes each token through the administrator Vault Proxy.
 
-- `gitlab_api_url` (`string`): GitLab REST API base URL (`https://gitlab.com/api/v4`).
-- `gitlab_token_owner_code` (`string`): Owner code whose `credential-distributor` identity names the `state_backend_path` of the GitLab token for every API call (`parent-group-governance`).
+The CLI derives the GitLab REST API URL and the runner URL from the origin remote of this repository, and reads the GitLab token of `credential-distributor-<governance_owner_code>` for every API call.
+
 - `gitlab_group_registry` (`object`): `vault_kv_mount`, `vault_kv_path`, and `vault_kv_field` of the top-level group ID in the registry.
 - `sonarqube_analysis_token` (`object`):
     - `user_tokens_endpoint` (`string`): The `api/user_tokens` web service of SonarQube.
@@ -150,7 +166,6 @@ The `service_issued_tokens` object declares the tokens which a service issues. A
 - `gitlab_group_runner` (`object`):
     - `description` (`string`): Runner description in the group settings and runner name in `config.toml`.
     - `tag_list` (`list(string)`): Job tags which the runner accepts.
-    - `gitlab_url` (`string`): GitLab instance URL which the runner polls.
     - `config_path` (`string`): Path of `config.toml` relative to the project root. An existing file refuses the registration.
 - `code_reviewer_variables` (`object`):
     - `bot_tokens` (`list(object)`): Each entry maps one Bastion Vault field (`vault`) to the project variable keys (`variable_keys`) receiving the token. `foundation-vault-bastion` grants the administrator identity read access on each listed path.
@@ -159,14 +174,14 @@ The `service_issued_tokens` object declares the tokens which a service issues. A
 
 The four operator identities defined in `operator_vault_proxy.identities` fulfill distinct security boundaries:
 
-| Identity               | Access Tier            | Listen Port | Primary Scope   |
-| ---------------------- | ---------------------- | ----------- | --------------- |
-| credential-distributor | credential-distributor | 8210        | Read-only CI/CD |
-| platform-foundation    | tenant                 | 8211        | Tenant Scope    |
-| administrator          | administrator          | 8212        | Bastion Admin   |
-| credential-rotator     | credential-rotator     | 8213        | Password Rotate |
+| Identity                                       | Access Tier            | Listen Port | Primary Scope   |
+| ---------------------------------------------- | ---------------------- | ----------- | --------------- |
+| credential-distributor-parent-group-governance | credential-distributor | 8210        | Read-only CI/CD |
+| platform-foundation                            | tenant                 | 8211        | Tenant Scope    |
+| administrator                                  | administrator          | 8212        | Bastion Admin   |
+| credential-rotator                             | credential-rotator     | 8213        | Password Rotate |
 
-1. `credential-distributor`:
+1. `credential-distributor-parent-group-governance`:
     - Role: Distributes CI/CD credentials, runner tokens, and publication keys to repository setup scripts.
     - Rights: Read access to the state backend token and the secret paths declared under `allowed_read_secret_paths`. Write access is limited to the prefixes declared under `allowed_write_secret_paths`.
 2. `platform-foundation`:
@@ -235,5 +250,7 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `service_issued_tokens`                        | Go CLI issued token operations     | `tools/governance/cmd/governance/issued_tokens.go`                   | Drives the three `credentials issue` subcommands.                     |
 | `code_reviewer_variables.bot_tokens`           | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/access-operator-proxy.tf` | Grants the administrator identity read access on each bot token path. |
 | `identities.*.code_reviewer_variable_projects` | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Lists the projects receiving the code reviewer variables.             |
+| `host_telemetry_scrape.registry`               | Go CLI operations                  | `tools/governance/cmd/governance/operations.go`                      | Reads the segment which `apply-host-telemetry` injects.               |
+| `host_telemetry_scrape`                        | Ansible workstation_host_telemetry | `ansible/roles/workstation_host_telemetry/tasks/main.yaml`           | Declares the network and the firewalld policy of the segment.         |
 
 ---

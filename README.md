@@ -102,7 +102,7 @@ The profile defaults to `issuer-gitlab-saas`. Because the OAuth token expires wi
 The platform architecture implements a multi-tenant Workload Identity Federation pattern to govern AI provider access across consumer projects:
 
 1. **Global Governance Layer (`group-ai-provider-anthropic`)**:
-    - Manages the single OIDC Issuer (`issuer-gitlab-saas` pointing to `https://gitlab.com`) at the Anthropic organization level.
+    - Manages the single OIDC Issuer (`issuer-gitlab-saas` pointing to `var.gitlab_url`, the GitLab instance of origin) at the Anthropic organization level.
     - Publishes the root trust contract (`organization` and `issuers`) via Terraform Remote State Outputs.
     - Remains strictly decoupled from individual downstream workspaces and projects.
 
@@ -306,7 +306,7 @@ A host prerequisite is a host setting which `vault-server` or `vault-terminator`
 
 1. The libvirt network `vault-bastion-publish` provides the address `172.16.0.1` on the bridge of the network.
 2. The unit `virtnetworkd.service` is enabled, and a drop-in starts the unit after firewalld reports the running state.
-3. The firewalld policy `libvirt-to-host` admits DHCP, DNS, ICMP, and TCP port 8200 from `172.16.0.0/12` to `172.16.0.1` for routed guests, and the scrape ports from each observability scraper segment alone, to any host address, since a scraper reaches the host through the gateway of its own segment.
+3. The firewalld policy `libvirt-to-host` admits DHCP, DNS, ICMP, and TCP port 8200 from the publish segment `172.16.0.0/24` to `172.16.0.1` for routed guests. A guest reaches the Bastion Vault through a NIC on the publish segment alone, as ADR-143 requires. The policy admits no scrape port, see Item E.
 4. The firewalld zone `libvirt` admits DHCP, DNS, and ICMP for NAT guests.
 5. The memlock limits of the operator user are unlimited, because Vault locks memory under rootless Podman.
 
@@ -327,7 +327,7 @@ ansible-galaxy collection install -r ansible/requirements.yaml
 ./governance host apply-libvirt
 ```
 
-The CLI injects `workstation_libvirt_operator_user` from the operator account, because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The inventory `ansible/inventory/localhost.yaml` declares `workstation_libvirt_scraper_source_cidrs`, the observability scraper segments, and `workstation_libvirt_host_exporter_ports`, the ports of node_exporter and the libvirt exporter on the host. The scrape ports are the Bastion Vault metrics port and the declared host exporter ports. An empty segment list keeps every scrape port closed. The role asserts the injected value before any task runs.
+The CLI injects `workstation_libvirt_operator_user` from the operator account, because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The publish segment derives from `vault_bastion.publish_address` of `workstation-topology.yaml` and the netmask of the network. The role asserts the injected value before any task runs.
 
 ### Item D. SonarQube Bootstrap
 
@@ -355,6 +355,25 @@ podman unshare find sonarqube/data sonarqube/postgres-data -mindepth 1 -delete
 
 The rebuild empties the two directories and keeps the directories, hence the bind mount sources and the registered labels survive. `podman unshare` is required, since the database files belong to a subordinate UID of the rootless container. The rebuild discards the analysis history and every token of the earlier instance, hence `group-sonarqube` mints a new analysis token on the next apply. The provider `jdamata/sonarqube` 0.16.21 fails the refresh of a token which the rebuilt instance lacks, instead of planning a replacement. The rebuild therefore ends with `terraform state rm sonarqube_user_token.ci_analysis` inside `terraform/layers/group-sonarqube`. SonarQube starts again at Section 1 Item C Step 2.
 
+### Item E. Host Telemetry Scrape Segment
+
+Observability scrapers reach the metrics of the host on the host telemetry scrape segment, the third octet 249 of the network allocation (ADR-143). `foundation-vault-bastion` derives the segment and the host address from the network allocation facts and publishes both at `registry/platform/network/allocation`, fields `host_telemetry_scrape_cidr` and `host_telemetry_scrape_address`. The libvirt playbook runs before the Bastion Vault exists, hence a separate command applies the segment after the apply of `foundation-vault-bastion`.
+
+```bash
+./governance host apply-host-telemetry
+```
+
+The CLI reads both fields through the administrator Vault Proxy, reissues `vault/tls/publish.pem` with the host address added to the SAN when the certificate lacks the address, and runs the role `workstation_host_telemetry`, which declares four host settings.
+
+1. The routed libvirt network `host-telemetry-scrape` provides the host address on the bridge of the network.
+2. The firewalld policy `host-telemetry-to-host` carries priority -2 and target CONTINUE, and admits the scrape ports from the segment to the host address alone. The scrape ports are `vault_bastion.metrics_port` and `host_telemetry_scrape.host_exporter_ports` of `workstation-topology.yaml`. The policy precedes `libvirt-to-host`, whose target REJECT closes every other port.
+3. The local fact `/etc/ansible/facts.d/host_telemetry.fact` records the host address.
+4. The tasks `E-vault-config.yaml` of `workstation_libvirt` render `haproxy.cfg` again. The template adds the frontend `host_telemetry_metrics` on the host address when the local fact exists. The frontend serves `GET /v1/sys/metrics` alone with the publish certificate, hence every later `apply-libvirt` keeps the frontend.
+
+The command ends with `podman compose restart vault-terminator`, which loads the reissued certificate and the frontend. The entrypoint of `vault-terminator` waits for the publish address alone, hence a terminator which starts before the bridge of the segment exits and restarts under `restart: always`. `./governance vault generate-tls` issues a publish certificate without the address, hence the command reruns after a regeneration of `vault/tls`.
+
+The registry location and the exporter ports reside in `host_telemetry_scrape` of `workstation-topology.yaml`. The exporters of the host bind the host address on the segment, which `hypervisor_baseline` of `platform-foundation` configures.
+
 ## Section 5. The Governance CLI
 
 The `governance` binary is built from `tools/governance`. The full design of the rotation state machine resides in `tools/governance/README.md`. This section covers the operator surface alone.
@@ -377,6 +396,7 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 | `[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites` | `host apply-libvirt`                     | Runs the playbook described in Section 4 Item C                            |
 | `[Host] Apply Workstation Vault Proxies`                                   | `host apply-vault-proxy`                 | Runs the playbook described in Section 6 Item F                            |
 | `[Host] Apply Workstation Vault Audit Check`                               | `host apply-vault-audit`                 | Installs the audit log check without the become password                   |
+| `[Host] Apply Host Telemetry Scrape Network`                               | `host apply-host-telemetry`              | Runs the playbook described in Section 4 Item E                            |
 | `[Vault] Set up TLS for Bastion Vault`                                     | `vault generate-tls`                     | Clears `vault/tls` and issues two CAs and two listener certificates        |
 | `[Vault] Initialize Bastion Vault`                                         | `vault init`                             | Verifies the factory default of each service, then initializes and unseals |
 | `[Vault] Enable KV-v2 Engine`                                              | `vault enable-kv`                        | Mounts the KV version 2 engine at the path `secret`                        |
@@ -414,26 +434,26 @@ Every rotation and every reconciliation first verifies the live credential throu
 
 Every layer stores state in the GitLab HTTP backend under the project hosting this repository, with one state name per layer. Before planning or applying any layer, the shell environment MUST be initialized with `eval "$(vault-proxy-env <role>)"`. The value of `<role>` MUST match the Vault Proxy Role column of Item B.
 
-- `terraform/.envrc` loads the identity `administrator` by default.
+- `terraform/.envrc` loads the identity `administrator` by default, and exports `TF_VAR_gitlab_url` and `TF_VAR_gitlab_top_level_group_path` from `GITLAB_URL` and `GITLAB_TOP_LEVEL_GROUP_PATH`. `vault-proxy-env` exports both values, which the CLI derives from the origin remote of this repository.
 - The first apply of `foundation-vault-bastion` MUST run with `eval "$(vault-proxy-env root)"` in the shell. The identity `root` routes `VAULT_ADDR` to `https://127.0.0.1:8200` and authenticates through `~/.vault-token`.
-- `terraform/layers/administration-gitlab-project/.envrc` loads `credential-distributor` via `eval "$(vault-proxy-env credential-distributor)"`.
-- Every layer omits state addresses from its `backend "http"` block. `vault-proxy-env` exports `GITLAB_TERRAFORM_STATE_BASE` from the identity's `state_backend_project_id` in `workstation-topology.yaml`, and each layer's `.envrc` derives `TF_HTTP_ADDRESS`, `TF_HTTP_LOCK_ADDRESS`, and `TF_HTTP_UNLOCK_ADDRESS` from `GITLAB_TERRAFORM_STATE_BASE` and the layer name.
+- `terraform/layers/administration-gitlab-project/.envrc` loads `credential-distributor-parent-group-governance` via `eval "$(vault-proxy-env credential-distributor-parent-group-governance)"`.
+- Every layer omits state addresses from its `backend "http"` block. `vault-proxy-env` exports `GITLAB_TERRAFORM_STATE_BASE` from the project ID of the owner of the identity in `operator_vault_proxy.state_backend.project_ids` of `workstation-topology.yaml`, and each layer's `.envrc` derives `TF_HTTP_ADDRESS`, `TF_HTTP_LOCK_ADDRESS`, and `TF_HTTP_UNLOCK_ADDRESS` from `GITLAB_TERRAFORM_STATE_BASE` and the layer name.
 - Layers reading remote state receive the same base URL via `TF_VAR_gitlab_terraform_state_base` exported by the `.envrc` of each such layer.
 - All environments export `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD` from `secret/parent-group-governance/terraform/state-backend`. The identity `root` reads the secret with the root token, and every other identity reads the secret through the credential-distributor Proxy.
 - The GitLab provider reads a token from the same secret through an ephemeral read, which keeps the token out of the persisted state of the consuming layer.
 
 ### Item B. Layer Inventory
 
-| Layer                            | Responsibility                                                                           | Vault Proxy Role (`<role>`)                 | Upstream State                                                                                                 |
-| -------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `foundation-vault-bastion`       | The PKI hierarchy, operator cert roles, tenant ACLs, the registry, transit unseal, audit | `root` (bootstrap), `administrator` (day-2) | None                                                                                                           |
-| `group-foundation`               | The top level group `Personal Lab` at path `csning1998-lab`                              | `administrator`                             | None                                                                                                           |
-| `administration-gitlab-project`  | The GitLab project hosting this repository and every Terraform state                     | `credential-distributor`                    | `group-foundation`, `group-ai-provider-anthropic`, `group-ai-provider-google-cloud`, `group-ai-provider-azure` |
-| `group-topology`                 | Every subgroup and nested subgroup beneath the top level group                           | `administrator`                             | `group-foundation`                                                                                             |
-| `group-gitlab-configuration`     | Group labels and the group CI variables without a credential                             | `administrator`                             | `group-topology`                                                                                               |
-| `group-ai-provider-anthropic`    | The Anthropic Workload Identity Federation issuer trusting `https://gitlab.com`          | `administrator`                             | None                                                                                                           |
-| `group-ai-provider-google-cloud` | The Google Cloud Workload Identity Federation pool and provider                          | `administrator`                             | None                                                                                                           |
-| `group-ai-provider-azure`        | The Azure OpenAI Cognitive Services account, the customer managed key, and the Key Vault | `administrator`                             | None                                                                                                           |
+| Layer                            | Responsibility                                                                           | Vault Proxy Role (`<role>`)                      | Upstream State                                                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `foundation-vault-bastion`       | The PKI hierarchy, operator cert roles, tenant ACLs, the registry, transit unseal, audit | `root` (bootstrap), `administrator` (day-2)      | None                                                                                                           |
+| `group-foundation`               | The top level group `Personal Lab` at the path of `var.gitlab_top_level_group_path`      | `administrator`                                  | None                                                                                                           |
+| `administration-gitlab-project`  | The GitLab project hosting this repository and every Terraform state                     | `credential-distributor-parent-group-governance` | `group-foundation`, `group-ai-provider-anthropic`, `group-ai-provider-google-cloud`, `group-ai-provider-azure` |
+| `group-topology`                 | Every subgroup and nested subgroup beneath the top level group                           | `administrator`                                  | `group-foundation`                                                                                             |
+| `group-gitlab-configuration`     | Group labels and the group CI variables without a credential                             | `administrator`                                  | `group-topology`                                                                                               |
+| `group-ai-provider-anthropic`    | The Anthropic Workload Identity Federation issuer trusting `var.gitlab_url`              | `administrator`                                  | None                                                                                                           |
+| `group-ai-provider-google-cloud` | The Google Cloud Workload Identity Federation pool and provider                          | `administrator`                                  | None                                                                                                           |
+| `group-ai-provider-azure`        | The Azure OpenAI Cognitive Services account, the customer managed key, and the Key Vault | `administrator`                                  | None                                                                                                           |
 
 The layer `foundation-vault-bastion` issues the credentials consumed by every later layer. The PKI hierarchy comprises a Root CA signing constrained intermediates. Each constrained intermediate issues subordinate certificates. The Root CA certificate resource declares `prevent_destroy`, because destruction invalidates every downstream certificate without a rotation handler.
 
@@ -453,7 +473,7 @@ Step 1 to Step 4 run with the root token, which `eval "$(vault-proxy-env root)"`
 1. Write the shared GitLab token into the field `token` as listed below. Any path modification MUST be reflected across consuming Terraform layers. The function `put_secret` prompts for each value without echo and writes the value to Vault through stdin without a trailing newline, hence no value enters the shell history or the argument list of `vault`, which other local users can read through `/proc/<pid>/cmdline`.
 
     ```bash
-    cd $HOME/GitLab/csning1998-lab/parent-group-governance
+    cd "$(git rev-parse --show-toplevel)"
 
     put_secret() {
         printf '%s %s: ' "$1" "$2" && read -rs secret_value && echo
@@ -477,14 +497,14 @@ Step 1 to Step 4 run with the root token, which `eval "$(vault-proxy-env root)"`
 
 2. Copy `terraform/layers/foundation-vault-bastion/network-allocation.example.json` to `network-allocation.json` in the same directory, and replace every example value with the value of the deployment. Git ignores `network-allocation.json`.
 3. Write the facts: `vault kv put secret/parent-group-governance/network/allocation @terraform/layers/foundation-vault-bastion/network-allocation.json`.
-4. Apply `foundation-vault-bastion` with the root token. The apply creates the cert auth mount `operator-cert` and one cert role per identity of `workstation-topology.yaml`, after which every Vault Proxy logs in, and every later apply of the layer runs as `administrator`.
+4. Apply `foundation-vault-bastion` with the root token. The apply creates the cert auth mount `operator-cert` and one cert role per identity of `workstation-topology.yaml`, after which every Vault Proxy logs in, and every later apply of the layer runs as `administrator`. Then run `./governance host apply-vault-audit` and `./governance host apply-host-telemetry`, which read the audit device and the registry which the apply creates.
 5. Apply `group-foundation`.
 6. Apply `group-ai-provider-*` (for example `group-ai-provider-anthropic`), provided the operator holds the required provider admin credentials recorded into Vault.
-7. Apply `administration-gitlab-project`, whose `.envrc` loads the `credential-distributor` identity, and apply `group-topology` in either order.
+7. Apply `administration-gitlab-project`, whose `.envrc` loads the `credential-distributor-parent-group-governance` identity, and apply `group-topology` in either order.
 8. Run `./governance credentials issue gitlab-group-runner`, and restart the runner container with `podman compose restart gitlab-runner` afterwards.
 9. Run `./governance credentials issue sonarqube-analysis-token` after Section 1 Item C Step 7 writes the administrator password into the Bastion Vault.
 10. Apply `group-gitlab-configuration`.
-11. Run `./governance credentials issue code-reviewer-variables` after every project of `code_reviewer_variable_projects` exists.
+11. Run `./governance credentials issue code-reviewer-variables` after every project of `code_reviewer_variable_projects` exists. Each entry is a project path below the top-level group, which the CLI derives from the origin remote.
 
 The platform trust facts hold the fields below. Every field is a string, because KV version 2 stores flat string values.
 
@@ -524,12 +544,12 @@ The historical state versions of every layer still hold values which a later cha
 
 ### Item F. Governance Layers of the Group
 
-The governance layer of every repository in the group, such as `administration-gitlab-project`, MUST run through the credential-distributor Vault Proxy of its owner, which the `.envrc` of the layer loads with `eval "$(vault-proxy-env credential-distributor-<owner code>)"`. The other layers of a repository outside the Bastion tenants MUST run through `consumer-<owner code>`. A repository which has not switched yet runs through the governance identity `credential-distributor`. The tenant registry of the Bastion Vault lists platforms alone, hence a governance layer does not hold a tenant identity.
+The governance layer of every repository in the group, such as `administration-gitlab-project`, MUST run through the credential-distributor Vault Proxy of its owner, which the `.envrc` of the layer loads with `eval "$(vault-proxy-env credential-distributor-<owner code>)"`. The other layers of a repository outside the Bastion tenants MUST run through `consumer-<owner code>`. The tenant registry of the Bastion Vault lists platforms alone, hence a governance layer does not hold a tenant identity.
 
 1. The role `workstation_vault_proxy` runs one Vault Proxy per identity of `operator_vault_proxy.identities` as a systemd user unit. Each Proxy listens on `127.0.0.1` at the port of the identity, requires a client certificate signed by the ML-DSA-87 CA of `vault/tls`, and overwrites the token of every request with the token of its own login.
 2. Each Proxy logs in through the cert auth mount `operator-cert` with a client certificate of CN `operator-<identity>`, and the cert role of the identity admits that CN alone. The private key of the client certificate is the long lived credential, and the file carries mode `0600` below `~/.config/vault-proxy/<identity>`.
 3. The role issues each certificate for 365 days, and every run of the role reissues a certificate within 30 days of expiry or after a CA change. The Proxy reloads the certificate without a restart. Each Proxy retries a failed login at most every `workstation_vault_proxy_login_retry_seconds` seconds, hence a Proxy which starts before the cert roles exist logs in within that bound after the apply of `foundation-vault-bastion`, and `vault-proxy-env` waits as long before reporting the failure.
-4. Each identity declares one `access_tier`, its `owner_code`, and, except `credential-rotator`, the `state_backend_path` of the GitLab token of its owner, which MUST lie below `<owner_code>/`. The tier `credential-distributor` reads that token, the paths of `allowed_read_secret_paths`, and the registry domains of `allowed_read_registry_paths`, and writes nothing, since `allowed_write_secret_paths` lists no prefix. The tier `consumer` reads that token and the registry domains alone. The tier `tenant` holds the tenant ACL of the platform and the registry reader. The tier `administrator` manages every object of `foundation-vault-bastion` and writes the GitLab token of every owner. The tier `credential-rotator` reads and writes the paths of `service_admin_passwords` alone, which `./governance` uses for the rotation and the reconciliation. A distributor or consumer identity is named `<access_tier>-<owner_code>`, with one identity per tier and owner, while the governance `credential-distributor` keeps the bare tier name until every repository runs with its own identity.
+4. The name of each identity determines the access tier and the owner code. `administrator` and `credential-rotator` carry the tier name and the governance owner code, a `credential-distributor-<owner code>` or `consumer-<owner code>` identity carries its tier and owner, and every other name is a tenant named after its owner code. Every identity except `credential-rotator` reads the GitLab token of its owner at `<owner code>/terraform/state-backend`. The tier `credential-distributor` reads that token, the paths of `allowed_read_secret_paths`, and the registry domains of `allowed_read_registry_paths`, and writes nothing, since `allowed_write_secret_paths` lists no prefix. The tier `consumer` reads that token and the registry domains alone. The tier `tenant` holds the tenant ACL of the platform and the registry reader. The tier `administrator` manages every object of `foundation-vault-bastion` and writes the GitLab token of every owner. The tier `credential-rotator` reads and writes the paths of `service_admin_passwords` alone, which `./governance` uses for the rotation and the reconciliation. Each tier holds one identity per owner, since each name occurs once.
 5. The token of each login is bound to `127.0.0.1/32`, lives one hour, and renews to four hours at most. A caller holds the placeholder token `proxy-supplied` alone, hence a leaked shell environment exposes no Vault token.
 6. `vault-proxy-env <identity>` prints the environment of the identity, including `VAULT_CLIENT_CERT` and `VAULT_CLIENT_KEY`, which the Vault CLI, the Vault provider, and Ansible present to the mTLS listener. The identity `root` prints the loopback listener of the Bastion Vault and the token helper instead.
 7. Each repository holds a fine-grained personal access token limited to its own project at `<owner_code>/terraform/state-backend`, since GitLab.com Free offers neither project nor group access tokens. The token reaches the state and the project of that repository alone, while the group keys stay group wide. `documentation/fine-grained-token-matrix.md` lists the permissions of each token. A Premium subscription replaces each token with a project access token, without a change of the Proxies or the governance layers.

@@ -15,6 +15,8 @@ module "workload_identity_federation" {
   source  = "gitlab.com/csning1998-lab/provisioner-workload-identity-federation/gitlab"
   version = "~> 0.4.0"
 
+  gitlab_url = var.gitlab_url
+
   gitlab_project = {
     id   = module.provisioner_gitlab_project.project_id
     path = module.provisioner_gitlab_project.full_path
@@ -48,6 +50,8 @@ module "workload_identity_federation" {
 A caller inside `parent-group-governance` MAY reference this module through the relative path `../../modules/provisioner-workload-identity-federation`.
 
 ### Item B. Inputs
+
+The variable `gitlab_url` (`string`, required) is the `https://<host>` URL of the GitLab instance which issues the CI job ID tokens. The Azure federated credential trusts this URL as the issuer.
 
 #### Item B.1. Variable `gitlab_project`
 
@@ -98,7 +102,7 @@ The variable `azure_federation` defines the federation configuration for Microso
 | `cognitive_account_id` | `string`                 | required                                    | Resource ID of the target Cognitive Account.        |
 | `openai_endpoint`      | `string`                 | required                                    | HTTPS URL of the Azure OpenAI endpoint.             |
 | `application_name`     | `optional(string)`       | `null`                                      | Custom display name for the Entra ID application.   |
-| `audiences`            | `optional(list(string))` | `["https://gitlab.com"]`                    | Audiences accepted by the federated credential.     |
+| `audiences`            | `optional(list(string))` | `[gitlab_url]` when empty                   | Audiences accepted by the federated credential.     |
 | `subjects`             | `optional(list(string))` | `["project_path:<path>:ref_type:...:main"]` | List of permitted subject assertion strings.        |
 | `roles`                | `optional(list(string))` | `["Cognitive Services OpenAI User"]`        | Role definitions assigned to the service principal. |
 
@@ -115,7 +119,7 @@ The module publishes the following outputs:
 
 ### Item A. Anthropic Federation Prerequisites
 
-The `group-ai-provider-anthropic` layer MUST be applied prior to consuming Anthropic federation. The `group-ai-provider-anthropic` layer registers the organization-level OIDC issuer for GitLab SaaS (`https://gitlab.com`).
+The `group-ai-provider-anthropic` layer MUST be applied prior to consuming Anthropic federation. The `group-ai-provider-anthropic` layer registers the organization-level OIDC issuer for the GitLab instance of `gitlab_url`.
 
 The Terraform operator executing this module MUST configure valid credentials for the `ippontech/anthropic` provider:
 

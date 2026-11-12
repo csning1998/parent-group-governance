@@ -17,7 +17,7 @@ This document records the privilege boundaries, roots of trust, fact publication
 - **Tenant**: A product repository granted a restricted set of privileges on the Bastion Vault and identified by an owner code, such as `platform-foundation`.
 - **Owner Code**: An identifier string for a tenant, formatted as lowercase alphanumerics connected by hyphens, such as `platform-foundation`, denoted as `<code>` below.
 - **root token**: The Bastion Vault root token, which `~/.vault-token` holds during the bootstrap and a break-glass alone.
-- **Operator identity**: An entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor`, `platform-foundation`, `administrator`, `credential-rotator`, `credential-distributor-opgitlab`, or `consumer-opgitlab`, with `access_tier` `credential-distributor`, `consumer`, `tenant`, `administrator`, or `credential-rotator`.
+- **Operator identity**: An entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor-parent-group-governance`, `platform-foundation`, `administrator`, `credential-rotator`, `credential-distributor-opgitlab`, or `consumer-opgitlab`. The key determines the access tier `credential-distributor`, `consumer`, `tenant`, `administrator`, or `credential-rotator`, and the owner code.
 - **Operator Vault Proxy**: The Vault Proxy of one operator identity on the operator workstation, which logs in through the cert auth mount `operator-cert` and overwrites the token of every request on its loopback mTLS listener.
 - **Operator cert role**: The cert auth role `operator-<identity>`, which admits the client certificate of CN `operator-<identity>` signed by the ML-DSA-87 CA of `vault/tls`.
 - **Assignment Scope**: The set of policy names which a tenant role on one class of auth mount is allowed to carry.
@@ -137,12 +137,12 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 
 `terraform_data.operator_identities_validation` stops the plan in the following cases:
 
-1. An identity declares an `access_tier` other than `credential-distributor`, `consumer`, `tenant`, `administrator`, or `credential-rotator`.
-2. The topology lacks exactly one `administrator` and one `credential-rotator` identity named after the tier.
-3. A tenant identity is not named after its `owner_code` or names no tenant of `access-tenant.tf`.
-4. A distributor or consumer identity is not named `<access_tier>-<owner_code>`, except the governance `credential-distributor`, or a tier holds two identities of one owner.
-5. A `state_backend_path` lies outside `<owner_code>/` of its identity, which keeps the governance GitLab token with the identities of `parent-group-governance`.
-6. A secret path carries a wildcard or an empty segment, a registry path names anything other than one domain below `platform/`, or a consumer identity declares a secret path.
+1. The topology lacks the identity `administrator` or the identity `credential-rotator`.
+2. The owner code which an identity key yields is not lowercase words joined by hyphens.
+3. A key without the prefix `credential-distributor-` or `consumer-` names no tenant of `access-tenant.tf`.
+4. A secret path carries a wildcard or an empty segment, a registry path names anything other than one domain below `platform/`, or a consumer identity declares a secret path.
+
+The local `operator_identity_roles` derives the tier and the owner code from each key, and every identity except `credential-rotator` reads the GitLab token at `<owner code>/terraform/state-backend`. The derivation keeps the governance GitLab token with the identities of `parent-group-governance`, since only `administrator` and `credential-distributor-parent-group-governance` yield that owner code.
 
 Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
 
@@ -173,10 +173,10 @@ The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Work
 
 #### Item D.5 Credential Distributor Identity
 
-The tenant registry lists platforms alone, and a repository of the group registers no tenant for the governance layer. Every governance layer of the group runs through the credential-distributor Proxy of its owner, `credential-distributor-<code>`, and a repository which has not switched yet runs through the governance `credential-distributor`.
+The tenant registry lists platforms alone, and a repository of the group registers no tenant for the governance layer. Every governance layer of the group runs through the credential-distributor Proxy of its owner, `credential-distributor-<code>`, including `credential-distributor-parent-group-governance`.
 
-1. The policy `operator-<identity>` of each credential-distributor identity reads the `state_backend_path` of the identity, the paths of `allowed_read_secret_paths`, and the registry domains of `allowed_read_registry_paths` in `workstation-topology.yaml`, and writes nothing, since `allowed_write_secret_paths` lists no prefix.
-2. The paths of `allowed_read_secret_paths` are the group keys: the Anthropic admin key, the GitHub publication token, the SonarQube analysis token, and the two bot tokens below `gitlab-ci-with-code-reviewer/integration`.
+1. The policy `operator-<identity>` of each credential-distributor identity reads the GitLab token of the owner of the identity, the paths of `allowed_read_secret_paths`, and the registry domains of `allowed_read_registry_paths` in `workstation-topology.yaml`, and writes nothing, since `allowed_write_secret_paths` lists no prefix.
+2. The paths of `allowed_read_secret_paths` are the group keys: the Anthropic admin key, the GitHub publication token, and the SonarQube analysis token. No credential-distributor identity reads the two bot tokens below `gitlab-ci-with-code-reviewer/integration`, since `./governance credentials issue code-reviewer-variables` writes both tokens into each project of `code_reviewer_variable_projects` through the administrator identity.
 3. The Workload Identity Federation module writes no Vault path, hence `allowed_write_secret_paths` lists no prefix, and a governance layer holds no Vault write privilege.
 
 #### Item D.6 Administrator Identity
@@ -188,7 +188,7 @@ The administrator identity replaces the root token after the bootstrap for every
 3. The policy grants `manage_mount` and `administer` capabilities across `administrator_auth_paths` (`approle`, `operator-cert`, `gitlab-saas-ci-job-jwt-provider`).
 4. The policy grants `manage_mount` across `administrator_audit_paths` (`file`, `stdout`) and permits Raft snapshot reads on `sys/storage/raft/snapshot`.
 5. The policy grants CRUD on KV paths under `parent-group-governance/` on the state backend mount.
-6. The policy grants data and metadata writes on the `state_backend_path` of every identity and on every path in `allowed_read_secret_paths` of a credential-distributor identity, since tenant policies are scoped to the owner code of each tenant alone and the bootstrap root token is revoked.
+6. The policy grants data and metadata writes on the GitLab token path of every identity and on every path in `allowed_read_secret_paths` of a credential-distributor identity, since tenant policies are scoped to the owner code of each tenant alone and the bootstrap root token is revoked.
 
 #### Item D.7 Credential Rotator Identity
 
@@ -266,7 +266,7 @@ pgg declares five categories of policies. The tenant cannot rewrite these polici
 | `pki-intermediate-spire-signer-<code>` | Updates on `pki-intermediate-spire/root/sign-intermediate`                                                                                        | SPIRE Parent upstream authority        |
 | `pki-leaf-platform-issuer-<code>`      | Updates on `pki-leaf-platform/issue/<code>-*` and `pki-leaf-platform/sign/<code>-*`                                                               | cert-manager of the Downstream Vault   |
 | `gitlab-ci-code-reviewer-read`         | Reads on `secret/data/parent-group-governance/ci/*`                                                                                               | Automated code reviewer GitLab CI jobs |
-| `operator-credential-distributor`      | Reads on the state backend token and the group keys of the credential-distributor identity                                                        | Credential-distributor cert role       |
+| `operator-<distributor identity>`      | Reads on the state backend token and the group keys of the credential-distributor identity                                                        | Credential-distributor cert role       |
 | `operator-administrator`               | Management of every mount, auth method, audit device, and policy of `foundation-vault-bastion`, and the KV paths below `parent-group-governance/` | Administrator cert role                |
 | `operator-credential-rotator`          | Reads and writes on the paths of `service_admin_passwords` alone                                                                                  | Credential-rotator cert role           |
 

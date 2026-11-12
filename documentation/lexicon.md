@@ -32,9 +32,9 @@ The following rules of the organization naming standard apply directly in this r
 
 ## Section 3. Operator Identities and Access Roles
 
-1. An operator identity is a key of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor`, `platform-foundation`, `administrator`, `credential-rotator`, `credential-distributor-opgitlab`, and `consumer-opgitlab`.
+1. An operator identity is a key of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor-parent-group-governance`, `platform-foundation`, `administrator`, `credential-rotator`, `credential-distributor-opgitlab`, and `consumer-opgitlab`.
 2. A certificate authentication role and its client certificate CN MUST carry the prefix `operator-` before the identity, as in `operator-administrator` and `operator-credential-rotator`.
-3. An identity MUST declare its `access_tier` as `credential-distributor`, `consumer`, `tenant`, `administrator`, or `credential-rotator`. The Go domain type `AccessRole` MUST carry the tiers which the CLI resolves, `administrator` and `credential-rotator`.
+3. The identity key MUST determine the access tier and the owner code. `administrator` and `credential-rotator` name the tier of the same name, `credential-distributor-<owner code>` and `consumer-<owner code>` name the tier of the prefix, and every other key names a tenant. The Go domain type `AccessRole` MUST carry the tiers which the CLI resolves, `administrator` and `credential-rotator`.
 4. A tenant identifier MUST be an owner code formatted as lowercase alphanumerics delimited by hyphens, matching the repository name of the tenant.
 5. The tenant ACL policy in the Bastion Vault MUST follow the pattern `<owner_code>-terraform-operator`, which the cert role `operator-<owner_code>` assigns.
 

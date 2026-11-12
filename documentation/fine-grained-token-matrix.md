@@ -22,7 +22,7 @@ This document defines the GitLab.com fine-grained personal access tokens across 
 
 | Token name                                              | Owner code                      | Project or group ID | Selected memberships                                                  | Reading identities                                                                 |
 | ------------------------------------------------------- | ------------------------------- | ------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `terraform-state-backend-parent-group-governance`       | `parent-group-governance`       | `86417732`          | Group `csning1998-lab` and project `parent-group-governance`          | `credential-distributor`, `administrator`                                          |
+| `terraform-state-backend-parent-group-governance`       | `parent-group-governance`       | `86417732`          | Group `csning1998-lab` and project `parent-group-governance`          | `credential-distributor-parent-group-governance`, `administrator`                  |
 | `terraform-state-backend-platform-foundation`           | `platform-foundation`           | `84608830`          | Project `csning1998-lab/platform-engineering-lab/platform-foundation` | `platform-foundation`, `credential-distributor-platform-foundation`                |
 | `terraform-state-backend-on-premise-gitlab-deployment`  | `opgitlab`                      | `82448331`          | Project `on-premise-gitlab-deployment`                                | `credential-distributor-opgitlab`, `consumer-opgitlab`                             |
 | `terraform-state-backend-gitlab-ci-with-code-reviewer`  | `gitlab-ci-with-code-reviewer`  | `83083739`          | Project `gitlab-ci-with-code-reviewer`                                | `credential-distributor-gitlab-ci-with-code-reviewer`                              |
@@ -31,7 +31,7 @@ This document defines the GitLab.com fine-grained personal access tokens across 
 | `terraform-state-backend-personal`                      | `personal`                      | `137823265`         | Group `csning1998-lab/personal`                                       | `credential-distributor-personal`                                                  |
 | `terraform-state-backend-terraform-provider-sshclient`  | `terraform-provider-sshclient`  | `86090557`          | Project `terraform-provider-sshclient`                                | `credential-distributor-terraform-provider-sshclient`                              |
 
-The Reading identities column follows `state_backend_path` and `allowed_read_secret_paths` of `workstation-topology.yaml`. The `administrator` identity writes every path of the table.
+The Reading identities column follows the owner code of each identity key and `allowed_read_secret_paths` of `workstation-topology.yaml`. The `administrator` identity writes every path of the table.
 
 ### Item B. Integration Tokens
 
@@ -44,7 +44,7 @@ The Reading identities column follows `state_backend_path` and `allowed_read_sec
 | `integration-code-reviewer-bot-gitlab-ci-with-code-reviewer`    | `gitlab-ci-with-code-reviewer` | `137791469`         | Group `csning1998-lab` | `gitlab-ci-with-code-reviewer/integration/code-reviewer-bot`    | `REVIEW_MR_REVIEWER` |
 | `integration-auto-version-tag-bot-gitlab-ci-with-code-reviewer` | `gitlab-ci-with-code-reviewer` | `137791469`         | Group `csning1998-lab` | `gitlab-ci-with-code-reviewer/integration/auto-version-tag-bot` | `TAG_PUSH_TOKEN`     |
 
-Every `credential-distributor` identity declared in `workstation-topology.yaml` reads both paths through `allowed_read_secret_paths`.
+No `credential-distributor` identity reads either path. The `administrator` identity reads both paths when `./governance credentials issue code-reviewer-variables` writes the CI variables into each project of `code_reviewer_variable_projects`.
 
 ## Section 3. Permission Matrix
 
