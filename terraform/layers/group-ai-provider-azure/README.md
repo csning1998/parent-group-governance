@@ -19,7 +19,7 @@ The `group-ai-provider-azure` layer manages the root Microsoft Entra ID and Azur
 - Encryption at rest relies on a customer managed key stored in the layer Key Vault.
 - Terraform data sources dynamically discover the Microsoft Entra ID tenant identifier and Azure subscription metadata from the authenticated operator session.
 - The layer exposes the tenant ID, subscription ID, resource group name, and OpenAI endpoint URL through Terraform remote state outputs for the governance layer of this repository.
-- The layer publishes `tenant_id`, `subscription_id`, `cognitive_account_id`, and `openai_endpoint` at `registry/platform/ai-provider/azure` of the Bastion Vault for the governance layers of other repositories, which read no state of this project.
+- The layer publishes `tenant_id`, `subscription_id`, `cognitive_account_id`, and `openai_endpoint` at `registry/platform/ai-provider/azure` of the Bastion Vault for the governance layers of other repositories. The governance layers of other repositories do not read the state of this project.
 - The root layer does not provision project level application registrations, service principals, or federated identity credentials.
 - Consuming project layers maintain sole responsibility for provisioning downstream identity federation by invoking `provisioner-workload-identity-federation`.
 - This division of responsibility preserves strict tenant isolation across project boundaries.
@@ -31,9 +31,9 @@ The AzureAD and AzureRM Terraform providers authenticate by consuming local Azur
 - The Terraform providers acquire OAuth authentication tokens in memory from the active Azure CLI user profile.
 - This token acquisition mechanism avoids storing long lived cloud service principal credentials on the operator workstation.
 - The layer retrieves remote state backend credentials through environment variables or Bastion Vault token injection.
-- The Vault provider writes the registry key through the `administrator` Proxy, which `eval "$(vault-proxy-env administrator)"` loads.
+- The Vault provider writes the registry key through the `administrator` Proxy loaded by `eval "$(vault-proxy-env administrator)"`.
 - The root layer does not store project level Workload Identity Federation credentials in Vault.
-- This boundary maintains strict multi-tenant security isolation across independent downstream projects.
+- This boundary maintains strict security isolation across independent downstream projects.
 
 ### Item C. Network Boundary
 
@@ -80,7 +80,7 @@ Layer deployment requires administrative privileges across both the Azure subscr
 - The subscription `Owner` role inherently includes permission to manage role assignments.
 - The subscription `Contributor` role does not grant role assignment authority.
 - An operator holding only `Contributor` status must obtain an additional role, such as `User Access Administrator` or `Role Based Access Control Administrator`.
-- The layer does not create Microsoft Entra ID applications, hence the operator does not require a Microsoft Entra ID administrative role.
+- The layer does not create Microsoft Entra ID applications. The operator therefore does not require a Microsoft Entra ID administrative role.
 - The operator shell environment requires valid GitLab HTTP backend credentials stored in `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD`.
 
 ### Item B. CLI Tooling
@@ -93,7 +93,7 @@ The Azure CLI toolchain `az` is required for operator authentication and deploym
 ### Item C. Terraform Variables
 
 The following table lists the Terraform variables in `terraform.tfvars`.
-Terraform does not read the `AZURE_*` shell variables of Section 3 Step A, which serve the Azure CLI commands alone.
+Terraform does not read the `AZURE_*` shell variables of Section 3 Step A. The `AZURE_*` shell variables serve the Azure CLI commands alone.
 
 | Terraform Variable               | Default / Example Value   | Description                                                                |
 | :------------------------------- | :------------------------ | :------------------------------------------------------------------------- |
@@ -129,7 +129,7 @@ az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
 
 ### Step B. Export State Backend Credentials
 
-The operator exports the HTTP state backend credentials through the `administrator` Vault Proxy, which `terraform/.envrc` also loads.
+The operator exports the HTTP state backend credentials through the `administrator` Vault Proxy also loaded by `terraform/.envrc`.
 
 ```bash
 eval "$(vault-proxy-env administrator)"
@@ -174,7 +174,7 @@ The published state outputs provide the following integration contracts:
 - `openai.name`: The account name of the Azure OpenAI Cognitive Services instance.
 - `openai.endpoint`: The HTTPS endpoint URL for Azure OpenAI API calls.
 - `deployments`: The catalog mapping deployed model deployment identifiers and names.
-- `network.private_endpoint_id`: The resource identifier of the cognitive account private endpoint, which evaluates to null on the Standard tier.
+- `network.private_endpoint_id`: The resource identifier of the cognitive account private endpoint. The identifier evaluates to null on the Standard tier.
 - `encryption.key_vault_id`: The resource identifier of the supporting Azure Key Vault instance.
 - `encryption.key_id`: The versionless resource identifier of the customer managed encryption key.
 

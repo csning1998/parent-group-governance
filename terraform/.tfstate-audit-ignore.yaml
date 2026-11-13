@@ -1,5 +1,5 @@
 ---
-# Locations which a provider marks sensitive while the value is public.
+# Locations marked sensitive by a provider while the value is public.
 # Refer to tools/governance/README.md Section 11.
 ignores:
   foundation-vault-bastion:
@@ -43,7 +43,7 @@ ignores:
       paths:
         - data_json.issuer_id
         - data_json.organization_id
-      reason: The registry publishes the federation issuer and organization identifiers, which carry no credential.
+      reason: The registry publishes the federation issuer and organization identifiers without any credential.
 
   group-ai-provider-google-cloud:
     - address: vault_kv_secret_v2.registry_platform_ai_provider_google_cloud
@@ -52,7 +52,7 @@ ignores:
         - data_json.project_number
         - data_json.pool_id
         - data_json.provider_id
-      reason: The registry publishes the project and workload identity pool identifiers, which carry no credential.
+      reason: The registry publishes the project and workload identity pool identifiers without any credential.
 
   group-ai-provider-azure:
     - address: vault_kv_secret_v2.registry_platform_ai_provider_azure
@@ -61,20 +61,20 @@ ignores:
         - data_json.subscription_id
         - data_json.cognitive_account_id
         - data_json.openai_endpoint
-      reason: The registry publishes the tenant, subscription, and account identifiers and the endpoint, without credential.
+      reason: The registry publishes the tenant, subscription, and account identifiers and the endpoint without any credential.
 
   group-foundation:
     - address: vault_kv_secret_v2.registry_platform_gitlab_group_top_level
       paths:
         - data_json.group_id
         - data_json.full_path
-      reason: The registry publishes the identifier and path of the public top-level group, which carry no credential.
+      reason: The registry publishes the identifier and path of the public top level group without any credential.
 
   group-topology:
     - address: vault_kv_secret_v2.registry_platform_gitlab_group_subgroups
       paths:
         - data_json.subgroup_ids
-      reason: The registry publishes the subgroup identifiers, which carry no credential.
+      reason: The registry publishes the subgroup identifiers without any credential.
 
   administration-gitlab-project:
     - address: module.github_mirror.gitlab_project_push_mirror.this

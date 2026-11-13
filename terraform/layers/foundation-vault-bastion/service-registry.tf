@@ -6,7 +6,7 @@ resource "vault_mount" "registry" {
   path        = "registry"
   type        = "kv"
   options     = { version = "2" }
-  description = "Facts which parent-group-governance publishes to tenants. Tenants read, and only parent-group-governance writes."
+  description = "Facts published by parent-group-governance to tenants. Tenants read, and only parent-group-governance writes."
 }
 
 # Each field holds one category in JSON, and a consumer decodes only the consumed field.

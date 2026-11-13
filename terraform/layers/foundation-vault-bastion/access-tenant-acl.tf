@@ -1,5 +1,5 @@
 
-# A tenant writes no policy, since Vault OSS bounds neither the content of a policy nor the policies of an auth role.
+# A tenant does not write policies because Vault OSS bounds neither the content of a policy nor the policies of an auth role.
 locals {
   # Every grant outside the tenant prefix names its path and its reason.
   acl_cross_tenant_grants = {
@@ -12,7 +12,7 @@ locals {
     ]
   }
 
-  # A tenant manages leaf roles only on a constrained leaf mount of the tenant, which cannot issue a Bastion name.
+  # A tenant manages leaf roles only on a constrained leaf mount of the tenant. A constrained leaf mount cannot issue a Bastion name.
   tenant_leaf_mounts = {
     for code in keys(local.tenants) : code => [
       for mount, spec in local.constrained_intermediates : vault_mount.pki_constrained[mount].path
@@ -20,7 +20,7 @@ locals {
     ]
   }
 
-  # A rule with an assign scope writes auth roles, and the policy parameters of the rule stay within the scope ceiling.
+  # A rule with an assign scope writes auth roles. The policy parameters of the rule remain within the scope ceiling.
   acl_rules = {
     for code in keys(local.tenants) : code => {
       kv = [
@@ -30,7 +30,7 @@ locals {
         { path = "secret/delete/${code}/*", capability = "kv_version" },
         { path = "secret/destroy/${code}/*", capability = "kv_version" },
       ]
-      # Vault 2.2.0 requires sudo on sys/mounts/auth/<path>/tune, which the Vault provider reads and writes.
+      # Grants sudo on sys/mounts/auth/<path>/tune because Vault 2.2.0 requires sudo when the Terraform provider inspects or tunes auth mounts.
       auth_mount = [
         { path = "sys/auth", capability = "read" },
         { path = "sys/auth/${code}-*", capability = "manage_mount" },
@@ -54,8 +54,8 @@ locals {
     }
   }
 
-  # Exact names only, since a glob such as <code>-* admits the comma separated string "<code>-a,other".
-  # Each auth scope admits only the assignable policies which name the scope, and transit unseal stays on owned mounts.
+  # The policy parameters list exact names only because a glob such as <code>-* admits the comma separated string "<code>-a,other".
+  # Each auth scope admits only the assignable policies which name the scope. Transit unseal policies remain on owned mounts.
   tenant_assignable = {
     for code in keys(local.tenants) : code => {
       for scope in ["owned", "approle", "gitlab"] : scope => concat(
@@ -88,7 +88,7 @@ locals {
     }
   }
 
-  # The inner filter yields zero or one entry, since a conditional cannot unify objects of different attributes.
+  # The inner filter yields zero or one entry because a conditional cannot unify objects of different attributes.
   tenant_acl_document = {
     for code, entries in local.acl_entries : code => {
       path = {

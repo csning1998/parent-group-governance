@@ -1,6 +1,5 @@
 
-# Vault refuses a request which no enabled audit device can record. Two devices of separate sinks keep the Bastion Vault
-# serving when one sink fails: a file on the dedicated audit volume, and the container log through stdout.
+# Configures both file and stdout audit devices because Vault rejects all requests unless at least one audit sink succeeds.
 resource "vault_audit" "file" {
   provider    = vault.bastion
   type        = "file"

@@ -1,5 +1,5 @@
 
-# The workstation topology and the local CAs of the repository, which this layer reads as files.
+# This layer reads the workstation topology and the local CAs of the repository as files.
 locals {
   workstation            = yamldecode(file("${path.root}/../../../workstation-topology.yaml"))
   vault_bastion_endpoint = "https://${local.workstation.vault_bastion.publish_address}:${local.workstation.vault_bastion.api_port}"
@@ -10,7 +10,7 @@ data "local_file" "vault_bastion_operator_ca" {
   filename = "${path.root}/../../../vault/tls/ca-ml-dsa-87.pem"
 }
 
-# The EC P-384 Transport Root CA signs the publish listener, which guests verify.
+# The EC P-384 Transport Root CA signs the publish listener certificate verified by guests.
 data "local_file" "vault_bastion_publish_ca" {
   filename = "${path.root}/../../../vault/tls/ca-ec-p384.pem"
 }
