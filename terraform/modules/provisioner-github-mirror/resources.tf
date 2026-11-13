@@ -10,7 +10,7 @@ data "gitlab_project_mirror_public_key" "this" {
 
 resource "github_repository" "this" {
   #checkov:skip=CKV_GIT_1: Repository visibility dynamically reflects the source GitLab project visibility.
-  #checkov:skip=CKV2_GIT_1: Branch protection is governed upstream on GitLab while GitHub acts as a push mirror.
+  #checkov:skip=CKV2_GIT_1: Branch protection is governed upstream on GitLab. GitHub acts as a push mirror.
   name        = var.github_repository.name
   description = coalesce(var.github_repository.description, data.gitlab_project.this.description, "")
   visibility  = local.github_visibility[coalesce(var.github_repository.visibility, data.gitlab_project.this.visibility)]
@@ -29,7 +29,7 @@ resource "github_repository" "this" {
 
 resource "gitlab_project_push_mirror" "this" {
   project = var.gitlab_project_id
-  # The mirror URL uses the Git SSH scheme, which keeps password material out of the remote URL.
+  # The mirror URL uses the Git SSH scheme. The SSH scheme excludes password material from the remote URL.
   url         = "ssh://git@github.com/${var.github_repository.owner}/${var.github_repository.name}.git"
   auth_method = "ssh_public_key"
   host_keys   = local.github_ssh_host_keys

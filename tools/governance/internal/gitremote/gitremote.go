@@ -31,7 +31,8 @@ func Parse(url string) (Remote, error) {
 	authority = authority[strings.LastIndex(authority, "@")+1:]
 	hostname, _, _ := strings.Cut(authority, ":")
 	host := hostname
-	// Retains the port on HTTP and HTTPS remotes for WebURL and APIURL, whereas SSH ports target the SSH daemon.
+	// HTTP and HTTPS remotes retain the port for WebURL and APIURL.
+	// An SSH remote omits the port because the SSH port targets the SSH daemon.
 	if hasScheme && (scheme == "https" || scheme == "http") {
 		host = authority
 	}

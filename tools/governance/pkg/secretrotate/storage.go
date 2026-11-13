@@ -20,7 +20,7 @@ const defaultRotationLockTTL = 5 * time.Minute
 
 const rotationLockTTLBuffer = 30 * time.Second
 
-// acquireLock stakes the claim of the current Rotate call on the lock, returning the holder identifier written.
+// acquireLock stakes the claim of the current Rotate call on the lock. acquireLock returns the written holder identifier.
 func acquireLock(ctx context.Context, client *vaultapi.Client, mount, path, field string) (string, error) {
 	var lastErr error
 	for range acquireLockMaxAttempts {
@@ -140,7 +140,7 @@ func readRotationState(ctx context.Context, client *vaultapi.Client, mount, path
 	return st, true
 }
 
-// writeRotationState stores the record as a JSON string, since Terraform reads every field of the path as a string.
+// writeRotationState stores the record as a JSON string because Terraform reads every field of the path as a string.
 func writeRotationState(ctx context.Context, client *vaultapi.Client, mount, path, field string, st rotationState) error {
 	raw, err := json.Marshal(st)
 	if err != nil {

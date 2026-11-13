@@ -38,7 +38,7 @@ locals {
   stage_domains = [for stage in local.network_allocation.stages : "${stage}.${local.network_allocation.domain_suffix}"]
 }
 
-# service-registry.tf publishes the host segments, which derive from the network allocation facts.
+# service-registry.tf publishes the host segments derived from the network allocation facts.
 locals {
   # The third octet of each host segment lies outside the catalog numbering of platform-foundation.
   host_segment_indexes = {
@@ -65,7 +65,7 @@ locals {
   dns_label_pattern = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
 
   # The Bastion publish network lies inside the platform network when both share the platform network address.
-  # The conditional evaluates the comparison only for two valid CIDRs, hence a malformed value reaches the precondition.
+  # The conditional evaluates the comparison only for two valid CIDRs. A malformed value therefore reaches the precondition.
   bastion_publish_inside_network = can(cidrnetmask(local.network_allocation.network_cidr)) && can(cidrnetmask(local.network_allocation.bastion_publish_cidr)) ? (
     tonumber(split("/", local.network_allocation.bastion_publish_cidr)[1]) >= tonumber(split("/", local.network_allocation.network_cidr)[1]) &&
     cidrhost("${split("/", local.network_allocation.bastion_publish_cidr)[0]}/${split("/", local.network_allocation.network_cidr)[1]}", 0) == cidrhost(local.network_allocation.network_cidr, 0)
@@ -83,7 +83,7 @@ locals {
     can(cidrnetmask(local.network_allocation.network_cidr)),
     can(cidrnetmask(local.network_allocation.bastion_publish_cidr)),
     can(cidrnetmask(local.network_allocation.network_cidr)) ? split("/", local.network_allocation.network_cidr)[1] == "16" : false,
-    # A missing network_baseline fails the baseline precondition alone, which names the field.
+    # A missing network_baseline fails only the baseline precondition. The baseline precondition names the field.
     local.network_baseline.cidr_subnet_bits == 0 || (
       can(cidrsubnet(local.network_allocation.network_cidr, local.network_baseline.cidr_subnet_bits, 0)) ? local.network_allocation.bastion_publish_cidr == cidrsubnet(local.network_allocation.network_cidr, local.network_baseline.cidr_subnet_bits, 0) : false
     ),
@@ -109,7 +109,8 @@ locals {
     for prefix in slice(local.allocation_prefixes, 1, 3) : prefix + local.network_baseline.cidr_subnet_bits <= 32
   ])
 
-  # The bounds mirror the network_baseline validations of platform-foundation, which consumed the baseline from tfvars.
+  # The bounds mirror the network_baseline validations of platform-foundation.
+  # The platform-foundation repository consumed the baseline from tfvars.
   network_baseline_valid = alltrue([
     local.network_baseline.host_vip_offset > 0 && local.network_baseline.host_vip_offset < 255,
     can(regex("^([0-9a-f]{2}:){2}[0-9a-f]{2}$", local.network_baseline.global_mac_prefix)),

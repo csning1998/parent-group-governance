@@ -10,8 +10,8 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 )
 
-// deployedElsewhereCase drives one Rotate call whose Deploy observes an outside writer replace the
-// field, then reports how resolveDeployedElsewhere treats that replacement.
+// deployedElsewhereCase drives one Rotate call. During Deploy, an outside writer replaces the field.
+// Each case asserts the treatment of the replacement by resolveDeployedElsewhere.
 type deployedElsewhereCase struct {
 	name      string
 	verifyErr bool
@@ -33,8 +33,8 @@ func TestResolveDeployedElsewhere(t *testing.T) {
 			wantErr:   "clearing the stale rotation state failed",
 		},
 		{
-			name:    "logs the value a concurrent write already stored",
-			wantLog: "accepting that value",
+			name:    "logs the raced value stored by a concurrent write",
+			wantLog: "accepting the raced value",
 		},
 	}
 	for _, c := range cases {
@@ -91,7 +91,7 @@ func (c deployedElsewhereCase) newTestSpec(t *testing.T, client *vaultapi.Client
 			t.Fatalf("simulate an out-of-band write: %v", err)
 		}
 		if c.failClear {
-			// The API client retries a rejected patch, so one refusal is not enough.
+			// failNextPatches(5) exceeds the retries of the Vault API client on a rejected patch.
 			store.failNextPatches(5)
 		}
 		return fmt.Errorf("%w: test", ErrAuthRejected)

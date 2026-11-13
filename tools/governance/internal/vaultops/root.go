@@ -16,11 +16,11 @@ import (
 )
 
 var (
-	// ErrNoRootToken reports a token helper file that lacks a live token with the root policy.
+	// ErrNoRootToken reports a token helper file without a live token of the root policy.
 	ErrNoRootToken = errors.New("vaultops: the token helper file does not hold a live root token")
-	// ErrSuccessorNotReady reports a successor operator identity that lacks an active login with its policy.
+	// ErrSuccessorNotReady reports a successor operator identity without an active login with its policy.
 	ErrSuccessorNotReady = errors.New("vaultops: the successor identity does not hold a login with its policy")
-	// ErrRootTokenPresent reports a token helper file that already holds a token before generate-root runs.
+	// ErrRootTokenPresent reports a token helper file with an existing token before generate-root runs.
 	ErrRootTokenPresent = errors.New("vaultops: the token helper file already holds a token, revoke the token first")
 	// ErrGenerateRootInProgress reports an unfinished generate-root attempt.
 	ErrGenerateRootInProgress = errors.New("vaultops: a generate-root attempt is in progress, cancel it with vault operator generate-root -cancel")

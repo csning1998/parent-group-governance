@@ -41,7 +41,7 @@ func TestNewStateAuditCmd(t *testing.T) {
 	}
 }
 
-// TestRunStateAuditMenu covers the menu entry, which scans the history as the acceptance of a merge request.
+// TestRunStateAuditMenu covers the menu entry. The menu entry scans the history as the acceptance of a merge request.
 func TestRunStateAuditMenu(t *testing.T) {
 	a := &app{root: t.TempDir(), out: ui.New(io.Discard, io.Discard)}
 	t.Setenv("TF_HTTP_USERNAME", "")

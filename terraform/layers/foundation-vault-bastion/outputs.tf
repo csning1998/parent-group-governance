@@ -36,7 +36,7 @@ output "vault_bastion_auth" {
 }
 
 output "vault_bastion_tenant" {
-  description = "Owner codes of the tenants registered on the Bastion Vault, and the cert role through which the operator Vault Proxy of each tenant logs in, keyed by owner code."
+  description = "Owner codes of the tenants registered on the Bastion Vault, and the operator cert role of each tenant keyed by owner code. The operator Vault Proxy of a tenant logs in through the operator cert role."
   value = {
     owner_codes   = keys(local.tenants)
     operator_role = { for code, role in vault_cert_auth_backend_role.operator : code => role.name if contains(keys(local.tenants), code) }
@@ -44,7 +44,7 @@ output "vault_bastion_tenant" {
 }
 
 output "vault_bastion_registry" {
-  description = "Mount of the registry which publishes tenant facts, and the read-only policy of each tenant, keyed by owner code. A tenant role references the policy and cannot rewrite the policy."
+  description = "Mount of the registry which publishes tenant facts, and the read only policy of each tenant keyed by owner code. A tenant role references the policy. The tenant role cannot rewrite the policy."
   value = {
     mount_path      = vault_mount.registry.path
     reader_policies = { for code, policy in vault_policy.registry_reader : code => policy.name }
@@ -52,7 +52,7 @@ output "vault_bastion_registry" {
 }
 
 output "vault_bastion_transit_unseal" {
-  description = "Transit mount, and the key and the policy of every auto-unsealing Vault cluster, keyed by consumer. A tenant role references the policy and cannot rewrite the policy."
+  description = "Transit mount, and the key and the policy of every auto unsealing Vault cluster keyed by consumer. A tenant role references the policy. The tenant role cannot rewrite the policy."
   value = {
     mount_path = vault_mount.transit_unseal.path
     consumers = {

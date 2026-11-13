@@ -52,8 +52,8 @@ func Load(path string) (*Env, error) {
 	return e, nil
 }
 
-// Environ expands variable references within key-value pairs against local configuration keys and
-// host environment variables, returning a formatted KEY=value slice.
+// Environ expands variable references within KEY=value pairs against local configuration keys and
+// host environment variables. Environ returns the expanded pairs as a KEY=value slice.
 func (e *Env) Environ() []string {
 	resolved := map[string]string{}
 	out := make([]string, 0, len(e.order))

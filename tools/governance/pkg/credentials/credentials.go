@@ -100,7 +100,7 @@ func resolveServiceFuncs(s serviceConfig) (secretrotate.DeployFunc, secretrotate
 	switch s.Mechanism {
 	case "http_form":
 		if s.VerifyEndpoint == "" {
-			return nil, nil, fmt.Errorf("http_form requires verify_endpoint, since rotation observes the live credential before any change")
+			return nil, nil, fmt.Errorf("http_form requires verify_endpoint because rotation observes the live credential before any change")
 		}
 		form := httprotate.FormSpec{
 			URL:           s.RotateEndpoint,

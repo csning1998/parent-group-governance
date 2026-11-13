@@ -170,8 +170,8 @@ func (s *scanner) addLeaf(address string, path []string, value string, isSensiti
 	}
 }
 
-// mergeJSONRestatements drops each <name>_json string whose JSON object restates the map <name>, hence one value is
-// reported once at <name>.<key>. A key which the map lacks or holds with another value stays under <name>_json.
+// mergeJSONRestatements strips <name>_json fields duplicating keys and values in map <name> to avoid reporting the
+// same secret twice. Keys absent from <name> or holding a different value remain under <name>_json.
 func mergeJSONRestatements(attributes any) any {
 	attrs, ok := attributes.(map[string]any)
 	if !ok {

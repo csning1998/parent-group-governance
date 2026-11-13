@@ -22,7 +22,7 @@ func newServer(t *testing.T, handler http.HandlerFunc) *Client {
 	return New(srv.URL+"/api/user_tokens/", "admin", "admin-password")
 }
 
-// TestGenerate asserts the name and type which generate sends, and the error upon a response without a token.
+// TestGenerate asserts the name and type sent by Client.Generate, and the error upon a response without a token.
 func TestGenerate(t *testing.T) {
 	t.Run("returns the token", func(t *testing.T) {
 		c := newServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +55,7 @@ func TestGenerate(t *testing.T) {
 	})
 }
 
-// TestList asserts the names and types of every token which search returns.
+// TestList asserts the names and types of every token returned by the search endpoint.
 func TestList(t *testing.T) {
 	c := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/user_tokens/search" {

@@ -26,7 +26,8 @@ const (
 	tlsNameECCA     = "ca-ec-p384"
 	tlsNameLoopback = "loopback"
 	tlsNamePublish  = "publish"
-	// The PROXY protocol listener trusts this self-signed certificate alone, which rejects every leaf of the local CAs.
+	// The PROXY protocol listener trusts the self signed terminator client certificate alone.
+	// The listener therefore rejects every leaf certificate of the local CAs.
 	tlsNameTerminatorClient = "terminator-client"
 )
 
@@ -259,8 +260,8 @@ func generateCertificateSerial() (*big.Int, error) {
 	return serial, nil
 }
 
-// writeCertificatePair stores the key as PKCS #8, which Go writes in the seed-only form for ML-DSA.
-// Vault and OpenSSL read the seed-only form, while Go rejects the expanded ML-DSA private key form.
+// writeCertificatePair marshals private keys as PKCS #8. The PKCS #8 encoding stores the ML-DSA seed of 32 bytes
+// accepted by Go, Vault, and OpenSSL. Go rejects the expanded ML-DSA key format.
 func writeCertificatePair(dir, name string, der []byte, key crypto.Signer) error {
 	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {

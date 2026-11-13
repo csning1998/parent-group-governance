@@ -149,7 +149,7 @@ func TestFormSpecDeployPreservesInjectionAttemptCharactersVerbatim(t *testing.T)
 }
 
 // TestFormSpecVerifyReportsWhetherTheServiceAcceptsTheSecret covers the read only observation
-// which secretrotate uses in place of a change request whenever the live credential is unknown.
+// used by the secretrotate package in place of a change request whenever the live credential is unknown.
 func TestFormSpecVerifyReportsWhetherTheServiceAcceptsTheSecret(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/validate" {

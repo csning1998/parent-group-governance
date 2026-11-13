@@ -14,10 +14,10 @@ The following rules of the organization naming standard apply directly in this r
 
 | Naming axis         | Rule                                                                                                                                       | Source in the organization naming standard |
 | :------------------ | :----------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------- |
-| Any name            | A name MUST NOT carry a qualifier which the namespace already implies.                                                                     | Section 3 Item A                           |
+| Any name            | A name MUST NOT carry a qualifier already implied by the namespace.                                                                        | Section 3 Item A                           |
 | Shared namespace    | A name in a shared namespace MUST carry the owner code qualifier.                                                                          | Section 3 Item A                           |
 | Vault instance noun | The Vault instance nouns are `bastion` and `downstream`. The noun `production` MUST name the stage only.                                   | Section 4 Item B and Item C                |
-| Terraform output    | An output name MUST follow the form `<subject>_<attribute>`. A new output MUST NOT repeat the subject which the layer name already states. | Section 5 Item D                           |
+| Terraform output    | An output name MUST follow the form `<subject>_<attribute>`. A new output MUST NOT repeat the subject already stated by the layer name.    | Section 5 Item D                           |
 | Subcommand verbs    | A CLI subcommand MUST use verb-initial ordering.                                                                                           | Section 3 Item C                           |
 
 ## Section 2. Vault Instances and Core Nouns
@@ -34,9 +34,9 @@ The following rules of the organization naming standard apply directly in this r
 
 1. An operator identity is a key of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor-parent-group-governance`, `platform-foundation`, `administrator`, `credential-rotator`, `credential-distributor-opgitlab`, and `consumer-opgitlab`.
 2. A certificate authentication role and its client certificate CN MUST carry the prefix `operator-` before the identity, as in `operator-administrator` and `operator-credential-rotator`.
-3. The identity key MUST determine the access tier and the owner code. `administrator` and `credential-rotator` name the tier of the same name, `credential-distributor-<owner code>` and `consumer-<owner code>` name the tier of the prefix, and every other key names a tenant. The Go domain type `AccessRole` MUST carry the tiers which the CLI resolves, `administrator` and `credential-rotator`.
-4. A tenant identifier MUST be an owner code formatted as lowercase alphanumerics delimited by hyphens, matching the repository name of the tenant.
-5. The tenant ACL policy in the Bastion Vault MUST follow the pattern `<owner_code>-terraform-operator`, which the cert role `operator-<owner_code>` assigns.
+3. The identity key MUST determine the access tier and the owner code. `administrator` and `credential-rotator` name the tier of the same name, `credential-distributor-<owner code>` and `consumer-<owner code>` name the tier of the prefix, and every other key names a tenant. The Go domain type `AccessRole` MUST carry the tiers resolved by the CLI: `administrator` and `credential-rotator`.
+4. A tenant identifier MUST be an owner code formatted as lowercase alphanumerics delimited by hyphens. The owner code MUST match the repository name of the tenant.
+5. The tenant ACL policy in the Bastion Vault MUST follow the pattern `<owner_code>-terraform-operator` assigned by the cert role `operator-<owner_code>`.
 
 ## Section 4. Vault Mounts and Service Boundaries
 
@@ -69,6 +69,6 @@ The following rules of the organization naming standard apply directly in this r
     - `Reconcile` MUST denote pushing an existing Vault credential outward to synchronize a drifted external service without credential rotation.
     - `Verify` MUST denote inspecting host binary prerequisites or probing credential validity without mutating state.
 2. The Go codebase MUST enforce strong typing for domain primitives:
-    - Sensitive credentials MUST be encapsulated within domain types that suppress plaintext leakage during string formatting.
+    - Sensitive credentials MUST be encapsulated within domain types which suppress plaintext leakage during string formatting.
     - High-entropy tokens generated through `crypto/rand` MUST be modeled using the dedicated type `RandomToken`, and MUST NOT carry a hex qualifier when encoded in URL-safe base64.
     - Access roles and credential keys MUST use distinct string-derived domain types rather than primitive strings.

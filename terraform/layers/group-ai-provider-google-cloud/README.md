@@ -11,7 +11,7 @@ The `group-ai-provider-google-cloud` layer manages the root Google Cloud Workloa
 - The layer enables required foundational GCP APIs: `iam.googleapis.com`, `iamcredentials.googleapis.com`, `sts.googleapis.com`, `aiplatform.googleapis.com`, and `generativelanguage.googleapis.com`.
 - The layer registers the root Workload Identity Pool `gitlab-pool` and OIDC Provider `gitlab-provider` pointing to `https://gitlab.com`.
 - The layer publishes root project metadata, pool identifiers, and provider contracts via Terraform Remote State Outputs for the governance layer of this repository.
-- The layer publishes `project_id`, `project_number`, `pool_id`, and `provider_id` at `registry/platform/ai-provider/google-cloud` of the Bastion Vault for the governance layers of other repositories, which read no state of this project.
+- The layer publishes `project_id`, `project_number`, `pool_id`, and `provider_id` at `registry/platform/ai-provider/google-cloud` of the Bastion Vault for the governance layers of other repositories. The governance layers of other repositories do not read the state of this project.
 - The layer does not provision downstream service accounts or IAM role bindings. Downstream isolation remains the sole responsibility of consuming project layers invoking `provisioner-workload-identity-federation`.
 
 ### Item B. Authentication Model
@@ -20,8 +20,8 @@ The Google Cloud Terraform provider authenticates using Application Default Cred
 
 - The provider retrieves OAuth2 tokens in memory from the local ADC credentials file `~/.config/gcloud/application_default_credentials.json`.
 - The layer consumes state backend credentials via environment variables or Bastion Vault token injection.
-- The Vault provider writes the registry key through the `administrator` Proxy, which `eval "$(vault-proxy-env administrator)"` loads.
-- The root layer does not write back any project-level WIF binding secrets into Vault, preserving strict multi-tenant boundary isolation.
+- The Vault provider writes the registry key through the `administrator` Proxy loaded by `eval "$(vault-proxy-env administrator)"`.
+- The root layer does not write back any project level WIF binding secrets into Vault. The strict boundary isolation between tenants is thereby preserved.
 
 ## Section 2. Host Prerequisites
 
@@ -52,7 +52,7 @@ The following table defines the correspondence between shell environment variabl
 
 ### Step A. Authenticate with Google Cloud
 
-The operator exports the target project and federation pool identifiers, and logs in interactively to establish user credentials and local Application Default Credentials (ADC).
+The operator exports the target project and federation pool identifiers. The operator then logs in interactively to establish user credentials and local Application Default Credentials (ADC).
 
 ```bash
 export GCP_PROJECT_ID="<gcp-project-id>"
@@ -66,7 +66,7 @@ gcloud config set project "${GCP_PROJECT_ID}"
 
 ### Step B. Export State Backend Credentials
 
-The `.envrc` of the layer loads the administrator identity through direnv. `vault-proxy-env` exports `TF_HTTP_USERNAME`, `TF_HTTP_PASSWORD`, and `GITLAB_TERRAFORM_STATE_BASE`, and the `.envrc` derives the state addresses of the layer.
+The `.envrc` of the layer loads the administrator identity through direnv. `vault-proxy-env` exports `TF_HTTP_USERNAME`, `TF_HTTP_PASSWORD`, and `GITLAB_TERRAFORM_STATE_BASE`. The `.envrc` derives the state addresses of the layer.
 
 ```bash
 cd terraform/layers/group-ai-provider-google-cloud
@@ -97,7 +97,7 @@ The output contains the following structures:
 
 - `project.id`: The Google Cloud project ID configured in `terraform.tfvars`.
 - `project.number`: The numeric project number resolved by the project data source.
-- `project.name`: The human-readable project display name.
+- `project.name`: The display name of the project.
 - `pool.id`: The Workload Identity Pool ID `gitlab-pool`.
 - `pool.name`: The full resource path of the pool.
 - `provider.id`: The Workload Identity Pool Provider ID `gitlab-provider`.
@@ -127,7 +127,7 @@ gcloud iam workload-identity-pools providers describe "${GCP_WORKLOAD_IDENTITY_P
 
 ### Item C. API Services Enablement Validation
 
-The operator validates that required Google Cloud APIs are active on the project.
+The operator confirms the active status of the required Google Cloud APIs on the project.
 
 ```bash
 gcloud services list --enabled --project="${GCP_PROJECT_ID}" --filter="NAME:(iamcredentials.googleapis.com OR sts.googleapis.com OR aiplatform.googleapis.com OR generativelanguage.googleapis.com)"
@@ -135,7 +135,7 @@ gcloud services list --enabled --project="${GCP_PROJECT_ID}" --filter="NAME:(iam
 
 ### Item D. Downstream Consumption Validation
 
-The operator validates that consuming layers can resolve the remote state.
+The operator confirms the resolution of the remote state in each consuming layer.
 
 ```bash
 cd ../administration-gitlab-project

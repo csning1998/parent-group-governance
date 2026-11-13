@@ -13,7 +13,7 @@
       - operator_vault_proxy.identities is mapping
     fail_msg: >-
       workstation_vault_proxy needs the operator account, the vault/tls directory, and the GitLab instance and
-      top-level group of origin, which the CLI injects, and workstation-topology.yaml, which the playbook loads.
+      top-level group of origin injected by the CLI, and workstation-topology.yaml loaded by the playbook.
 
 - name: "Section A. Resolve the operator account and the Proxy directories"
   ansible.builtin.include_tasks: A-operator.yaml
@@ -31,5 +31,5 @@
 - name: "Section D. Run one Vault Proxy per identity as a systemd user service"
   ansible.builtin.include_tasks: D-service.yaml
 
-- name: "Section E. Install vault-proxy-env, which prints the environment of an identity"
+- name: "Section E. Install vault-proxy-env to print the environment of an identity"
   ansible.builtin.include_tasks: E-env.yaml

@@ -35,7 +35,7 @@ func RunPlaybook(ctx context.Context, ansibleDir, runDir, playbookFile string, o
 		execOpts = append(execOpts, execute.WithCmdRunDir(runDir))
 	}
 
-	// The go-ansible error lists every variable of extraEnv, including the become password, and wraps no cause.
+	// The go-ansible error lists every variable of extraEnv, including the become password. The error does not wrap a cause.
 	// The playbook output already shows the failing task on the terminal.
 	if err := execute.NewDefaultExecute(execOpts...).Execute(ctx); err != nil {
 		return fmt.Errorf("%s failed, the task output above names the failing task", playbookFile)

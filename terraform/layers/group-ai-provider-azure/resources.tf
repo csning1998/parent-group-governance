@@ -36,7 +36,8 @@ resource "azurerm_cognitive_account" "openai" {
     identity_ids = [azurerm_user_assigned_identity.openai.id]
   }
 
-  # azurerm_cognitive_account_customer_managed_key owns the key, since an account update without this rule removes the key.
+  # azurerm_cognitive_account_customer_managed_key owns the key because
+  # an account update without this rule removes the key.
   lifecycle {
     prevent_destroy = true
     ignore_changes  = [customer_managed_key]

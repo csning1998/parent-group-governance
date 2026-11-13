@@ -22,7 +22,7 @@ listener "tcp" {
 }
 
 # The TLS terminator manages the publish address and forwards guest traffic using PROXY protocol v2.
-# The listener requires the terminator client certificate, since any local process can send a forged PROXY header to loopback.
+# The listener requires the terminator client certificate because any local process can send a forged PROXY header to loopback.
 listener "tcp" {
   address                            = "{{ vault_bastion.loopback_address }}:{{ vault_bastion.publish_backend_port }}"
   tls_disable                        = false

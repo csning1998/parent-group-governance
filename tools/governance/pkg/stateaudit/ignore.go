@@ -19,7 +19,7 @@ type Ignore struct {
 	Reason  string
 }
 
-// ignoreEntry is one entry of the ignore file, which names one or more addresses and one or more paths.
+// ignoreEntry is one entry of the ignore file. Each entry names one or more addresses and one or more paths.
 type ignoreEntry struct {
 	Address   string   `yaml:"address"`
 	Addresses []string `yaml:"addresses"`
@@ -96,7 +96,7 @@ func pickOneOrMany(one string, many []string, oneKey, manyKey string) ([]string,
 	return many, nil
 }
 
-// ApplyIgnores returns the findings which no entry names, and the entries which named none.
+// ApplyIgnores filters out ignored findings and returns the remaining findings alongside any unused ignore entries.
 func ApplyIgnores(findings []Finding, ignores []Ignore) ([]Finding, []Ignore) {
 	used := make([]bool, len(ignores))
 	var kept []Finding

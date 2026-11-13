@@ -4,7 +4,7 @@
 locals {
   operator_proxy = local.workstation.operator_vault_proxy
 
-  # Derives each proxy identity's access tier and owner code from its map key per the topology naming contract.
+  # Derives the access tier and owner code of each proxy identity from its map key per the topology naming contract.
   operator_identity_roles = {
     for name in keys(local.operator_proxy.identities) : name => {
       access_tier = (
@@ -36,13 +36,13 @@ locals {
     for name, identity in local.operator_proxy.identities : name => identity if local.operator_identity_roles[name].access_tier == "credential-rotator"
   }
 
-  # Maps every identity executing Terraform to its owner's GitLab state token path, excluding credential-rotator.
+  # Maps every identity executing Terraform to the GitLab state token path of its owner, excluding credential-rotator.
   # The administrator policy writes every path of the map.
   operator_state_backend_paths = {
     for name, role in local.operator_identity_roles : name => "${role.owner_code}/terraform/state-backend" if role.access_tier != "credential-rotator"
   }
 
-  # The administrator identity manages every mount, auth method, and audit device which this layer declares.
+  # The administrator identity manages every mount, auth method, and audit device declared by this layer.
   administrator_mount_paths = concat(
     [vault_mount.pki_root.path, vault_mount.transit_unseal.path, vault_mount.registry.path],
     [for mount in vault_mount.pki_constrained : mount.path],
@@ -101,7 +101,7 @@ resource "terraform_data" "operator_identities_validation" {
         for identity in values(local.operator_consumer_identities) :
         length(try(identity.allowed_read_secret_paths, [])) == 0 && length(try(identity.allowed_write_secret_paths, [])) == 0
       ])
-      error_message = "A consumer identity MUST NOT declare allowed_read_secret_paths or allowed_write_secret_paths, since the tier reads no organization credential."
+      error_message = "A consumer identity MUST NOT declare allowed_read_secret_paths or allowed_write_secret_paths because the tier does not read any organization credential."
     }
     precondition {
       condition     = length(distinct([for identity in values(local.operator_proxy.identities) : identity.listen_port])) == length(local.operator_proxy.identities)

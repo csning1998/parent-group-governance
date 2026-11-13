@@ -36,7 +36,7 @@ func New(endpoint, login, password string) *Client {
 	}
 }
 
-// Generate creates a token with the specified name and tokenType, returning the secret token value.
+// Generate creates a token with the specified name and tokenType. Generate returns the secret token value.
 func (c *Client) Generate(ctx context.Context, name, tokenType string) (string, error) {
 	form := url.Values{}
 	form.Set("name", name)

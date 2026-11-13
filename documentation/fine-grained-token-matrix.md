@@ -4,19 +4,19 @@ This document defines the GitLab.com fine-grained personal access tokens across 
 
 ## Section 1. Context and Constraints
 
-1. The current constraint is the GitLab.com Free tier plan of the group, which provides neither project access tokens nor group access tokens.
+1. The current constraint is the GitLab.com Free tier plan of the group. The Free tier plan provides neither project access tokens nor group access tokens.
 2. The chosen path provisions one fine-grained personal access token per repository for the state backend and one per CI tool for integration under the owner account. Setting `access` to selected memberships limits each downstream state backend token to its own project.
 3. Each state backend token provides `TF_HTTP_PASSWORD` for the Terraform HTTP state backend and supplies authentication for the `gitlab` provider across the layers of the repository.
 4. Each integration token authenticates one CI tool of `gitlab-ci-with-code-reviewer` in the pipelines of every repository whose CI variables carry the token. `./governance credentials issue code-reviewer-variables` writes the variables of each project in `code_reviewer_variable_projects`, and `provisioner-code-reviewer` writes the variables of each repository still calling the module.
-5. The associated cost is the manual rotation of each token, which attaches to the personal owner account and expires within 365 days.
-6. The owner manages tokens through <https://gitlab.com/-/user_settings/personal_access_tokens?state=active&sort=expires_asc>, which lists active tokens ordered by expiration date.
+5. The associated cost is the manual rotation of each token. Each token belongs to the personal owner account and expires within 365 days.
+6. The owner manages tokens through <https://gitlab.com/-/user_settings/personal_access_tokens?state=active&sort=expires_asc>. The page lists active tokens ordered by expiration date.
 7. Permission names conform to the GitLab fine-grained permission specifications for the [REST API](https://docs.gitlab.com/auth/tokens/fine_grained_access_tokens_rest/) and [GraphQL API](https://docs.gitlab.com/auth/tokens/fine_grained_access_tokens_graphql/).
 
 ## Section 2. Token Registry
 
 ### Item A. Names and Paths
 
-1. A token name MUST follow `terraform-state-backend-<repository name>`, or `terraform-state-backend-<owner code>` for a subgroup token. The token name serves display purposes only, placing the kind before the repository name to match operator Proxy identity conventions.
+1. A token name MUST follow `terraform-state-backend-<repository name>`, or `terraform-state-backend-<owner code>` for a subgroup token. The token name serves display purposes only. The name places the kind before the repository name to match operator Proxy identity conventions.
 2. A token description MUST be `Bastion Vault secret/<owner code>/terraform/state-backend` to record the exact path hosting the token.
 3. The token MUST reside in the `token` field under `secret/<owner code>/terraform/state-backend`. The `administrator` proxy identity writes to this path.
 
@@ -123,10 +123,10 @@ Action codes: `C` Create, `R` Read, `U` Update, `D` Delete, `L` Lock, `P` Protec
 
 1. A selected group extends every project permission of the token to every project and subgroup below the group.
 2. The `parent-group-governance` token therefore reaches the state, variables, and remote mirrors of every repository in `csning1998-lab`.
-3. The chosen path accepts the group wide scope, since the governance identity creates every project and the `administrator` identity writes every repository token.
+3. The chosen path accepts the group wide scope because the governance identity creates every project and the `administrator` identity writes every repository token.
 4. The associated cost is a governance token whose reach exceeds the state of `parent-group-governance`. Separate tokens for the state backend and the `gitlab` provider would narrow the reach, at the cost of `vault-proxy-env` exporting two tokens per identity.
 5. The `personal` token selects the subgroup `csning1998-lab/personal` and serves every repository below the subgroup through one identity. A personal repository joins without a change to `workstation-topology.yaml` or this document. The associated cost is a shared token without isolation between personal repositories.
-6. Each integration token selects the group `csning1998-lab`, because the CI tools run in the pipelines of every repository in the group.
+6. Each integration token selects the group `csning1998-lab` because the CI tools run in the pipelines of every repository in the group.
 
 ### Item F. Integration Tokens
 
@@ -150,13 +150,13 @@ The User tab and the Global tab grant no resource to either token.
 | Repository       | Repository Tag | R       | `auto-tag:verify-token` through `GET /projects/:id/repository/tags`                                              |
 
 1. `add_labels` creates a project label only when the referenced label does not exist. Every label applied by `mr-labeler` exists as a `gitlab_group_label` managed by `group-gitlab-configuration`. The update operation therefore does not create new labels and does not require the Label permission.
-2. The verification step `auto-tag:verify-token` inspects repository tags through read requests alone, which cannot detect a missing Repository Tag Create permission prior to merge. The token therefore MUST grant both Create and Read permissions on Repository Tag.
+2. The verification step `auto-tag:verify-token` inspects repository tags through read requests alone. Read requests cannot detect a missing Repository Tag Create permission prior to merge. The token therefore MUST grant both Create and Read permissions on Repository Tag.
 
 ## Section 4. Procedures
 
 ### Item A. Creation
 
-1. The owner MUST create the token at the URL specified in item 6 of Section 1, assigning the name and description defined in Section 2 Item A.
+1. The owner MUST create the token at the URL specified in item 6 of Section 1 with the name and description defined in Section 2 Item A.
 2. The owner MUST configure an expiration period of at most 365 days.
 3. The owner MUST select the groups and projects listed in the Selected memberships column of Section 2 Item A.
 4. The owner MUST grant the actions of the corresponding owner code column on each tab of the resource selector: Group and project (Section 3 Item A), User (Section 3 Item B), and Global (Section 3 Item C).
@@ -176,8 +176,8 @@ set +o pipefail
 ```
 
 1. The printed character count MUST be greater than zero.
-2. An erroneous value MUST be removed using `vault kv metadata delete -mount=secret <owner code>/terraform/state-backend` before writing the corrected value, because Vault KV-v2 retains historical versions.
-3. A shell loop variable in zsh MUST NOT use the name `path`, because zsh binds `path` directly to the environment variable `PATH`.
+2. An erroneous value MUST be removed using `vault kv metadata delete -mount=secret <owner code>/terraform/state-backend` before writing the corrected value because Vault KV v2 retains historical versions.
+3. A shell loop variable in zsh MUST NOT use the name `path` because zsh binds `path` directly to the environment variable `PATH`.
 4. An integration token replaces `<owner code>/terraform/state-backend` with the Vault path of Section 2 Item B, and the local file name with the token name.
 
 ### Item C. Verification
@@ -211,12 +211,12 @@ unset t
 
 ## Section 5. Provider Requirements
 
-The `gitlab` provider 19.2.0 issues the following requests, which determine the permissions of Section 3 beyond the managed resources.
+The following requests issued by the `gitlab` provider 19.2.0 determine the permissions of Section 3 beyond the managed resources.
 
-1. The provider requests `GET /user` during configuration, since the `early_auth_check` attribute defaults to `true`. The request requires User Read.
+1. The provider requests `GET /user` during configuration because the `early_auth_check` attribute defaults to `true`. The request requires User Read.
 2. `gitlab_branch_protection` and `gitlab_group` request `GET /metadata` to detect GitLab EE. The request requires Metadata Read.
-3. `gitlab_project` requests `GET /projects/:id/push_rule` on every refresh, and `gitlab_group` requests `GET /groups/:id/push_rule`. The provider accepts HTTP `404` alone, hence Push Rule Read is required although GitLab.com Free does not offer push rules.
-4. `gitlab_user_runner` updates the runner through `PUT /runners/:id`, which requires Runner Update.
-5. `gitlab_project_cicd_catalog` reads the catalog status through the GraphQL field `project(fullPath) { isCatalogResource }`, which Project Read covers.
-6. `gitlab_project` creation waits for the default branch protection through `GET /projects/:id/repository/branches/:branch`, which requires Branch Read.
-7. A token without a required permission receives HTTP `403` with the error `insufficient_granular_scope`, and the error description names the missing permission.
+3. `gitlab_project` requests `GET /projects/:id/push_rule` on every refresh, and `gitlab_group` requests `GET /groups/:id/push_rule`. The provider accepts HTTP `404` alone. Push Rule Read is therefore required although GitLab.com Free does not offer push rules.
+4. `gitlab_user_runner` updates the runner through `PUT /runners/:id`. The request requires Runner Update.
+5. `gitlab_project_cicd_catalog` reads the catalog status through the GraphQL field `project(fullPath) { isCatalogResource }`. Project Read covers the field.
+6. `gitlab_project` creation waits for the default branch protection through `GET /projects/:id/repository/branches/:branch`. The request requires Branch Read.
+7. A token without a required permission receives HTTP `403` with the error `insufficient_granular_scope`. The error description names the missing permission.

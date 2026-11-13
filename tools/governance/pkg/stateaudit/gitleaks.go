@@ -22,7 +22,7 @@ func NewGitleaksDetector() (ValueDetector, error) {
 	return gitleaksDetector{detector: detector}, nil
 }
 
-// Detect scans "key": "value", since the generic gitleaks rules require the attribute name as context.
+// Detect scans "key": "value" because the generic gitleaks rules require the attribute name as context.
 func (g gitleaksDetector) Detect(key, value string) []Detection {
 	var detections []Detection
 	for _, finding := range g.detector.DetectString(`"` + key + `": "` + value + `"`) {

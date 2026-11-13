@@ -1,4 +1,4 @@
-// Package topology loads workstation-topology.yaml, which Ansible, Terraform, and this CLI share.
+// Package topology loads workstation-topology.yaml shared by Ansible, Terraform, and this CLI.
 package topology
 
 import (
@@ -41,7 +41,7 @@ type BastionVault struct {
 	MetricsPort     int    `yaml:"metrics_port"`     // unauthenticated Prometheus metrics telemetry scraping port (8202)
 }
 
-// APIEndpoint returns the loopback API listener URL (e.g. https://127.0.0.1:8200), which CLI operations use.
+// APIEndpoint returns the loopback API listener URL (e.g. https://127.0.0.1:8200) used by CLI operations.
 func (b BastionVault) APIEndpoint() string {
 	return "https://" + net.JoinHostPort(b.LoopbackAddress, strconv.Itoa(b.APIPort))
 }
@@ -50,7 +50,7 @@ func (b BastionVault) APIEndpoint() string {
 type ProxyIdentity struct {
 	ListenPort int `yaml:"listen_port"` // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)
 
-	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // relative project paths under the root group receiving code reviewer CI/CD variables
+	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // project paths relative to the top-level group which receive the code reviewer CI/CD variables
 }
 
 // IdentityRole holds the access tier, owner code, and KV v2 state token path derived from an identity name.
@@ -102,8 +102,8 @@ type OperatorVaultProxy struct {
 
 	CertAuthMount    string                   `yaml:"cert_auth_mount"`   // Vault TLS certificate auth mount path matching CN operator-<identity>
 	UserConfigDir    string                   `yaml:"user_config_dir"`   // directory relative to user $HOME storing mTLS client certs and systemd units
-	PlaceholderToken string                   `yaml:"placeholder_token"` // dummy token string required by client headers, which the proxy strips and replaces
-	StateBackend     StateBackend             `yaml:"state_backend"`     // shared KV v2 location schema for owner state backend tokens
+	PlaceholderToken string                   `yaml:"placeholder_token"` // dummy token string required by client headers and replaced by the proxy
+	StateBackend     StateBackend             `yaml:"state_backend"`     // KV v2 location of the GitLab state token of each owner code
 	Identities       map[string]ProxyIdentity `yaml:"identities"`        // operator role entries mapped to their local listener ports and tiers
 }
 
@@ -137,7 +137,7 @@ type ProxyEndpoint struct {
 	CACert     string // absolute filesystem path to local root CA certificate bundle (ca.pem)
 	ClientCert string // absolute filesystem path to operator mTLS client certificate (client.pem)
 	ClientKey  string // absolute filesystem path to operator mTLS client private key (client-key.pem)
-	Token      string // dummy placeholder token (proxy-supplied), which the proxy replaces via mTLS
+	Token      string // dummy placeholder token (proxy-supplied) replaced by the proxy via mTLS
 }
 
 // HostTelemetryRegistry specifies the Vault KV v2 coordinates at which foundation-vault-bastion publishes the scrape subnet.

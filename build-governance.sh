@@ -29,11 +29,12 @@ readonly golangci_lint_module="github.com/golangci/golangci-lint/v2/cmd/golangci
 # Exported environment variables SHALL override default workstation analysis endpoints.
 readonly sonar_host_url="${SONAR_HOST_URL:-http://127.0.0.1:9000}"
 
-# Every go command MUST run on the toolchain directive of go.mod, which the distribution default GOTOOLCHAIN=local blocks.
+# The distribution default GOTOOLCHAIN=local blocks the toolchain directive of go.mod.
+# GOTOOLCHAIN=auto selects the directive toolchain for every go command.
 export GOTOOLCHAIN=auto
 
 # Static analysis and formatting MUST execute within the target Go module directory.
-# The linter MUST be built by that toolchain because a linter built by an older Go refuses the module.
+# The linter MUST be built by the go.mod toolchain because a linter built by an older Go refuses the module.
 (cd tools/"${cli_module}" && go fmt ./... >/dev/null)
 (cd tools/"${cli_module}" && go run "${golangci_lint_module}" run -c ../../.gitlab/golangci.yml ./...)
 
@@ -68,12 +69,12 @@ elif ! sonar_token=$(proxy_env=$(vault-proxy-env credential-distributor-parent-g
     vault kv get -mount=secret -field="${sonar_token_field}" "${sonar_token_path}"); then
     echo "skipped: the Bastion Vault returned no ${sonar_token_field} at secret/${sonar_token_path}" >&2
 else
-    # The scanner receives copies of the unignored files, the git history, and the coverage reports through podman cp,
-    # which bind-mounts no host path and skips ignored trees such as .terraform, node_modules, and Packer output.
-    # The copies carry the labels of the container and leave the host files out of reach of the analyzer.
-    # The traps remove the scanner, whose stored configuration holds SONAR_TOKEN, on every exit path.
+    # podman cp copies the unignored files, the git history, and the coverage reports into the scanner without a bind mount.
+    # The copy excludes ignored trees such as .terraform, node_modules, and Packer output. The copies receive the container labels.
+    # The analyzer therefore cannot reach the host files.
     scanner=""
     remove_scanner() { if [ -n "${scanner}" ]; then podman rm -f "${scanner}" >/dev/null 2>&1 || true; scanner=""; fi; }
+    # The traps remove the scanner on every exit path because the stored configuration of the scanner contains SONAR_TOKEN.
     trap 'rm -f "$coverage_rc"; remove_scanner' EXIT
     trap 'remove_scanner; exit 130' INT TERM
     scanner=$(SONAR_TOKEN="${sonar_token}" podman create --network host \

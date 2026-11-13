@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 )
 
-// Paths locates filesystem paths which Vault operations read or write.
+// Paths locates filesystem paths read or written by Vault operations.
 type Paths struct {
 	ProjectRoot string
 	Home        string

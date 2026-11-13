@@ -14,9 +14,9 @@ workstation_selinux_policy_modules:
   - workstation_nnp_container_runtime
   - gitlab_runner_podman
   - buildah_vfs_mounton
-# become: true gathers facts as root. A numeric-UID regex labels every
-# user-session Podman API directory. gitlab-runner dials that tree as
-# unix:///run/podman/podman.sock after a bind mount.
+# become: true gathers facts as root. A numeric UID regex labels every
+# user session Podman API directory. gitlab-runner dials the socket of the directory
+# as unix:///run/podman/podman.sock after a bind mount.
 workstation_selinux_podman_sock: "/run/user/[0-9]+/podman(/.*)?"
 workstation_selinux_on_premise_agent_names:
   - vault

@@ -8,10 +8,10 @@ locals {
 }
 
 # Each key names a PKI mount whose RFC 5280 Name Constraints bind the whole subtree, whatever a caller of sign-intermediate passes.
-# An assignable entry declares the policy which the owner may assign on the listed auth scopes, and {owner} expands to the owner.
+# An assignable entry declares the policy assignable by the owner on the listed auth scopes. {owner} expands to the owner.
 locals {
   constrained_intermediates = {
-    # The mount signs the SPIRE Parent CA, which signs the SPIRE Child CA.
+    # The mount signs the SPIRE Parent CA. The SPIRE Parent CA signs the SPIRE Child CA.
     "pki-intermediate-spire" = {
       owner                 = local.platform_tenant
       root_ca_id            = "ec-p384"
@@ -43,7 +43,7 @@ locals {
       excluded_ip_ranges    = [local.network_allocation.bastion_publish_cidr]
       assignable            = null
     }
-    # The mount issues leaf certificates alone, since the zero path length forbids a subordinate CA.
+    # The mount issues only leaf certificates because the zero path length forbids a subordinate CA.
     "pki-leaf-platform" = {
       owner                 = local.platform_tenant
       root_ca_id            = "ec-p384"
@@ -114,7 +114,7 @@ locals {
   }
 }
 
-# The tenant cannot rewrite the policy, because the tenant ACL does not grant any write on sys/policies/acl.
+# The tenant cannot rewrite the policy because the tenant ACL does not grant any write on sys/policies/acl.
 resource "vault_policy" "pki_constrained_assignable" {
   for_each = local.constrained_assignable
 
@@ -153,11 +153,11 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "pki_constrained_c
   key_bits      = each.value.key_bits
   parameter_set = each.value.parameter_set
 
-  # The algorithm and the mount accessor name the key, since Vault rejects a new key under an existing key name.
+  # The algorithm and the mount accessor name the key because Vault rejects a new key under an existing key name.
   key_name = "${each.value.algorithm}-${vault_mount.pki_constrained[each.value.mount].accessor}"
 }
 
-# The intermediate outlives the one-year CA certificates which the mount signs, since Vault rejects a TTL past the issuer expiry.
+# The intermediate outlives the CA certificates of one year signed by the mount because Vault rejects a TTL past the issuer expiry.
 resource "vault_pki_secret_backend_root_sign_intermediate" "pki_constrained_signed" {
   for_each = local.constrained_intermediate_issuers
 

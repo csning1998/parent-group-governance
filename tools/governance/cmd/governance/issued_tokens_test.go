@@ -69,8 +69,8 @@ func (v *issuedVault) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"data": map[string]any{"version": 2}})
 }
 
-// writeJSON answers with value. An encoding failure reaches the client under test as a malformed response body,
-// which the test then reports.
+// writeJSON encodes value as the JSON response body. An encoding failure reaches the client under test as a
+// malformed response body. The test reports the malformed response body.
 func writeJSON(w http.ResponseWriter, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }

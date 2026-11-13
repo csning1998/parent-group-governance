@@ -36,16 +36,16 @@ locals {
     "priority::P3-low"      = { color = "#64748b", description = "Identifies a low priority scheduled for future execution." }
 
     # Scoped labels under the 'status::' prefix MUST track the execution state. These labels are mutually exclusive within an Issue or Merge Request scope.
-    "status::pending"   = { color = "#eab308", description = "Indicates that progress is blocked pending external action or review." }
-    "status::to-do"     = { color = "#3b82f6", description = "Indicates an item scheduled for implementation that has not yet commenced." }
+    "status::pending"   = { color = "#eab308", description = "Indicates progress blocked pending external action or review." }
+    "status::to-do"     = { color = "#3b82f6", description = "Indicates an item scheduled for implementation and not yet commenced." }
     "status::duplicate" = { color = "#94a3b8", description = "Identifies a duplicate instance of an existing issue or merge request." }
     "status::wontfix"   = { color = "#64748b", description = "Indicates a formal decision to forego resolution or implementation." }
     "status::invalid"   = { color = "#475569", description = "Indicates an issue or merge request deemed out of scope or invalid." }
 
     # Scoped labels under the 'action::' prefix MUST specify required pipeline or review actions. These labels are mutually exclusive within an Issue or Merge Request scope.
-    "action::needs-review"   = { color = "#7c3aed", description = "Indicates that the merge request is ready for formal code review." }
-    "action::changes-needed" = { color = "#d97706", description = "Indicates that modifications are requested by reviewers prior to approval." }
-    "action::blocked"        = { color = "#b91c1c", description = "Indicates that execution is blocked by external dependencies or upstream tasks." }
+    "action::needs-review"   = { color = "#7c3aed", description = "Indicates a merge request ready for formal code review." }
+    "action::changes-needed" = { color = "#d97706", description = "Indicates modifications requested by reviewers prior to approval." }
+    "action::blocked"        = { color = "#b91c1c", description = "Indicates execution blocked by external dependencies or upstream tasks." }
 
     # Labels lacking a prefix represent orthogonal metadata attributes and MAY be concurrently assigned regardless of scoped label selections.
     "security"         = { color = "#991b1b", description = "Denotes security vulnerability mitigations or hardening enhancements." }

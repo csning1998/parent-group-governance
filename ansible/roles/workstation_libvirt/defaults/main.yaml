@@ -4,17 +4,18 @@
 # cannot supply the operator name. A hardcoded account name is forbidden.
 workstation_libvirt_operator_user: ""
 
-# The Bastion Vault guest-reachability segment lies outside service_catalog, since cidr_index must exceed
+# The Bastion Vault guest reachability segment lies outside service_catalog because cidr_index must exceed
 # cidr_nat_offset (124) and octet 0 of 172.16.0.0/24 lies outside the expressible range of the catalog.
 # The bridge address is vault_bastion.publish_address of workstation-topology.yaml.
 workstation_libvirt_publish_network:
   name: "vault-bastion-publish"
   netmask: "255.255.255.0"
-  # Restricts port 8200 ingress to the /24 publish subnet per ADR-143, requiring guest VMs to attach a publish NIC.
+  # Restricts port 8200 ingress to the /24 publish subnet per ADR 143, requiring guest VMs to attach a publish NIC.
+  # Section 0 of tasks/main.yaml asserts a 255.255.255.0 netmask because source_cidr derives a /24 prefix.
   source_cidr: "{{ (vault_bastion.publish_address.split('.')[:3] | join('.')) ~ '.0/24' }}"
 
-# vault.hcl.j2 renders the listeners of vault_bastion in workstation-topology.yaml, which the playbook loads.
-# The CLI injects workstation_libvirt_vault_config_path.
+# Renders vault.hcl from the vault_bastion listener settings in workstation-topology.yaml at the path injected via
+# workstation_libvirt_vault_config_path.
 workstation_libvirt_vault:
   config_path: "{{ workstation_libvirt_vault_config_path | default('') }}"
 
@@ -36,5 +37,5 @@ workstation_libvirt_terminator:
 workstation_libvirt_scrape_ports: >-
   {{ [vault_bastion.metrics_port] + (host_telemetry_scrape.host_exporter_ports | default([])) }}
 
-# Seconds which virtnetworkd waits at start for firewalld to report the running state.
+# Maximum startup wait in seconds for virtnetworkd until firewalld enters the running state.
 workstation_libvirt_firewalld_ready_timeout: 120

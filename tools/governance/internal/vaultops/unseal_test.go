@@ -84,7 +84,7 @@ func TestUnsealParsesLineByLine(t *testing.T) {
 	}
 }
 
-// TestUnsealStopsAtFirstFailure verifies that remaining unseal keys MUST NOT be submitted after an API failure.
+// TestUnsealStopsAtFirstFailure covers an API failure on the second unseal key. Unseal does not submit the third key.
 func TestUnsealStopsAtFirstFailure(t *testing.T) {
 	srv, received := newFakeUnsealServer(t, 1)
 	defer srv.Close()

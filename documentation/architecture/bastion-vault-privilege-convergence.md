@@ -16,11 +16,11 @@ This document records the privilege boundaries, roots of trust, fact publication
 - **Bastion Vault**: The `hashicorp/vault:2.2.0` OSS instance running via podman compose on the operator workstation, listening on `127.0.0.1:8200` and `10.20.0.1:8200`.
 - **Tenant**: A product repository granted a restricted set of privileges on the Bastion Vault and identified by an owner code, such as `platform-foundation`.
 - **Owner Code**: An identifier string for a tenant, formatted as lowercase alphanumerics connected by hyphens, such as `platform-foundation`, denoted as `<code>` below.
-- **root token**: The Bastion Vault root token, which `~/.vault-token` holds during the bootstrap and a break-glass alone.
+- **root token**: The Bastion Vault root token stored in `~/.vault-token` only during the bootstrap and a break glass.
 - **Operator identity**: An entry of `operator_vault_proxy.identities` in `workstation-topology.yaml`, such as `credential-distributor-parent-group-governance`, `platform-foundation`, `administrator`, `credential-rotator`, `credential-distributor-opgitlab`, or `consumer-opgitlab`. The key determines the access tier `credential-distributor`, `consumer`, `tenant`, `administrator`, or `credential-rotator`, and the owner code.
-- **Operator Vault Proxy**: The Vault Proxy of one operator identity on the operator workstation, which logs in through the cert auth mount `operator-cert` and overwrites the token of every request on its loopback mTLS listener.
-- **Operator cert role**: The cert auth role `operator-<identity>`, which admits the client certificate of CN `operator-<identity>` signed by the ML-DSA-87 CA of `vault/tls`.
-- **Assignment Scope**: The set of policy names which a tenant role on one class of auth mount is allowed to carry.
+- **Operator Vault Proxy**: The Vault Proxy of one operator identity on the operator workstation. The Proxy logs in through the cert auth mount `operator-cert`. The Proxy overwrites the token of every request on its loopback mTLS listener.
+- **Operator cert role**: The cert auth role `operator-<identity>`. The role admits the client certificate of CN `operator-<identity>` signed by the ML-DSA-87 CA of `vault/tls`.
+- **Assignment Scope**: The set of policy names assignable to a tenant role on one class of auth mount.
 - **registry**: The KV v2 mount `registry` written by pgg alone for the facts needed by tenants.
 - **Name Constraints**: The certificate extension defined by RFC 5280 which restricts the names carried by certificates issued under a given CA certificate.
 
@@ -29,7 +29,7 @@ This document records the privilege boundaries, roots of trust, fact publication
 ### Item A. Protected Assets
 
 1. The issuance capabilities of `pki-root` and subordinate intermediate CAs. The trust bundles of both the workstation and platform nodes trust `pki-root`. An issuer able to produce a certificate chaining back to `pki-root` can impersonate any service accepted by those trust bundles.
-2. The unseal capability of the Downstream Vault. Decrypt privileges on the transit key, combined with the encrypted root key in the Downstream Vault storage, yield the root key of the Downstream Vault, which is equivalent to acquiring all secrets inside the Downstream Vault.
+2. The unseal capability of the Downstream Vault. Decrypt privileges on the transit key, combined with the encrypted root key in the Downstream Vault storage, yield the root key of the Downstream Vault. Possession of the root key is equivalent to acquiring every secret inside the Downstream Vault.
 3. The authorization boundaries between tenants, as well as between tenants and pgg.
 4. Network allocation facts, specifically domains, stage domains, and CIDR blocks. These values determine the permitted and excluded scopes of Name Constraints.
 5. Audit logs. The audit log serves as the sole ground truth for forensic analysis.
@@ -50,7 +50,7 @@ Each row in the table below represents a threat scenario. The unmitigated conseq
 | ID  | Scenario                                                                 | Unmitigated Consequence                                                                                                                                                                                                                                                                                                                              | Countermeasure                       |
 | --- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
 | T1  | A tenant has write access to both policies and auth roles simultaneously | The tenant writes a policy containing `path "*"` and assigns the policy to a role of the tenant, obtaining full Bastion Vault privileges, including intermediate CA issuance and transit key decryption                                                                                                                                              | Section 3 Item E                     |
-| T2  | `allowed_parameters` matches policy names via glob patterns              | Strings like `<code>-a,other` are split into two distinct policies by the auth method, allowing the tenant to assign policies outside its assignment scope                                                                                                                                                                                           | Section 3 Item E.1                   |
+| T2  | `allowed_parameters` matches policy names via glob patterns              | The auth method splits a string such as `<code>-a,other` into two distinct policies. The tenant can thereby assign policies outside its assignment scope                                                                                                                                                                                             | Section 3 Item E.1                   |
 | T3  | Operator login credentials are issued by Terraform                       | Secret IDs or tokens enter state files, outputs, and KV storage, allowing any layer with read access to pgg state to log in as the operator identity indefinitely                                                                                                                                                                                    | Section 3 Item D                     |
 | T4  | mp reads pgg state via `terraform_remote_state`                          | The reader acquires the entire state snapshot. If the GitLab token used for reading carries the Maintainer role, the reader could tamper with pgg state to induce unintended actions during the next apply                                                                                                                                           | Section 4 Item C                     |
 | T5  | Published facts reside on paths writable by the tenant                   | The tenant tampers with the domains or CIDR blocks constraining itself, causing subsequent layers reading those facts to apply relaxed values                                                                                                                                                                                                        | Section 4 Item C.2                   |
@@ -74,7 +74,7 @@ Each row in the table below represents a threat scenario. The unmitigated conseq
 3. An identity capable of writing both policies and auth roles can craft a policy containing `path "*"` and assign the policy to a role of the identity, obtaining arbitrary privileges.
 4. When `allowed_parameters` in ACLs matches via glob patterns, strings containing commas such as `<code>-a,other` are accepted and subsequently split into two separate policies by the auth method.
 5. `terraform_remote_state` downloads the complete state snapshot, giving readers access to all resource attributes. `sensitive = true` only masks values in CLI output.
-6. Reading Terraform state from GitLab requires the Developer role, while writing and locking state requires the Maintainer role.
+6. Reading Terraform state from GitLab requires the Developer role. Writing and locking state requires the Maintainer role.
 7. Destroying a `vault_kv_secret_v2` resource with the default `delete_all_versions = false` soft deletes only the latest version. Earlier versions stay readable, and the latest version stays recoverable until the versions are destroyed or the metadata is deleted.
 8. Vault provider 5.5.0 deprecated the data source `vault_kv_secret_v2`.
 
@@ -82,7 +82,7 @@ Each row in the table below represents a threat scenario. The unmitigated conseq
 
 1. Every privilege MUST be held by the lowest identity in the hierarchy.
 2. Every Vault path MUST have only one writer.
-3. Every authorization boundary value MUST have a single declaration source, and that source MUST undergo version control and review.
+3. Every authorization boundary value MUST have a single declaration source. The declaration source MUST undergo version control and review.
 4. Secrets MUST NOT enter any Terraform state, KV copy, or output.
 5. Any check failure MUST abort the entire workflow. Partial results MUST NOT be applied.
 6. Daily operations MUST NOT require manual credential delivery.
@@ -107,7 +107,7 @@ Identities on the Bastion Vault are structured into five tiers. Each tier receiv
 1. The root token MUST only be used on the operator workstation.
 2. The root token serves the bootstrap alone: `vault init`, `vault enable-kv`, the first writes of the state backend token and the network allocation facts, and the first apply of `foundation-vault-bastion` through `vault-proxy-env root`. `./governance vault revoke-root` then revokes the token, and `./governance vault generate-root` restores one from the unseal key quorum for a break-glass.
 3. The root token MUST NOT reach a Vault Proxy or the environment of a non-root identity. `vault-proxy-env` unsets `VAULT_TOKEN` for the identity `root`, and prints the placeholder token for every other identity.
-4. Every use of the root token triggers a `vault-audit-alert`, which serves as an expected operational signal.
+4. Every use of the root token triggers a `vault-audit-alert`. The alert serves as an expected operational signal.
 
 ### Item C. L1 pgg Terraform
 
@@ -115,11 +115,11 @@ Identities on the Bastion Vault are structured into five tiers. Each tier receiv
 2. `foundation-vault-bastion` declares auth mounts, PKI mounts, transit mounts, registry mounts, audit devices, the operator cert auth mount and cert roles, and policies held by pgg.
 3. `foundation-vault-bastion` also declares the tenant ACL and every policy which a tenant may assign.
 4. The state file of the layer is stored in GitLab project `86417732`, and the state MUST NOT contain any secrets, as verified in Section 9 Step E.
-5. Applies MUST use a saved plan: executing `terraform plan -out=tfplan` first, followed by `terraform apply tfplan` after review.
+5. Applies MUST use a saved plan. The operator executes `terraform plan -out=tfplan` first and `terraform apply tfplan` after review.
 
 ### Item D. L2 Operator Vault Proxy
 
-This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-root login to the Bastion Vault runs through the Vault Proxy of one operator identity. A caller holds no Vault token, hence a leaked shell environment or a leaked state file exposes no credential which logs in.
+This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non root login to the Bastion Vault passes through the Vault Proxy of one operator identity. A caller does not hold a Vault token. A leaked shell environment or a leaked state file therefore does not expose a credential capable of a login.
 
 #### Item D.1 Declaration of the Operator Cert Roles
 
@@ -142,7 +142,7 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non-ro
 3. A key without the prefix `credential-distributor-` or `consumer-` names no tenant of `access-tenant.tf`.
 4. A secret path carries a wildcard or an empty segment, a registry path names anything other than one domain below `platform/`, or a consumer identity declares a secret path.
 
-The local `operator_identity_roles` derives the tier and the owner code from each key, and every identity except `credential-rotator` reads the GitLab token at `<owner code>/terraform/state-backend`. The derivation keeps the governance GitLab token with the identities of `parent-group-governance`, since only `administrator` and `credential-distributor-parent-group-governance` yield that owner code.
+The local `operator_identity_roles` derives the tier and the owner code from each key. Every identity except `credential-rotator` reads the GitLab token at `<owner code>/terraform/state-backend`. The derivation keeps the governance GitLab token with the identities of `parent-group-governance` because only `administrator` and `credential-distributor-parent-group-governance` yield the `parent-group-governance` owner code.
 
 Terraform MUST NOT declare any client certificate, private key, secret ID, or token.
 
@@ -159,10 +159,10 @@ The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Work
 #### Item D.3 Token Boundary Guarantees
 
 1. The Bastion Vault token of an operator identity MUST reside in the memory of the Proxy alone. The Proxy overwrites the placeholder token of every request.
-2. The Vault provider MUST skip the child token, since a child token from `auth/token/create` does not carry `token_bound_cidrs` and the cert role grants no `auth/token/create`.
+2. The Vault provider MUST skip the child token because a child token from `auth/token/create` does not carry `token_bound_cidrs` and the cert role does not grant `auth/token/create`.
 3. The long lived credential is the client private key. The key never leaves the operator workstation and never enters a Terraform state, an output, or a KV path.
 4. No secret ID and no wrapping token exist in the operator login, hence no credential crosses the network outside the mTLS handshake.
-5. The identity `root` uses the token helper `~/.vault-token` and bypasses every Proxy, since root applies the cert roles needed by every Proxy.
+5. The identity `root` uses the token helper `~/.vault-token` instead of a Proxy because root applies the cert roles needed by every Proxy.
 
 #### Item D.4 Usage Conditions
 
@@ -175,9 +175,9 @@ The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Work
 
 The tenant registry lists platforms alone, and a repository of the group registers no tenant for the governance layer. Every governance layer of the group runs through the credential-distributor Proxy of its owner, `credential-distributor-<code>`, including `credential-distributor-parent-group-governance`.
 
-1. The policy `operator-<identity>` of each credential-distributor identity reads the GitLab token of the owner of the identity, the paths of `allowed_read_secret_paths`, and the registry domains of `allowed_read_registry_paths` in `workstation-topology.yaml`, and writes nothing, since `allowed_write_secret_paths` lists no prefix.
-2. The paths of `allowed_read_secret_paths` are the group keys: the Anthropic admin key, the GitHub publication token, and the SonarQube analysis token. No credential-distributor identity reads the two bot tokens below `gitlab-ci-with-code-reviewer/integration`, since `./governance credentials issue code-reviewer-variables` writes both tokens into each project of `code_reviewer_variable_projects` through the administrator identity.
-3. The Workload Identity Federation module writes no Vault path, hence `allowed_write_secret_paths` lists no prefix, and a governance layer holds no Vault write privilege.
+1. The policy `operator-<identity>` of each `credential-distributor` identity reads the GitLab token of the owner of the identity, the paths of `allowed_read_secret_paths`, and the registry domains of `allowed_read_registry_paths` in `workstation-topology.yaml`. The policy does not grant any write because `allowed_write_secret_paths` does not list a prefix.
+2. The paths of `allowed_read_secret_paths` are the group keys: the Anthropic admin key, the GitHub publication token, and the SonarQube analysis token. A `credential-distributor` identity does not read the two bot tokens below `gitlab-ci-with-code-reviewer/integration` because `./governance credentials issue code-reviewer-variables` writes both tokens into each project of `code_reviewer_variable_projects` through the administrator identity.
+3. The Workload Identity Federation module does not write a Vault path. `allowed_write_secret_paths` therefore does not list a prefix. A governance layer does not hold a Vault write privilege.
 
 #### Item D.6 Administrator Identity
 
@@ -225,8 +225,8 @@ The tenant ACL comprises five categories of rules.
 
 1. Each rule which writes auth roles belongs to one assignment scope.
 2. An assignment scope admits `default`, `registry-reader-<code>`, and the assignable policies which name the scope.
-3. Transit unseal policies stay in the owned scope, which contains the Kubernetes auth mounts used by the Downstream Vault pods.
-4. `pki-intermediate-spire-signer-<code>` stays in the approle scope, which contains the AppRole of the SPIRE Parent upstream authority.
+3. Transit unseal policies remain in the owned scope. The owned scope contains the Kubernetes auth mounts used by the Downstream Vault pods.
+4. `pki-intermediate-spire-signer-<code>` remains in the approle scope. The approle scope contains the AppRole of the SPIRE Parent upstream authority.
 5. The gitlab scope admits neither a signer policy nor an issuer policy, because a CI job role carries claims chosen by the tenant.
 6. `registry/<code>/bastion` publishes the policy names of each scope in the field `assignable_policies`.
 
@@ -276,7 +276,7 @@ pgg declares five categories of policies. The tenant cannot rewrite these polici
 
 This section addresses T6 from Section 2 Item C. Network allocation facts govern the permitted and excluded scopes of Name Constraints. Any unreviewed modification is equivalent to relaxing certificate trust boundaries.
 
-`foundation-vault-bastion/network-allocation.tf` reads the instance values from `secret/parent-group-governance/network/allocation` on the Bastion Vault. The instance values do not reside in the repository, since the repository is public and serves every deployment.
+`foundation-vault-bastion/network-allocation.tf` reads the instance values from `secret/parent-group-governance/network/allocation` on the Bastion Vault. The instance values do not reside in the repository because the repository is public and serves every deployment.
 
 | Field                  | Source                | Example            | Purpose                                                                                                               |
 | ---------------------- | --------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
@@ -284,8 +284,8 @@ This section addresses T6 from Section 2 Item C. Network allocation facts govern
 | `stages`               | Bastion KV, JSON list | `["production"]`   | Derivation of the stage domains, formatted as `<stage>.<domain_suffix>`                                               |
 | `network_cidr`         | Bastion KV            | `10.20.0.0/16`     | Platform network CIDR, permitted IP scope for `pki-intermediate-vault-downstream` and `pki-leaf-platform`             |
 | `bastion_publish_cidr` | Bastion KV            | `10.20.0.0/24`     | Bastion publish network CIDR, excluded IP scope, and the source of the Bastion publish address in `token_bound_cidrs` |
-| `pod_network_cidr`     | Bastion KV            | `10.64.0.0/10`     | Pool of the pod network of each Kubernetes cluster, carved by `cidr_index` and `cidr_subnet_bits`                     |
-| `service_network_cidr` | Bastion KV            | `10.128.0.0/12`    | Pool of the service network of each Kubernetes cluster, carved by `cidr_index` and `cidr_subnet_bits`                 |
+| `pod_network_cidr`     | Bastion KV            | `10.64.0.0/10`     | Pool of the pod network of each Kubernetes cluster carved by `cidr_index` and `cidr_subnet_bits`                      |
+| `service_network_cidr` | Bastion KV            | `10.128.0.0/12`    | Pool of the service network of each Kubernetes cluster carved by `cidr_index` and `cidr_subnet_bits`                  |
 
 The locals `cilium_hubble_extra_dns_domains` (`hubble-grpc.cilium.io`, `hubble-relay.cilium.io`) and `kubernetes_default_cluster_domain` (`cluster.local`) of `trust-pki-constrained.tf` are code constants outside the fact object. The Hubble names are the fixed suffixes under which Cilium names Hubble mTLS peers. `cluster.local` is the permitted DNS scope of `pki-leaf-platform` for the Service names of in-cluster raft peers.
 
@@ -294,7 +294,7 @@ The locals `cilium_hubble_extra_dns_domains` (`hubble-grpc.cilium.io`, `hubble-r
 3. tfvars, `-var`, and `TF_VAR_` MUST NOT be able to override network allocation facts.
 4. `terraform_data.network_allocation_validation` carries a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, when `network_cidr` is not a `/16`, or when `bastion_publish_cidr` differs from segment 0 of `network_cidr`. Another precondition stops the plan when `network_cidr`, `pod_network_cidr`, and `service_network_cidr` overlap, or when the prefix length of a pool plus `cidr_subnet_bits` exceeds 32. A further precondition stops the plan when `host_log_rendezvous_offset` equals the host number of `vault_bastion.publish_address`.
 5. A `check` block is not used for the validation, because a failed `check` assertion only produces a warning (refer to the [Terraform check block documentation](https://developer.hashicorp.com/terraform/language/block/check)).
-6. KV v2 keeps every version of the path. A change of the instance values replaces the constrained intermediate certificates in the next plan, which exposes the change during review of the plan.
+6. KV v2 keeps every version of the path. A change of the instance values replaces the constrained intermediate certificates in the next plan. The replacement exposes the change during review of the plan.
 7. `vault_bastion.publish_address` of `workstation-topology.yaml` declares the Bastion publish address, and a precondition of `terraform_data.network_allocation_validation` stops the plan when the address lies outside `bastion_publish_cidr`.
 
 ### Item B. Intermediate CAs Restricted by Name Constraints
@@ -303,12 +303,12 @@ This section addresses T7, T8, and T16 from Section 2 Item C. The trust bundles 
 
 #### Item B.1 PKI Hierarchy
 
-| Mount                               | Issuer      | Purpose                                                                                                                                                     | `max_path_length` |
-| ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `pki-root`                          | Self-signed | Infrastructure Root CA, dual issuers (`ec-p384`, `ml-dsa-87`), `prevent_destroy`                                                                            | Unlimited         |
-| `pki-intermediate-spire`            | `pki-root`  | Target issuer of the SPIRE Parent CA, dual issuers (`ec-p384`, `ml-dsa-87`), which in turn signs the SPIRE Child CA, with migration in Section 10 Item B    | 2                 |
-| `pki-intermediate-vault-downstream` | `pki-root`  | Target issuer of the Downstream Vault CA, dual issuers (`ec-p384`, `ml-dsa-87`), which in turn signs one mesh CA layer, with migration in Section 10 Item B | 2                 |
-| `pki-leaf-platform`                 | `pki-root`  | Leaf issuer for tenant roles, dual issuers (`ec-p384`, `ml-dsa-87`), such as the listener certificates of the SPIRE Parent and the Downstream Vault         | 0                 |
+| Mount                               | Issuer      | Purpose                                                                                                                                                                       | `max_path_length` |
+| ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `pki-root`                          | Self-signed | Infrastructure Root CA, dual issuers (`ec-p384`, `ml-dsa-87`), `prevent_destroy`                                                                                              | Unlimited         |
+| `pki-intermediate-spire`            | `pki-root`  | Target issuer of the SPIRE Parent CA with dual issuers (`ec-p384`, `ml-dsa-87`). The SPIRE Parent CA signs the SPIRE Child CA. Section 10 Item B covers the migration.        | 2                 |
+| `pki-intermediate-vault-downstream` | `pki-root`  | Target issuer of the Downstream Vault CA with dual issuers (`ec-p384`, `ml-dsa-87`). The Downstream Vault CA signs one mesh CA layer. Section 10 Item B covers the migration. | 2                 |
+| `pki-leaf-platform`                 | `pki-root`  | Leaf issuer for tenant roles, dual issuers (`ec-p384`, `ml-dsa-87`), such as the listener certificates of the SPIRE Parent and the Downstream Vault                           | 0                 |
 
 pgg embeds the Name Constraints of `pki-intermediate-spire`, `pki-intermediate-vault-downstream`, and `pki-leaf-platform` into the intermediate CA certificates through `root/sign-intermediate` on `pki-root`. Subordinate callers cannot omit or loosen these restrictions.
 
@@ -322,9 +322,9 @@ Every intermediate mount holds dual issuers: an ECDSA P-384 issuer and an ML-DSA
 | `pki-intermediate-vault-downstream` | DNS `domain_suffix` and Hubble names, IP `network_cidr`                        | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
 | `pki-leaf-platform`                 | DNS `domain_suffix` and `kubernetes_default_cluster_domain`, IP `network_cidr` | IP `bastion_publish_cidr`, URI `domain_suffix` and `.<domain_suffix>` |
 
-1. `pki-intermediate-spire` excludes all IP addresses, preventing certificates issued by SPIRE from spoofing Bastion addresses `127.0.0.1` or `10.20.0.1`.
-2. `pki-intermediate-vault-downstream` excludes URIs under the platform domain and every subdomain of the platform domain, a range which contains the SPIFFE trust domain, preventing the Downstream Vault from issuing SVIDs.
-3. `pki-intermediate-vault-downstream` excludes the Bastion publish CIDR, ensuring that a compromised Downstream Vault cannot issue listener certificates for the Bastion Vault.
+1. `pki-intermediate-spire` excludes all IP addresses. Certificates issued by SPIRE therefore cannot spoof the Bastion addresses `127.0.0.1` or `10.20.0.1`.
+2. `pki-intermediate-vault-downstream` excludes URIs under the platform domain and every subdomain of the platform domain. The excluded range contains the SPIFFE trust domain. The Downstream Vault therefore cannot issue SVIDs.
+3. `pki-intermediate-vault-downstream` excludes the Bastion publish CIDR. A compromised Downstream Vault therefore cannot issue listener certificates for the Bastion Vault.
 4. `pki-leaf-platform` permits neither a loopback address nor the Bastion publish CIDR, and a tenant leaf role therefore cannot issue a Bastion listener certificate.
 5. The Downstream Vault listener certificate MUST NOT carry `localhost` or `127.0.0.1`.
 6. The raft peers of the Downstream Vault MUST join through names under `kubernetes_default_cluster_domain`.
@@ -343,7 +343,7 @@ This section addresses T4 and T5 from Section 2 Item C. The choice of publicatio
 
 #### Item C.1 Publication Contents
 
-`foundation-vault-bastion/service-registry.tf` declares the KV v2 mount `registry` along with two types of publications, the `registry.tf` of each AI provider layer publishes the identifiers of that provider, and the `registry.tf` of `group-foundation` and `group-topology` publishes the GitLab group identifiers. Each field of `registry/<code>/bastion` holds one JSON object. In `registry/platform/network/allocation`, `stage_domains` and `host_log_rendezvous_server_names` hold JSON arrays, `network_baseline` holds one JSON object, and the remaining fields hold plain strings. Every field of `registry/platform/ai-provider/<provider>` and `registry/platform/gitlab-group/top-level` holds a plain string. `subgroup_ids` of `registry/platform/gitlab-group/subgroups` holds one JSON object mapping each subgroup path to its identifier as a string.
+`foundation-vault-bastion/service-registry.tf` declares the KV v2 mount `registry` along with two types of publications. The `registry.tf` of each AI provider layer publishes the identifiers of the provider. The `registry.tf` of `group-foundation` and `group-topology` publishes the GitLab group identifiers. Each field of `registry/<code>/bastion` contains one JSON object. In `registry/platform/network/allocation`, `stage_domains` and `host_log_rendezvous_server_names` contain JSON arrays. `network_baseline` contains one JSON object. The remaining fields of the allocation path contain plain strings. Every field of `registry/platform/ai-provider/<provider>` and `registry/platform/gitlab-group/top-level` contains a plain string. `subgroup_ids` of `registry/platform/gitlab-group/subgroups` contains one JSON object which maps each subgroup path to the identifier of the subgroup as a string.
 
 | Path                                         | Field                                                                                         | Contents                                                                                                                                                 |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -364,7 +364,7 @@ This section addresses T4 and T5 from Section 2 Item C. The choice of publicatio
 
 #### Item C.2 Access Rules
 
-1. Only a pgg layer running as `administrator` MAY write to `registry`, and each path MUST have one writer layer. `foundation-vault-bastion` writes `platform/network/allocation` and `<code>/bastion`, each AI provider layer writes `platform/ai-provider/<provider>`, `group-foundation` writes `platform/gitlab-group/top-level`, and `group-topology` writes `platform/gitlab-group/subgroups`, since `foundation-vault-bastion` applies before those layers and cannot publish the identifiers created by those layers.
+1. Only a pgg layer running as `administrator` MAY write to `registry`. Each path MUST have one writer layer. `foundation-vault-bastion` writes `platform/network/allocation` and `<code>/bastion`. Each AI provider layer writes `platform/ai-provider/<provider>`. `group-foundation` writes `platform/gitlab-group/top-level`. `group-topology` writes `platform/gitlab-group/subgroups`. `foundation-vault-bastion` applies before the AI provider layers, `group-foundation`, and `group-topology`. `foundation-vault-bastion` therefore cannot publish the identifiers created by those layers.
 2. The publication path MUST NOT fall under the tenant writable path `secret/<code>/`. A tenant able to write a publication location could loosen the facts which constrain the tenant.
 3. Tenants consume publication content using `registry-reader-<code>`. A credential-distributor or consumer identity reads the domains of its `allowed_read_registry_paths` alone.
 4. Consumers read data via data source `vault_generic_secret`, decode JSON fields with `nonsensitive(jsondecode(...))`, and read plain string fields with `nonsensitive(...)`.
@@ -379,7 +379,7 @@ This section addresses T9 and T10 from Section 2 Item C. Decrypt permissions on 
 2. Each auto-unsealing Vault cluster maintains a dedicated `aes256-gcm96` key.
 3. Both `exportable` and `allow_plaintext_backup` remain false on keys. Neither setting can return to false once enabled.
 4. `deletion_allowed` remains false on keys.
-5. Policy `transit-unseal-<consumer>` permits only encrypt, decrypt, and `auth/token/renew-self` on that specific key.
+5. Policy `transit-unseal-<consumer>` permits only encrypt, decrypt, and `auth/token/renew-self` on the dedicated key of the consumer.
 6. The Kubernetes auth role on the consumer side is declared by mp, configured with `token_no_default_policy = true`, `token_period = 3600`, and `token_bound_cidrs`.
 
 ## Section 5. Audit and Alerts
@@ -423,13 +423,13 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 
 ### Item A. Package Architecture
 
-| Package or role                        | File                                           | Responsibility                                                                                                        |
-| -------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `internal/topology`                    | `topology.go`                                  | Loads `vault_bastion` of `workstation-topology.yaml`, the Bastion endpoint and the listener certificate addresses     |
-| `internal/vaultops`                    | `operator.go`, `paths.go`, `root.go`, `tls.go` | Vault lifecycle and the local CA, with the endpoint and the listener addresses of the topology alone                  |
-| `pkg/secretrotate`                     | `factory_default.go`                           | `AwaitFactoryDefault` used by `vault init` to verify that each service still accepts its factory default              |
-| `cmd/governance`                       | `host_playbooks.go`, `commands.go`, `menu.go`  | `host apply-all` and the first menu item, which run SELinux, libvirt, the local CA when absent, and the Vault Proxies |
-| Ansible role `workstation_vault_proxy` | `tasks/`, `templates/`                         | Client certificates, Proxy configurations, systemd user units, and `vault-proxy-env`                                  |
+| Package or role                        | File                                           | Responsibility                                                                                                    |
+| -------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `internal/topology`                    | `topology.go`                                  | Loads `vault_bastion` of `workstation-topology.yaml`, the Bastion endpoint and the listener certificate addresses |
+| `internal/vaultops`                    | `operator.go`, `paths.go`, `root.go`, `tls.go` | Vault lifecycle and the local CA, with the endpoint and the listener addresses of the topology alone              |
+| `pkg/secretrotate`                     | `factory_default.go`                           | `AwaitFactoryDefault` used by `vault init` to verify the factory default of each service against the live service |
+| `cmd/governance`                       | `host_playbooks.go`, `commands.go`, `menu.go`  | `host apply-all` and the first menu item for SELinux, libvirt, the local CA when absent, and the Vault Proxies    |
+| Ansible role `workstation_vault_proxy` | `tasks/`, `templates/`                         | Client certificates, Proxy configurations, systemd user units, and `vault-proxy-env`                              |
 
 ### Item B. Commands and Menus
 
@@ -441,7 +441,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 
 1. `./governance` removes every Vault variable read by the Vault API client, such as `VAULT_ADDR`, `VAULT_CACERT`, and `VAULT_SKIP_VERIFY`, before any command runs. The Vault API client reads the process environment inside `NewClient`, and an ambient value therefore overrides or breaks an explicitly configured client. Without the removal, a stale `VAULT_CACERT` of a wiped TLS directory stops the CLI which regenerates the TLS directory, and the Proxy environment of a `.envrc` reroutes the root operations of the CLI to a Proxy. Every test package which builds a Vault client clears the same variables in `TestMain`.
 2. `./governance vault init` sends no Vault request when a service of `service_admin_passwords` rejects its factory default password.
-3. `./governance host apply-all` generates the local CAs only when `vault/tls/ca-ml-dsa-87.pem` is absent, since a new CA invalidates the listener certificates, every client certificate of the Proxies, and every operator cert role.
+3. `./governance host apply-all` generates the local CAs only when `vault/tls/ca-ml-dsa-87.pem` is absent because a new CA invalidates the listener certificates, every client certificate of the Proxies, and every operator cert role.
 4. A blank answer to the become password prompt cancels the run before any playbook starts.
 
 ### Item D. Testing
@@ -466,10 +466,10 @@ For risks associated with rejecting this choice, refer to T1 and T2.
 2. Decision: pgg declares the tenant ACL and every assignable policy. A tenant does not write or request any policy.
 3. Cost: A new Bastion permission for a tenant requires a pgg change and a pgg apply.
 
-| Alternative                                                    | Rationale for Rejection                                                                                                  |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Tenant writes policies with the tenant prefix                  | A prefix does not restrict the capabilities inside a policy                                                              |
-| A broker validates and writes policies requested by a tenant   | Every request change requires an mp apply followed by a pgg apply, and the request scope checks grow with every new path |
+| Alternative                                                  | Rationale for Rejection                                                                                              |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Tenant writes policies with the tenant prefix                | A prefix does not restrict the capabilities inside a policy                                                          |
+| A broker validates and writes policies requested by a tenant | Every request change requires an mp apply followed by a pgg apply. The request scope checks grow with every new path |
 
 ### Item B. Operator Login Mechanism
 
@@ -493,7 +493,7 @@ For risks associated with rejecting this choice, refer to T4 and T5.
 
 1. Constraint: `terraform_remote_state` downloads the complete state snapshot. Consumers require GitLab tokens with read access to the pgg project, and the Maintainer role confers write access.
 2. Decision: pgg publishes facts to the `registry` mount, and tenants read the facts through Vault ACLs.
-3. Cost: Consumers must hold a Vault token. KV values are stored as strings, which consumers decode and validate independently.
+3. Cost: Consumers must hold a Vault token. KV values are stored as strings. Consumers decode and validate the strings independently.
 
 | Alternative                                         | Rationale for Rejection                                                                        |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -501,7 +501,7 @@ For risks associated with rejecting this choice, refer to T4 and T5.
 | Reading state with a Developer-role read-only token | Consumers still acquire complete state snapshots                                               |
 | Consul KV                                           | Requires deploying stateful services and bootstrapping ACLs, introducing another root of trust |
 | SSM Parameter Store                                 | Coupled with AWS, incompatible with on-prem and Nutanix migration                              |
-| Publishing to `secret/<code>/`                      | Writable by the tenant, allowing the tenant to relax the constraints placed on the tenant      |
+| Publishing to `secret/<code>/`                      | Writable by the tenant. The tenant can thereby relax the constraints placed on the tenant      |
 
 Terraform documentation recommends publishing external data outside state files to maintain decoupled access controls (refer to [The terraform_remote_state Data Source](https://developer.hashicorp.com/terraform/language/state/remote-state-data)).
 
@@ -573,13 +573,13 @@ The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 
 
 ### Step A. Greenfield Deployment
 
-1. Run the first menu item `[Host] Apply All Workstation Prerequisites` of `./governance`, which applies SELinux, the libvirt prerequisites, the local CA when absent, and the Vault Proxies.
-2. Start the Bastion Vault container from `compose.yml`, which declares the audit volume, together with every service of `service_admin_passwords`.
+1. Run the first menu item `[Host] Apply All Workstation Prerequisites` of `./governance`. The menu item applies SELinux, the libvirt prerequisites, the local CA when absent, and the Vault Proxies.
+2. Start the Bastion Vault container and every service of `service_admin_passwords` from `compose.yml`. `compose.yml` declares the audit volume.
 3. Initialize the Bastion Vault, unseal the Bastion Vault, and enable the KV v2 engine through `./governance`.
 4. Write the instance values with `vault kv put secret/parent-group-governance/network/allocation @network-allocation.json`, using `network-allocation.example.json` as the template.
 5. Apply `foundation-vault-bastion` with `vault-proxy-env root`. The apply creates the operator cert roles, after which every Proxy logs in.
-6. Run `./governance host apply-vault-audit`, which injects `workstation_vault_audit_home` and `workstation_vault_audit_repository` into the `workstation_vault_audit` playbook.
-7. Run the mp layers which require the Bastion Vault through the platform-foundation Proxy, following the sequence documented in `architecture_platform-foundation_deployment-chain.md` in the planning repository.
+6. Run `./governance host apply-vault-audit`. The command injects `workstation_vault_audit_home` and `workstation_vault_audit_repository` into the `workstation_vault_audit` playbook.
+7. Run the mp layers which require the Bastion Vault through the platform-foundation Proxy in the sequence documented in `architecture_platform-foundation_deployment-chain.md` in the planning repository.
 8. Revoke the root token with `./governance vault revoke-root` once the administrator Proxy logs in.
 
 ### Step B. Routine Operations
@@ -587,7 +587,7 @@ The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 
 1. Execute `./governance vault unseal` after any Bastion Vault reboot.
 2. Enter a directory whose `.envrc` loads the operator identity, and direnv loads the Proxy environment.
 3. Run `./governance host apply-vault-proxy` within 30 days of the expiry of the client certificates.
-4. Generate plans for Terraform changes using `terraform plan -out=tfplan`, reviewing the plans before executing `terraform apply tfplan`.
+4. Generate plans for Terraform changes with `terraform plan -out=tfplan`. Review the plans before executing `terraform apply tfplan`.
 
 ## Section 9. Verification
 
@@ -623,7 +623,7 @@ systemctl --user is-active vault-proxy@platform-foundation.service
 | Token check                       | `VAULT_TOKEN=proxy-supplied`, the placeholder overwritten by the Proxy                                                                                                                                  |
 | `vault token lookup`              | `path` is `auth/operator-cert/login`, policies are `default`, `platform-foundation-terraform-operator`, `registry-reader-platform-foundation`, `ttl` does not exceed 3600, `bound_cidrs` is `127.0.0.1` |
 | `vault policy list`               | 403 permission denied                                                                                                                                                                                   |
-| `curl` without client certificate | `000`, since the Proxy listener rejects the handshake                                                                                                                                                   |
+| `curl` without client certificate | `000` because the Proxy listener rejects the handshake                                                                                                                                                  |
 | Unit state                        | `active`                                                                                                                                                                                                |
 
 ### Step C. Registry and Privilege Boundary Verification
@@ -712,7 +712,7 @@ for res in state["resources"]:
 '
 ```
 
-In the expected output, only `data_json` of `registry_platform_network_allocation` and `registry_tenant_bastion` contains data, representing the public facts detailed in Section 4 Item C. The data source `vault_generic_secret.network_allocation` also contains data, representing the network allocation facts of Section 4 Item A. All other sensitive attributes MUST be `null`.
+In the expected output, only `data_json` of `registry_platform_network_allocation` and `registry_tenant_bastion` contains data. The data represents the public facts detailed in Section 4 Item C. The data source `vault_generic_secret.network_allocation` also contains data. The data of the data source represents the network allocation facts of Section 4 Item A. All other sensitive attributes MUST be `null`.
 
 ### Step F. Alerts
 
@@ -729,18 +729,18 @@ Root token usage and rejected role writes MUST appear in the systemd journal.
 
 1. `vault/keys/unseal.key` holds every unseal key, and a reader of the file produces a root token through generate-root. `enable_unauthenticated_access` admits generate-root without a token. A compromise of the workstation account therefore compromises the Bastion Vault, while the root token itself resides on disk during the bootstrap and a break-glass alone.
 2. Audit logs lack a remote sink. A compromise of the host allows tampering with the audit logs.
-3. Alerts are written only to journald without push notification channels, and the user timer requires systemd linger when the operator is not logged in.
+3. Alerts are written only to journald without push notification channels. The user timer requires systemd linger while the operator is logged out.
 4. The owned scope of `auth/<code>-*` covers JWT auth mounts created by the tenant.
 5. `administration-gitlab-project` of every downstream repository holds the shared GitLab token of `secret/parent-group-governance/terraform/state-backend`. The layers of pgg create the group `csning1998-lab` and write their own states with the token, hence a holder of the token manages the group and writes the state of every project.
 6. `workstation-topology.yaml` declares the Bastion publish address, while `bastion_publish_cidr` of the network allocation facts declares the publish network. A precondition ties both, and the two values remain two declaration sources.
 7. The client private key of each operator identity resides below `~/.config/vault-proxy` with mode `0600`. A process of the operator account reads the key and logs in as the identity until the certificate expires.
 8. `vault/tls/ca-ml-dsa-87-key.pem` signs a client certificate for any operator identity, hence the key is equivalent to every operator identity. The file carries mode `0600`.
 9. Classical digital signatures, ECDSA P-384 included, are quantum vulnerable. NIST IR 8547 initial public draft disallows quantum vulnerable signatures after 2035. `pki-root` and every constrained intermediate mount hold an ML-DSA-87 issuer, while the `root_ca_id` of every constrained intermediate remains `ec-p384`, hence every issued chain stays ECDSA until the switch.
-10. Every GitLab token belongs to the personal account of the operator and reaches the workstation through the Bastion Vault. GitLab.com Free does not offer project access tokens, which bind a token to a project bot user, hence a compromise of the workstation account exposes every repository.
+10. Every GitLab token belongs to the personal account of the operator and reaches the workstation through the Bastion Vault. GitLab.com Free does not offer project access tokens bound to a project bot user. A compromise of the workstation account therefore exposes every repository.
 
 ### Item B. Next Steps
 
-1. Rebuild mp to read `registry`, removing every `terraform_remote_state` reference to `foundation-vault-bastion`.
+1. Rebuild mp to read `registry`. The rebuild removes every `terraform_remote_state` reference to `foundation-vault-bastion`.
 2. Move the SPIRE Parent upstream authority to `pki-intermediate-spire`, the Downstream Vault intermediate CA to `pki-intermediate-vault-downstream`, and every listener certificate to `pki-leaf-platform`.
 3. Integrate the secret scanning routine from Section 9 Step E into pgg CI pipelines.
 4. Consolidate the publish address of `workstation-topology.yaml` and `bastion_publish_cidr` into one declaration source.

@@ -124,8 +124,8 @@ func (a *app) runMenu(ctx context.Context) error {
 	}
 }
 
-// runReconcileCredentialMenu prompts for one or more credentials that already have a value in
-// Vault and reconciles each chosen credential in turn, asking for its current live password.
+// runReconcileCredentialMenu prompts for one or more credentials with a value in Vault.
+// Each chosen credential is reconciled in turn after a prompt for its current live password.
 // A failure on one credential does not stop the rest.
 func (a *app) runReconcileCredentialMenu(ctx context.Context) error {
 	client, err := a.newRotationClient()
@@ -162,9 +162,9 @@ func (a *app) runReconcileCredentialMenu(ctx context.Context) error {
 	return lastErr
 }
 
-// runRotateCredentialMenu prompts for one or more of the declared credential keys and rotates
-// each chosen credential in turn. A failure on one credential does not stop the rest. Each
-// listed key is marked with whether Vault already holds a value for that credential.
+// runRotateCredentialMenu prompts for one or more of the declared credential keys.
+// Each chosen credential is rotated in turn. A failure on one credential does not stop the rest.
+// Each listed key indicates whether Vault already stores a value for the credential.
 func (a *app) runRotateCredentialMenu(ctx context.Context) error {
 	keys := make([]string, len(a.credentials))
 	labels := make([]string, len(a.credentials))

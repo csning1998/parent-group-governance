@@ -1,6 +1,6 @@
 
 variable "gitlab_url" {
-  description = "Specifies the https URL of the GitLab instance, which vault-proxy-env exports from the origin remote of parent-group-governance."
+  description = "Specifies the GitLab instance HTTPS URL exported by vault-proxy-env from the repository origin remote."
   type        = string
 
   validation {
@@ -10,7 +10,7 @@ variable "gitlab_url" {
 }
 
 variable "gitlab_top_level_group_path" {
-  description = "Specifies the path of the top-level GitLab group, which vault-proxy-env exports from the origin remote of parent-group-governance."
+  description = "Specifies the root GitLab group path exported by vault-proxy-env from the repository origin remote."
   type        = string
 
   validation {

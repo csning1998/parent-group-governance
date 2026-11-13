@@ -1,7 +1,6 @@
 ---
-# Defines a dedicated internal network segment for Bastion Vault guest reachability using
-# the 172.16.0.0/24 subnet, which remains unallocated by service_catalog due to the
-# cidr_index > cidr_nat_offset (124) boundary constraint.
+# Defines a dedicated internal network segment for Bastion Vault guest reachability on 172.16.0.0/24.
+# service_catalog leaves the subnet unallocated because cidr_index must exceed cidr_nat_offset (124).
 - name: "B1. Define Bastion Vault publish network"
   community.libvirt.virt_net:
     uri: qemu:///system

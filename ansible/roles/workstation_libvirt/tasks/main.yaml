@@ -40,7 +40,7 @@
       playbooks/workstation_secure_boot.yaml of workstation-backup before this playbook.
 
 # The publish network requires a running virtnetworkd. A host which enables only
-# the socket unit never starts the daemon at boot, which skips libvirt autostart.
+# the socket unit does not start the daemon at boot. libvirt then skips network autostart.
 - name: "Section A. Enable the libvirt network daemon after firewalld"
   ansible.builtin.include_tasks: A-virtnetworkd.yaml
 

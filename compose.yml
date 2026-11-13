@@ -14,8 +14,8 @@ services:
     container_name: parent-group-governance-gitlab-runner
     network_mode: "host"
     restart: always
-    # Reaching the rootless podman socket requires the connectto permission, which the
-    # gitlab_runner_podman policy module grants exclusively to this SELinux type.
+    # Reaching the rootless podman socket requires the connectto permission. The gitlab_runner_podman
+    # policy module grants the permission exclusively to this SELinux type.
     security_opt:
       - label=type:container_engine_t
     volumes:
@@ -25,7 +25,7 @@ services:
   vault-server:
     image: docker.io/hashicorp/vault:2.2.0
     container_name: parent-group-governance-vault-bastion
-    # Vault starts without waiting for the publish network, since every listener in vault.hcl binds loopback.
+    # Vault starts without waiting for the publish network because every listener in vault.hcl binds loopback.
     entrypoint: ["vault", "server", "-config=/opt/vault/vault.hcl"]
     # Ansible role workstation_libvirt renders VAULT_ADDR from the loopback listener in workstation-topology.yaml.
     env_file:
@@ -51,7 +51,7 @@ services:
       retries: 5
 
   # The TLS terminator binds the publish address to enforce ML-KEM-1024 key exchange.
-  # The terminator shares the host namespace with vault-server, since the PROXY protocol backend binds loopback.
+  # The terminator shares the host namespace with vault-server because the PROXY protocol backend binds loopback.
   vault-terminator:
     build:
       context: ./vault/terminator
@@ -59,7 +59,8 @@ services:
     container_name: parent-group-governance-vault-bastion-terminator
     # HAProxy running as PID 1 ignores SIGTERM. Container init forwards the signal to HAProxy.
     init: true
-    # The entrypoint polls for the publish address before starting HAProxy, since libvirt assigns the address asynchronously.
+    # The entrypoint polls for the publish address before starting HAProxy.
+    # libvirt assigns the publish address asynchronously.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
