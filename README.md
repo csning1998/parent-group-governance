@@ -198,7 +198,7 @@ The service `iac-runner` inside `on-premise-gitlab-deployment` is exempt from th
 2. The following command reports the distinct label set carried by every file beneath the registered mount sources. The reported set MUST contain the single entry `container_file_t:s0` without a category suffix.
 
     ```bash
-    ls -RZ .gitleaks.toml vault sonarqube | grep -o 'container_file_t:s0[^ ]*' | sort -u
+    ls -RZ .gitleaks.toml vault sonarqube gitlab-runner-configs | grep -o 'container_file_t:s0[^ ]*' | sort -u
     ```
 
 3. The runner MUST establish a connection to the Podman socket. The following request confirms access through an HTTP status of 200.
@@ -212,7 +212,7 @@ The service `iac-runner` inside `on-premise-gitlab-deployment` is exempt from th
 4. `matchpathcon` retrieves the policy default of any path. `matchpathcon` MUST report `container_file_t:s0` for every registered mount source.
 
     ```bash
-    matchpathcon .gitleaks.toml vault/data sonarqube/data
+    matchpathcon .gitleaks.toml vault/data sonarqube/data gitlab-runner-configs
     ```
 
 5. The file `/etc/fstab` MUST carry `etc_t:s0`. The command `ls -Z /etc/fstab` reports the label.

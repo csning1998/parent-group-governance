@@ -41,6 +41,9 @@ workstation_selinux_personal_on_premise_agent_rel: >-
 workstation_selinux_fcontext_present:
   - target: "{{ workstation_selinux_repository }}/(vault|sonarqube)(/.*)?"
     ftype: a
+  # A recreated runner container receives new MCS categories. The s0 level admits every category pair.
+  - target: "{{ workstation_selinux_repository }}/gitlab-runner-configs(/.*)?"
+    ftype: a
   - target: "{{ workstation_selinux_repository }}/.git(/.*)?"
     ftype: a
   - target: "{{ workstation_selinux_repository }}/.gitleaks.toml"
@@ -127,6 +130,7 @@ workstation_selinux_fcontext_absent:
 workstation_selinux_restorecon_paths:
   - "{{ workstation_selinux_repository }}/vault"
   - "{{ workstation_selinux_repository }}/sonarqube"
+  - "{{ workstation_selinux_repository }}/gitlab-runner-configs"
   - "{{ workstation_selinux_repository }}/.git"
   - "{{ workstation_selinux_repository }}/.gitleaks.toml"
   - "{{ workstation_selinux_platform_foundation_root }}/vault"
