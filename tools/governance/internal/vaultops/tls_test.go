@@ -291,7 +291,7 @@ func TestTerminatorClientCertificateAloneAuthenticatesToTheProxyListener(t *test
 	}
 }
 
-// handshakeWithClientAuth returns the server side result, since TLS 1.3 reports a rejected client certificate
+// handshakeWithClientAuth returns the server side result because TLS 1.3 reports a rejected client certificate
 // to the client only on the first read.
 func handshakeWithClientAuth(t *testing.T, serverConfig, clientConfig *tls.Config) error {
 	t.Helper()

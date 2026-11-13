@@ -24,10 +24,10 @@ type SonarQubeAnalysisTokenConfig struct {
 	GitLabGroupVariableKey string     `yaml:"gitlab_group_variable_key"` // GitLab group CI/CD variable key storing the token
 }
 
-// GitLabGroupRunnerConfig declares the group runner and the config.toml which the runner container reads.
+// GitLabGroupRunnerConfig declares the group runner and the config.toml read by the runner container.
 type GitLabGroupRunnerConfig struct {
 	Description string   `yaml:"description"` // runner description in the group settings and the runner name in config.toml
-	TagList     []string `yaml:"tag_list"`    // job tags which the runner accepts
+	TagList     []string `yaml:"tag_list"`    // job tags accepted by the runner
 	ConfigPath  string   `yaml:"config_path"` // config.toml path relative to the project root
 }
 
@@ -37,7 +37,7 @@ type ReviewerBotToken struct {
 	VariableKeys []string   `yaml:"variable_keys"` // project CI/CD variable keys receiving the bot token
 }
 
-// CodeReviewerVariablesConfig declares the bot tokens which ./governance writes into each listed project.
+// CodeReviewerVariablesConfig declares the bot tokens written by ./governance into each listed project.
 type CodeReviewerVariablesConfig struct {
 	BotTokens []ReviewerBotToken `yaml:"bot_tokens"` // bot tokens of the reviewer and the version tag jobs
 }

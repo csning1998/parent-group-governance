@@ -1,4 +1,4 @@
-// Package vaultenv removes the ambient Vault environment, since the governance CLI configures every Vault client explicitly.
+// Package vaultenv removes the ambient Vault environment because the governance CLI configures every Vault client explicitly.
 package vaultenv
 
 import (
@@ -8,7 +8,7 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 )
 
-// Names lists every variable which the Vault API client reads from the process environment.
+// Names lists every variable read by the Vault API client from the process environment.
 var Names = []string{
 	vaultapi.EnvVaultAddress,
 	vaultapi.EnvVaultAgentAddr,

@@ -12,7 +12,7 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 )
 
-// probeTimeout bounds a status probe, since the Vault API defaults of 60 seconds and two retries
+// probeTimeout bounds a status probe because the Vault API defaults of 60 seconds and two retries
 // stall the interactive banner for minutes against an unreachable address.
 const probeTimeout = 3 * time.Second
 

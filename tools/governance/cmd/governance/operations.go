@@ -27,7 +27,7 @@ const (
 
 const msgCancelled = "Cancelled."
 
-// serviceReadyTimeout bounds the wait for the services of service_admin_passwords, which start with the Bastion Vault.
+// serviceReadyTimeout bounds the wait for the services of service_admin_passwords started with the Bastion Vault.
 const serviceReadyTimeout = 5 * time.Minute
 
 // errRetainedServiceState indicates a target service rejecting its factory default password before Vault initialization.
@@ -51,8 +51,8 @@ func (a *app) enableVaultKV(ctx context.Context) error {
 	return op.EnableKVEngine(ctx)
 }
 
-// ensureLocalCA generates the local CA when vault/tls holds none, since a new CA invalidates every issued certificate.
-// An existing CA keeps its certificates, and only a missing terminator client certificate is issued.
+// ensureLocalCA generates the local CA when vault/tls lacks a CA because a new CA invalidates every issued certificate.
+// An existing CA keeps its certificates. ensureLocalCA then issues only a missing terminator client certificate.
 func (a *app) ensureLocalCA(_ context.Context) error {
 	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err != nil {
 		return a.issueVaultTLS()

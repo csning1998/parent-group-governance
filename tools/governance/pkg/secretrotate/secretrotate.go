@@ -19,7 +19,7 @@ var ErrAuthRejected = errors.New("secretrotate: the live service rejected the pr
 // ErrNoLiveCredential marks a live service which accepts none of the candidate credentials.
 var ErrNoLiveCredential = errors.New("secretrotate: the live service accepts none of the known credentials")
 
-// DeployFunc deploys a rotated secret against the target service, authenticating with previous.
+// DeployFunc deploys a rotated secret against the target service with previous as the authentication credential.
 // An implementation MUST wrap ErrAuthRejected when the service rejects previous.
 type DeployFunc func(ctx context.Context, previous, next string) error
 
@@ -35,7 +35,8 @@ type Spec struct {
 	Deploy DeployFunc
 	Verify VerifyFunc
 
-	// FactoryDefaultPassword is the credential of a rebuilt service, which Rotate and Reconcile verify as a candidate.
+	// FactoryDefaultPassword specifies the initial password of a freshly provisioned service.
+	// Rotate and Reconcile test the password as a fallback candidate.
 	FactoryDefaultPassword string
 }
 
@@ -43,8 +44,8 @@ type Spec struct {
 // An implementation MUST return an error, never false, for an answer which proves nothing.
 type VerifyFunc func(ctx context.Context, secret string) (bool, error)
 
-// deployRaceResolvedError signals that Deploy failed only because a writer outside this rotation
-// already changed the target field before Deploy ran.
+// deployRaceResolvedError reports a Deploy failure caused only by a writer outside the current rotation.
+// The outside writer changed the target field before Deploy ran.
 type deployRaceResolvedError struct {
 	Resolved string
 	cause    error
@@ -69,7 +70,7 @@ type rotationState struct {
 	PendingNext string `json:"pending_next"`
 }
 
-// vaultField is the value of the rotated field which Rotate read under the lock.
+// vaultField holds the current secret value and its presence flag read under the rotation lock.
 type vaultField struct {
 	value  string
 	exists bool
@@ -146,7 +147,7 @@ func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(st
 		return recovered, err
 	}
 
-	// A rebuilt service holds the factory default, and a rebuilt Vault holds no value at all.
+	// A rebuilt service accepts the factory default. A rebuilt Vault does not store a value.
 	var candidates []string
 	if exists {
 		candidates = append(candidates, previous)
@@ -172,7 +173,8 @@ func (e *deployRaceResolvedError) Error() string {
 
 func (e *deployRaceResolvedError) Unwrap() error { return e.cause }
 
-// acquireLock stakes the claim of the current Rotate call on the lock, returning the holder identifier written.
+// commitRotation performs the deploy, the Vault commit, and the staged state cleanup for next.
+// A deploy race resolves through resolveDeployedElsewhere.
 func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, read vaultField, live, next string, log func(string)) (string, error) {
 	if err := stageAndDeploy(ctx, client, spec, read, live, next, log); err != nil {
 		var raced *deployRaceResolvedError
@@ -222,13 +224,13 @@ func recoverPendingRotation(ctx context.Context, client *vaultapi.Client, spec S
 
 func requireVerify(spec Spec) error {
 	if spec.Verify == nil {
-		return errors.New("secretrotate: Spec.Verify is required, since every operation observes the live credential first")
+		return errors.New("secretrotate: Spec.Verify is required because every operation observes the live credential first")
 	}
 	return nil
 }
 
-// resolveDeployedElsewhere accepts raced.Resolved only after Verify confirms the live service
-// holds that same value.
+// resolveDeployedElsewhere accepts raced.Resolved only after a successful Verify of raced.Resolved
+// against the live service.
 func resolveDeployedElsewhere(ctx context.Context, client *vaultapi.Client, spec Spec, raced *deployRaceResolvedError, log func(string)) (string, error) {
 	live, err := spec.Verify(ctx, raced.Resolved)
 	if err != nil {
@@ -241,12 +243,12 @@ func resolveDeployedElsewhere(ctx context.Context, client *vaultapi.Client, spec
 		return "", fmt.Errorf("secretrotate: %w, and clearing the stale rotation state failed: %w", raced, err)
 	}
 	if log != nil {
-		log("Deploy failed against a stale previous, but the Vault field already reflects a rotation completed elsewhere; accepting that value.")
+		log("Deploy failed against a stale previous, but the Vault field already reflects a rotation completed elsewhere; accepting the raced value.")
 	}
 	return raced.Resolved, nil
 }
 
-// resolveLiveCredential returns the first candidate which the live service accepts.
+// resolveLiveCredential returns the first candidate accepted by the live service.
 func resolveLiveCredential(ctx context.Context, spec Spec, candidates []string) (string, error) {
 	seen := map[string]bool{}
 	for _, candidate := range candidates {

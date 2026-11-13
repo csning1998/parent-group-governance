@@ -132,7 +132,7 @@ func TestHTTPSourceReportsRejectedCredentials(t *testing.T) {
 	}
 }
 
-// TestHTTPSourceReportsAStateWhichNeverExisted covers GitLab, which answers 204 for a layer without any apply.
+// TestHTTPSourceReportsAStateWhichNeverExisted covers the HTTP 204 response of GitLab for a layer without any apply.
 func TestHTTPSourceReportsAStateWhichNeverExisted(t *testing.T) {
 	server := newBackend(t)
 	source := HTTPSource{Client: server.Client(), Username: "some-gitlab-ci-token", Password: "some-backend-secret"}

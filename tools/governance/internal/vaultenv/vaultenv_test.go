@@ -37,7 +37,7 @@ func TestNamesCoverTheVaultAPIEnvironment(t *testing.T) {
 	}
 	for _, name := range read {
 		if !slices.Contains(Names, name) {
-			t.Errorf("Names lacks %s, which the Vault API client reads", name)
+			t.Errorf("Names lacks the Vault API client variable %s", name)
 		}
 	}
 }

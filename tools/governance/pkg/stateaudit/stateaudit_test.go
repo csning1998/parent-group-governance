@@ -25,7 +25,7 @@ func (prefixDetector) Detect(_, value string) []Detection {
 	return nil
 }
 
-// stateFixture is a version 4 state with every shape which ScanState reads.
+// stateFixture is a version 4 state with every shape read by ScanState.
 func stateFixture() []byte {
 	return []byte(`{
   "version": 4,

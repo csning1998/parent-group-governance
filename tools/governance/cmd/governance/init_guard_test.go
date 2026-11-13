@@ -20,7 +20,7 @@ func TestInitVaultProceedsWhenEveryServiceAcceptsTheFactoryDefault(t *testing.T)
 		credentials: []credentials.Credential{credentialAccepting("example-fresh", true)},
 	}
 
-	// vaultops.Init then fails against the absent Vault, which proves the check passed.
+	// vaultops.Init then fails against the absent Vault. The failure occurs only after a passing check.
 	if err := a.initVault(context.Background()); errors.Is(err, errRetainedServiceState) {
 		t.Errorf("initVault error = %v, want the check to pass", err)
 	}

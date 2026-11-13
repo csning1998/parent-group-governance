@@ -14,7 +14,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 )
 
-// hostFixture is an app whose ansible-playbook is a recorder on PATH, which fails on a playbook named in failOn.
+// hostFixture is an app whose ansible-playbook is a recorder on PATH. The recorder fails on every playbook named in failOn.
 type hostFixture struct {
 	a   *app
 	log string
@@ -218,7 +218,7 @@ func newHostFixture(t *testing.T, becomeAnswer, failOn string) *hostFixture {
 	}
 }
 
-// calls returns one line per ansible-playbook run, holding the arguments and whether the become password arrived.
+// calls returns one line per ansible-playbook run. Each line records the arguments and whether the become password arrived.
 func (f *hostFixture) calls(t *testing.T) []string {
 	t.Helper()
 	data, err := os.ReadFile(f.log)

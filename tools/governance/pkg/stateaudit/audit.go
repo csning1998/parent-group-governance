@@ -109,7 +109,7 @@ func NewCommand(resolve func(opts Options) (Config, error)) *cobra.Command {
 			return AuditAndReport(cmd.Context(), cfg, cmd.OutOrStdout())
 		},
 	}
-	cmd.Flags().BoolVar(&opts.History, "history", false, "also scan every historical state version which the backend holds")
+	cmd.Flags().BoolVar(&opts.History, "history", false, "also scan every historical state version held by the backend")
 	cmd.Flags().StringVar(&opts.TerraformDir, "terraform-dir", "", "audit the layers and the ignore file below this terraform directory of another repository")
 	cmd.Flags().BoolVar(&reveal, "reveal", false, "print each value below its location, on an interactive terminal outside CI alone")
 	return cmd

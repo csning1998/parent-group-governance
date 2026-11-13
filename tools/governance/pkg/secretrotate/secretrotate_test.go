@@ -39,16 +39,14 @@ type fakeKVv2 struct {
 	afterRequest         map[int]func()
 }
 
-// fakeVaultPayload is the request body shape shared by the write and patch handlers of the fake
-// server, holding the KV-v2 data map plus an optional check-and-set version requested by the
-// caller.
+// fakeVaultPayload is the request body shape shared by the write and patch handlers of the fake server.
+// The payload contains the KV v2 data map and an optional check and set version requested by the caller.
 type fakeVaultPayload struct {
 	Data map[string]any `json:"data"`
 	Cas  *int           `json:"cas"`
 }
 
-// liveService fakes the one credential which the live service accepts, behind both the Deploy and
-// the Verify of a Spec. Deploy changes the credential only when previous matches the credential.
+// liveService simulates a target service holding a single active password for Spec.Verify and Spec.Deploy.
 type liveService struct {
 	current   string
 	deploys   [][2]string
@@ -58,8 +56,8 @@ type liveService struct {
 }
 
 // outsideWriteCase is one row of TestRotateResolvesAgainstAWriterOutsideThisRotation. liveValue
-// names the single credential the fake live service accepts, letting each row decide whether the
-// value the outside writer stored is genuinely live.
+// names the single credential accepted by the fake live service. Each row thereby decides whether
+// the value stored by the outside writer is genuinely live.
 type outsideWriteCase struct {
 	name             string
 	storedByOutsider string
@@ -203,7 +201,7 @@ func TestReconcileFailsWhenNoValueExistsInVault(t *testing.T) {
 }
 
 // TestReconcileIsANoOpWhenTheServiceAlreadyAcceptsTheVaultValue covers a service already in sync.
-// Reconcile MUST NOT call Deploy, since a change to the same password is rejected by some services.
+// Reconcile MUST NOT call Deploy because some services reject a change to the same password.
 func TestReconcileIsANoOpWhenTheServiceAlreadyAcceptsTheVaultValue(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
@@ -243,7 +241,7 @@ func TestReconcileResolvesTheLiveCredentialBeforeDeploying(t *testing.T) {
 		{name: "the factory default is live", liveValue: "admin", wantPrevious: "admin"},
 		{name: "an interrupted rotation left the staged value live", staged: "pending-value", liveValue: "pending-value", wantPrevious: "pending-value"},
 		{name: "the operator supplies the live value", operator: "typed-value", liveValue: "typed-value", wantPrevious: "typed-value"},
-		{name: "the operator supplies a value which the service rejects", operator: "typed-value", liveValue: "admin", wantErr: ErrNoLiveCredential},
+		{name: "the operator supplies a value rejected by the service", operator: "typed-value", liveValue: "admin", wantErr: ErrNoLiveCredential},
 		{name: "no candidate is live", liveValue: "unknown", wantErr: ErrNoLiveCredential},
 	}
 	for _, c := range cases {
@@ -251,8 +249,8 @@ func TestReconcileResolvesTheLiveCredentialBeforeDeploying(t *testing.T) {
 	}
 }
 
-// TestReconcileStopsWhenVerifyIsInconclusive covers a transport failure of Verify, which proves
-// nothing about the live credential. Reconcile MUST stop before Deploy.
+// TestReconcileStopsWhenVerifyIsInconclusive covers a transport failure of Verify. The transport failure
+// does not prove the state of the live credential. Reconcile MUST stop before Deploy.
 func TestReconcileStopsWhenVerifyIsInconclusive(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
@@ -272,8 +270,8 @@ func TestReconcileStopsWhenVerifyIsInconclusive(t *testing.T) {
 	}
 }
 
-// TestReconcileTreatsStoredEmptyStringAsAValidNext covers a Vault field holding "": a value
-// distinct from the field being absent. Reconcile MUST still push that stored empty string out.
+// TestReconcileTreatsStoredEmptyStringAsAValidNext covers a Vault field with the value "".
+// An empty string is distinct from an absent field. Reconcile MUST still deploy the stored empty string.
 func TestReconcileTreatsStoredEmptyStringAsAValidNext(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
@@ -411,9 +409,9 @@ func TestRotateReReadsFieldStateAfterAcquiringTheLock(t *testing.T) {
 	}
 }
 
-// TestRotateRecoversWhenApplySucceededButCommitNeverRan covers the worst crash point: a prior
-// run staged {previous, pending_next}, the live service accepted the Apply, and the process
-// died before the final Vault commit. Rotate MUST verify and commit that already-live value.
+// TestRotateRecoversWhenApplySucceededButCommitNeverRan covers the worst crash point. A prior run staged
+// {previous, pending_next}. The live service accepted the Deploy. The process terminated before the final
+// Vault commit. Rotate MUST verify and commit the staged pending value.
 func TestRotateRecoversWhenApplySucceededButCommitNeverRan(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
@@ -644,9 +642,9 @@ func TestWriteFieldPatchesWithoutAnExistenceProbe(t *testing.T) {
 	}
 }
 
-// TestWriteFieldRoundTripsSpecialCharacters covers both write paths writeField selects between:
-// WriteWithContext for a path with no document yet, JSONMergePatch for one that already holds a
-// document. Either path MUST treat the value as one opaque string, never as extra JSON structure.
+// TestWriteFieldRoundTripsSpecialCharacters covers both write paths selected by writeField.
+// WriteWithContext writes a path without a document. JSONMergePatch writes a path with an existing document.
+// Both paths MUST store the value as one opaque string and never as extra JSON structure.
 func TestWriteFieldRoundTripsSpecialCharacters(t *testing.T) {
 	cases := []roundTripCase{
 		{"create path, no existing document", false, "\"}}; DROP TABLE secrets; --\n\x00<script>\\"},
@@ -780,7 +778,7 @@ func readStagedRotationFields(t *testing.T, client *vaultapi.Client, mount, path
 	return staging.Previous, staging.PendingNext, true
 }
 
-// seedField writes one field at the fixed test path, failing the test when the write fails.
+// seedField writes one field at the fixed test path. A failed write fails the test.
 func seedField(t *testing.T, client *vaultapi.Client, field, value string) {
 	t.Helper()
 	if err := writeField(context.Background(), client, "secret", "app/infra", field, value); err != nil {
@@ -1046,9 +1044,9 @@ func (s *fakeKVv2) handleWrite(w http.ResponseWriter, r *http.Request, path stri
 	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{}})
 }
 
-// recordRequest appends one "METHOD path" entry to the request log and fires any hook staged for
-// the 1-based position at which the new entry lands. The hook runs after mu is released, letting
-// the hook issue its own requests against the same server without self-deadlock.
+// recordRequest appends one "METHOD path" entry to the request log. The hook staged for the position of
+// the new entry (counted from 1) fires after mu is released. The hook can therefore issue its own requests
+// against the same server without self deadlock.
 func (s *fakeKVv2) recordRequest(method, path string) {
 	s.mu.Lock()
 	s.requests = append(s.requests, method+" "+path)
