@@ -101,7 +101,7 @@
       register: workstation_selinux_system_restorecon_stat
       changed_when: false
 
-    # Recursion on a later directory entry would relabel unrelated inodes under that tree.
+    # Recursion on a later directory entry would relabel unrelated inodes under the later directory entry.
     - name: "B4b. Dry-run restorecon on existing system inodes"
       ansible.builtin.command:
         cmd: restorecon -Fnv "{{ item.item }}"

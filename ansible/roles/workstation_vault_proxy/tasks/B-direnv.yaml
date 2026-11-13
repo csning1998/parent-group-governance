@@ -4,7 +4,7 @@
     name: direnv
     state: present
 
-- name: "B2. Require a shell which direnv hooks"
+- name: "B2. Require a shell hooked by direnv"
   ansible.builtin.assert:
     that:
       - _workstation_vault_proxy_shell in ['zsh', 'bash']

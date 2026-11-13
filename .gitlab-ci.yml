@@ -43,7 +43,7 @@ test:go:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
-# Coverage paths stay relative to the repository root, which the scanner resolves against sonar.sources.
+# Keeps coverage paths relative to the repository root for SonarQube to resolve against sonar.sources.
 test:python:
   stage: test
   image: docker.io/library/python:3.14-alpine

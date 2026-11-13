@@ -21,7 +21,7 @@ auto_auth {
   }
 }
 
-# Every forwarded request carries the token of this Proxy, which overwrites the token of the caller.
+# The Proxy replaces the token of the caller with the token of the Proxy on every forwarded request.
 api_proxy {
   use_auto_auth_token = "force"
 }

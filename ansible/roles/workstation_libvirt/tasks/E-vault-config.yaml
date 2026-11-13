@@ -9,7 +9,7 @@
       The CLI injects this extra var.
 
 # The CLI provisions the local CA before running this task. A missing certificate indicates execution outside host apply-all.
-# The check precedes E3, since vault.hcl names terminator-client.pem and Vault refuses to start without the file.
+# The check precedes E3 because vault.hcl names terminator-client.pem and Vault refuses to start without the file.
 - name: "E2. Stat the certificates mounted by the TLS terminator"
   ansible.builtin.stat:
     path: "{{ workstation_libvirt_terminator.certificate_dir }}/{{ item }}"
@@ -24,7 +24,7 @@
       - item.stat.isreg
     fail_msg: >-
       {{ item.item }} is missing or is not a regular file in {{ workstation_libvirt_terminator.certificate_dir }}.
-      Run ./governance host apply-all, which issues the local CA before this playbook.
+      Run ./governance host apply-all. The command issues the local CA before this playbook.
     quiet: true
   loop: "{{ workstation_libvirt_terminator_certificates.results }}"
   loop_control:
@@ -60,7 +60,7 @@
   when: (ansible_local | default({})).host_telemetry.scrape_address is defined
 
 # Writes listener addresses to environment files instead of hardcoding IPs in compose.yml. Both terminator containers
-# read terminator.env, and the role appends TERMINATOR_SCRAPE_ADDRESS when the scrape IP fact exists.
+# read terminator.env. The role appends TERMINATOR_SCRAPE_ADDRESS when the scrape IP fact exists.
 - name: "E5. Render the container environment files from the declared listeners"
   ansible.builtin.copy:
     content: "{{ item.content }}\n"
@@ -78,6 +78,10 @@
   vars:
     _workstation_libvirt_scrape_address: "{{ (ansible_local | default({})).host_telemetry.scrape_address | default('') }}"
     _workstation_libvirt_terminator_env: >-
-      {{ ['TERMINATOR_PUBLISH_ADDRESS=' ~ vault_bastion.publish_address]
-         + (['TERMINATOR_SCRAPE_ADDRESS=' ~ _workstation_libvirt_scrape_address]
-            if _workstation_libvirt_scrape_address else []) }}
+      {{
+        ['TERMINATOR_PUBLISH_ADDRESS=' ~ vault_bastion.publish_address] +
+        (
+          ['TERMINATOR_SCRAPE_ADDRESS=' ~ _workstation_libvirt_scrape_address]
+          if _workstation_libvirt_scrape_address else []
+        )
+      }}
