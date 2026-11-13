@@ -114,7 +114,7 @@ resource "vault_auth_backend" "operator_cert" {
   provider    = vault.bastion
   type        = "cert"
   path        = local.operator_proxy.cert_auth_mount
-  description = "Workstation operator Vault Proxy client certificates signed by the local Transport Root CA."
+  description = "Client certificates of the operator Vault Proxies on the workstation, signed by the local CA."
 }
 
 # A credential-distributor identity reads the GitLab token of its owner, the read paths, and the registry domains of

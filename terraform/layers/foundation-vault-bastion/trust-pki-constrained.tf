@@ -157,7 +157,7 @@ resource "vault_pki_secret_backend_intermediate_cert_request" "pki_constrained_c
   key_name = "${each.value.algorithm}-${vault_mount.pki_constrained[each.value.mount].accessor}"
 }
 
-# Sets an intermediate TTL of several years beyond the subordinate CA lifetime of one year because Vault rejects issued certificate expiry past the issuer expiration.
+# The intermediate outlives the CA certificates of one year signed by the mount because Vault rejects a TTL past the issuer expiry.
 resource "vault_pki_secret_backend_root_sign_intermediate" "pki_constrained_signed" {
   for_each = local.constrained_intermediate_issuers
 
