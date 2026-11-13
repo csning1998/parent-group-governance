@@ -54,7 +54,7 @@ List non-breaking structural cleanups, signature parameterization, or variable c
     - `terraform fmt -check` and `terraform validate` pass across affected modules and layers.
     - `terraform test` passes across modified shared provisioner modules.
     - `terraform plan` confirms zero configuration drift or unexpected state mutations.
-- [ ] **Idempotency**: Reexecuting `terraform apply` shows that infrastructure matches the configuration.
+- [ ] **Idempotency**: A second `terraform apply` does not report a change between the infrastructure and the configuration.
 
 - [ ] **Ansible Toolchain (`iac-ansible`)**:
     - `ansible-lint` passes with zero production-profile errors or warnings.
