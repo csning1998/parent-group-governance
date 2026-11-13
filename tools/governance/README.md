@@ -523,7 +523,7 @@ a.topology = topo
         switch s.Mechanism {
         case "http_form":
             if s.VerifyEndpoint == "" {
-                return nil, nil, fmt.Errorf("http_form requires verify_endpoint, since rotation observes the live credential before any change")
+                return nil, nil, fmt.Errorf("http_form requires verify_endpoint because rotation observes the live credential before any change")
             }
             form := httprotate.FormSpec{URL: s.Endpoint, VerifyURL: s.VerifyEndpoint, Login: s.Login}
             return form.Deploy, form.Verify, nil
@@ -622,7 +622,8 @@ type Spec struct {
     Deploy DeployFunc
     Verify VerifyFunc
 
-    // FactoryDefaultPassword is the credential of a rebuilt service, which Rotate and Reconcile verify as a candidate.
+    // FactoryDefaultPassword specifies the initial password of a freshly provisioned service.
+    // Rotate and Reconcile test the password as a fallback candidate.
     FactoryDefaultPassword string
 }
 ```
@@ -1395,7 +1396,7 @@ func isCASConflict(err error) bool {
 
 `Rotate` 裡有兩次對同一個欄位的讀取，時間點不同，用途也不同。第一次讀取只用來餵給 _Item A_ 的銷毀偵測，讀到的值本身被丟棄。第二次讀取才是後續 `recoverPendingRotation` 跟 `commitRotation` 真正要拿去比對、拿去當作 `Deploy` 認證用途的 `previous` 跟 `exists`，而且刻意安排在鎖已經取得之後才進行。
 
-如果只讀一次、把第一次讀到的值一路沿用到底，會有一個時間差：在第一次讀取跟鎖真正取得之間，如果有一個域外寫入者（不透過這個套件、直接對 Vault 下指令）在這段期間寫入了這個欄位，`exists` 會維持在讀取當下觀察到的不存在，導致 `commitRotation` 誤判成第一次建立，直接把新產生的密碼用 `writeField` 蓋掉域外寫入者剛寫入的值，全程不會呼叫 `Deploy` 去跟外部服務核對，這個域外寫入者留下的值就這樣在沒有任何驗證、也沒有任何錯誤訊息的情況下消失了。把 `previous` 與 `exists` 的讀取移到鎖已經確定屬於自己之後，讀到的就是這次輪替真正要對付的狀態，即使域外寫入發生在兩次讀取之間，第二次讀取也會看到它，`commitRotation` 就會正確地把它當成既有的舊密碼，透過 _Section 7 Item B_ 的 `stageAndApply` 呼叫 `Deploy` 去核對。
+如果只讀一次、把第一次讀到的值一路沿用到底，會有一個時間差：在第一次讀取跟鎖真正取得之間，如果有一個域外寫入者（不透過這個套件、直接對 Vault 下指令）在這段期間寫入了這個欄位，`exists` 會維持在讀取當下觀察到的不存在，導致 `commitRotation` 誤判成第一次建立，直接把新產生的密碼用 `writeField` 蓋掉域外寫入者剛寫入的值，全程不會呼叫 `Deploy` 去跟外部服務核對，這個域外寫入者留下的值就這樣在沒有任何驗證、也沒有任何錯誤訊息的情況下消失了。把 `previous` 與 `exists` 的讀取移到鎖已經確定屬於自己之後，讀到的就是這次輪替真正要對付的狀態，即使域外寫入發生在兩次讀取之間，第二次讀取也會看到它，`commitRotation` 就會正確地把它當成既有的舊密碼，透過 _Section 7 Item B_ 的 `stageAndDeploy` 呼叫 `Deploy` 去核對。
 
 ### Item E. httprotate 的變更密碼協定
 
@@ -1497,7 +1498,7 @@ type rotationState struct {
 }
 ```
 
-在真正呼叫 `Deploy` 之前，`stageAndApply` 會先把這一輪要用的舊密碼跟即將套用的新密碼，一起寫進同一個 Vault 路徑底下的 `<field>_rotation` 附屬欄位，寫入的部分在 _Section 7 Item B_ 說明。這個寫入動作發生在對外部服務動手之前，所以即使程式在呼叫 `Deploy` 之後、正式提交新密碼之前的任何時間點中斷，Vault 裡都留著足夠的資訊：這一輪打算把密碼從哪個舊值換成哪個新值。
+在真正呼叫 `Deploy` 之前，`stageAndDeploy` 會先把這一輪要用的舊密碼跟即將套用的新密碼，一起寫進同一個 Vault 路徑底下的 `<field>_rotation` 附屬欄位，寫入的部分在 _Section 7 Item B_ 說明。這個寫入動作發生在對外部服務動手之前，所以即使程式在呼叫 `Deploy` 之後、正式提交新密碼之前的任何時間點中斷，Vault 裡都留著足夠的資訊：這一輪打算把密碼從哪個舊值換成哪個新值。
 
 自我修復發生在下一次呼叫 `Rotate` 的時候，由 `recoverPendingRotation` 負責，以 `Verify` 確認暫存的新密碼是否已經生效：
 
@@ -1654,10 +1655,10 @@ _Section 6_ 結束在 `Rotate` 骨架的最後一行，把 `previous`、`next`�
 
 ```go
 func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, read vaultField, live, next string, log func(string)) (string, error) {
-    if err := stageAndApply(ctx, client, spec, read, live, next, log); err != nil {
-        var raced *applyRaceResolvedError
+    if err := stageAndDeploy(ctx, client, spec, read, live, next, log); err != nil {
+        var raced *deployRaceResolvedError
         if errors.As(err, &raced) {
-            return resolveAppliedElsewhere(ctx, client, spec, raced, log)
+            return resolveDeployedElsewhere(ctx, client, spec, raced, log)
         }
         return "", err
     }
@@ -1675,7 +1676,7 @@ func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, rea
 }
 ```
 
-每一輪都經過 `stageAndApply`，沒有跳過外部服務的分支。Vault 沒有值時，_Section 6_ 的 `resolveLiveCredential` 已經用出廠預設值確認服務目前的密碼，所以 `Deploy` 一定有一個驗證過的舊密碼可用。`read` 帶著 Vault 原本的值，只供 _Item C_ 的回退偵測比對，`live` 才是送給 `Deploy` 的舊密碼。
+每一輪都經過 `stageAndDeploy`，沒有跳過外部服務的分支。Vault 沒有值時，_Section 6_ 的 `resolveLiveCredential` 已經用出廠預設值確認服務目前的密碼，所以 `Deploy` 一定有一個驗證過的舊密碼可用。`read` 帶著 Vault 原本的值，只供 _Item C_ 的回退偵測比對，`live` 才是送給 `Deploy` 的舊密碼。
 
 正式提交用的是 `writeField`，不帶 CAS 條件，與 _Section 6 Item B_ 取鎖時用的 `writeFieldCAS` 不同。理由是這個時間點互斥已經由鎖提供：能走到這裡代表鎖屬於自己，沒有第二個 `Rotate` 會同時寫這個欄位。反過來說，如果這裡也加上 CAS，帶的版本號必然是過期的，因為自己稍早取鎖的那次寫入就已經讓文件版本前進了一次，Vault 會拒絕這次提交，把一次成功的輪替變成失敗。
 
@@ -1683,27 +1684,27 @@ func commitRotation(ctx context.Context, client *vaultapi.Client, spec Spec, rea
 
 提交失敗的錯誤訊息直接告訴操作者重跑即可。外部服務這時已經換成 `next`，而 `next` 留在 staging 紀錄的 `pending_next`，重跑時 `recoverPendingRotation` 會以 `Verify` 確認並提交這個值。
 
-### Item B. Write-Ahead Staging 與 `stageAndApply`
+### Item B. Write-Ahead Staging 與 `stageAndDeploy`
 
-`stageAndApply` 負責把 _Section 6 Item F_ 描述的那筆 staging 紀錄寫進去，然後以驗證過的 `live` 呼叫外部服務：
+`stageAndDeploy` 負責把 _Section 6 Item F_ 描述的那筆 staging 紀錄寫進去，然後以驗證過的 `live` 呼叫外部服務：
 
 ```go
-func stageAndApply(ctx context.Context, client *vaultapi.Client, spec Spec, read vaultField, live, next string, log func(string)) error {
+func stageAndDeploy(ctx context.Context, client *vaultapi.Client, spec Spec, read vaultField, live, next string, log func(string)) error {
     st := rotationState{Previous: live, PendingNext: next}
     if err := writeRotationState(ctx, client, spec.Mount, spec.Path, spec.Field, st); err != nil {
         return err
     }
-    applyErr := spec.Deploy(ctx, live, next)
-    if applyErr == nil {
+    deployErr := spec.Deploy(ctx, live, next)
+    if deployErr == nil {
         if log != nil {
             log("Credential rotated against the live service.")
         }
         return nil
     }
     if current, ok := readField(ctx, client, spec.Mount, spec.Path, spec.Field); ok && (!read.exists || current != read.value) {
-        return &applyRaceResolvedError{Resolved: current, cause: applyErr}
+        return &deployRaceResolvedError{Resolved: current, cause: deployErr}
     }
-    return applyErr
+    return deployErr
 }
 ```
 
@@ -1744,27 +1745,27 @@ func clearRotationState(ctx context.Context, client *vaultapi.Client, mount, pat
 
 ### Item C. `Deploy` 失敗後的回退偵測與驗證
 
-`Deploy` 因為認證失敗而回傳錯誤時，有可能不是這次輪替本身的問題，而是有人繞過這個套件的鎖，直接把 Vault 裡的值換成別的內容。`stageAndApply` 因此在失敗之後會多讀一次 Vault 目前的欄位值，跟這次呼叫在鎖內讀到的 `read` 比對。如果兩者不一樣，代表在 `Deploy` 執行的這段時間，有寫入者繞過鎖直接改動了這個欄位，於是回傳 `applyRaceResolvedError`，把對方留下的值一併帶出來：
+`Deploy` 因為認證失敗而回傳錯誤時，有可能不是這次輪替本身的問題，而是有人繞過這個套件的鎖，直接把 Vault 裡的值換成別的內容。`stageAndDeploy` 因此在失敗之後會多讀一次 Vault 目前的欄位值，跟這次呼叫在鎖內讀到的 `read` 比對。如果兩者不一樣，代表在 `Deploy` 執行的這段時間，有寫入者繞過鎖直接改動了這個欄位，於是回傳 `deployRaceResolvedError`，把對方留下的值一併帶出來：
 
 ```go
-type applyRaceResolvedError struct {
+type deployRaceResolvedError struct {
     Resolved string
     cause    error
 }
 
-func (e *applyRaceResolvedError) Error() string {
+func (e *deployRaceResolvedError) Error() string {
     return fmt.Sprintf("secretrotate: apply failed against a stale previous, a concurrent write already resolved this credential: %v", e.cause)
 }
 
-func (e *applyRaceResolvedError) Unwrap() error { return e.cause }
+func (e *deployRaceResolvedError) Unwrap() error { return e.cause }
 ```
 
 用一個自訂錯誤型別攜帶 `Resolved` 而不是多一個回傳值，是因為這個情況只發生在錯誤路徑上，讓正常路徑的簽章保持乾淨。實作 `Unwrap` 則讓原始的失敗原因仍然可以被 `errors.Is` 一路檢查到，包裝這一層不會把底層的語意藏起來。
 
-光是欄位值變了還不足以直接採信對方留下的值，那有可能只是一次寫入錯誤、或者剛好是垃圾資料，從未真正被外部服務接受過。`resolveAppliedElsewhere` 因此在接受之前，一定要先以 `Verify` 確認這個值：
+光是欄位值變了還不足以直接採信對方留下的值，那有可能只是一次寫入錯誤、或者剛好是垃圾資料，從未真正被外部服務接受過。`resolveDeployedElsewhere` 因此在接受之前，一定要先以 `Verify` 確認這個值：
 
 ```go
-func resolveAppliedElsewhere(ctx context.Context, client *vaultapi.Client, spec Spec, raced *applyRaceResolvedError, log func(string)) (string, error) {
+func resolveDeployedElsewhere(ctx context.Context, client *vaultapi.Client, spec Spec, raced *deployRaceResolvedError, log func(string)) (string, error) {
     live, err := spec.Verify(ctx, raced.Resolved)
     if err != nil {
         return "", fmt.Errorf("secretrotate: %w, and verifying the raced value failed: %w", raced, err)
@@ -1776,15 +1777,15 @@ func resolveAppliedElsewhere(ctx context.Context, client *vaultapi.Client, spec 
         return "", fmt.Errorf("secretrotate: %w, and clearing the stale rotation state failed: %w", raced, err)
     }
     if log != nil {
-        log("Apply failed against a stale previous, but the Vault field already reflects a rotation completed elsewhere; accepting that value.")
+        log("Deploy failed against a stale previous, but the Vault field already reflects a rotation completed elsewhere; accepting the raced value.")
     }
     return raced.Resolved, nil
 }
 ```
 
-這裡的比對邏輯與 `recoverPendingRotation` 一致：一律透過 `Verify` 驗證候選值。只有在外部服務確認接受該值時，才會清除這輪殘留的 staging 紀錄，並採用該值作為最終結果；若服務拒絕該值，就直接回傳原先的 `applyRaceResolvedError`，向呼叫端明確指出失敗，避免在未獲驗證的情況下誤把未確認的值當成成功。若 `Verify` 在網路連線或通訊時發生錯誤，就將兩項錯誤一併打包回傳。
+這裡的比對邏輯與 `recoverPendingRotation` 一致：一律透過 `Verify` 驗證候選值。只有在外部服務確認接受該值時，才會清除這輪殘留的 staging 紀錄，並採用該值作為最終結果；若服務拒絕該值，就直接回傳原先的 `deployRaceResolvedError`，向呼叫端明確指出失敗，避免在未獲驗證的情況下誤把未確認的值當成成功。若 `Verify` 在網路連線或通訊時發生錯誤，就將兩項錯誤一併打包回傳。
 
-因為這條路徑採納的是並行寫入者已經提交的值，所以 `commitRotation` 在 `errors.As` 比對命中後，會直接回傳 `resolveAppliedElsewhere` 的結果，不再執行後續的 `writeField`。這輪產生的 `next` 則會直接捨棄，因為外部服務當前持有的已經是並行寫入的新密碼，若硬把自己的值覆寫回 Vault，反而會破壞一致性。
+因為這條路徑採納的是並行寫入者已經提交的值，所以 `commitRotation` 在 `errors.As` 比對命中後，會直接回傳 `resolveDeployedElsewhere` 的結果，不再執行後續的 `writeField`。這輪產生的 `next` 則會直接捨棄，因為外部服務當前持有的已經是並行寫入的新密碼，若硬把自己的值覆寫回 Vault，反而會破壞一致性。
 
 這項回退偵測要防護的對象，是繞過互斥鎖機制的外部並行寫入操作。在正常流程下，_Section 6 Item B_ 的互斥鎖已經確保兩個 `Rotate` 程序不會同時進入 `Deploy` 階段；所以這項機制防禦的是鎖保護範圍外的異常行為（例如管理員直接用 CLI 命令強制寫入欄位），確保系統在遇到帶外異動時仍能維持狀態收斂。
 
