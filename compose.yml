@@ -59,7 +59,8 @@ services:
     container_name: parent-group-governance-vault-bastion-terminator
     # HAProxy running as PID 1 ignores SIGTERM. Container init forwards the signal to HAProxy.
     init: true
-    # The entrypoint polls for the publish address before starting HAProxy because libvirt assigns the address asynchronously.
+    # The entrypoint polls for the publish address before starting HAProxy.
+    # libvirt assigns the publish address asynchronously.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |

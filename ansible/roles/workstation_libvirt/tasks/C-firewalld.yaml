@@ -37,7 +37,8 @@
     that:
       - _workstation_libvirt_trusted_zone.stdout is not search('^\s*(interfaces|sources):[ ]+\S', multiline=true)
     fail_msg: >-
-      The permanent zone trusted binds an interface or a source. The zone trusted admits the traffic of the binding to every port of the host.
+      The permanent zone trusted binds an interface or a source.
+      The zone trusted admits the traffic of the binding to every port of the host.
       Remove the binding with firewall-cmd --permanent --zone=trusted --remove-source or --remove-interface.
 
 - name: "C6. Read the runtime bindings of the zone trusted"
@@ -53,7 +54,8 @@
     that:
       - _workstation_libvirt_trusted_zone_runtime.stdout is not search('^\s*(interfaces|sources):[ ]+\S', multiline=true)
     fail_msg: >-
-      The runtime zone trusted binds an interface or a source. The zone trusted admits the traffic of the binding to every port of the host.
+      The runtime zone trusted binds an interface or a source.
+      The zone trusted admits the traffic of the binding to every port of the host.
       Remove the binding with firewall-cmd --zone=trusted --remove-source or --remove-interface.
 
 - name: "C8. Read the runtime policy for routed guest traffic to the host"

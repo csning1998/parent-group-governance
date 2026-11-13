@@ -18,7 +18,7 @@ workstation_vault_audit_rotate_size: "100M"
 workstation_vault_audit_rotate_keep: 14
 
 # The transit mount of the auto-unseal keys. A decrypt from an address outside the source CIDRs raises a finding.
-# An empty list skips the source check because the token_bound_cidrs of the role already rejects a request from outside the source CIDRs.
+# An empty list skips the source check. The token_bound_cidrs of the role already rejects a request from outside the CIDRs.
 workstation_vault_audit_transit_mount: "transit-unseal"
 workstation_vault_audit_transit_source_cidrs: []
 

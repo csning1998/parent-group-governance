@@ -61,7 +61,8 @@ ignores:
         - data_json.subscription_id
         - data_json.cognitive_account_id
         - data_json.openai_endpoint
-      reason: The registry publishes the tenant, subscription, and account identifiers and the endpoint without any credential.
+      reason: >-
+        The registry publishes the tenant, subscription, and account identifiers and the endpoint without any credential.
 
   group-foundation:
     - address: vault_kv_secret_v2.registry_platform_gitlab_group_top_level
