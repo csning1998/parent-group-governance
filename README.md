@@ -307,7 +307,7 @@ A host prerequisite is a host setting which `vault-server` or `vault-terminator`
 
 1. The libvirt network `vault-bastion-publish` provides the address `172.16.0.1` on the bridge of the network.
 2. The unit `virtnetworkd.service` is enabled, and a drop-in starts the unit after firewalld reports the running state.
-3. The firewalld policy `libvirt-to-host` admits DHCP, DNS, ICMP, and TCP port 8200 from the publish segment `172.16.0.0/24` to `172.16.0.1` for routed guests. A guest reaches the Bastion Vault through a NIC on the publish segment alone, as ADR-143 requires. The policy admits no scrape port, see Item E.
+3. The firewalld policy `libvirt-to-host` admits DHCP, DNS, ICMP, and TCP port 8200 from the publish segment `172.16.0.0/24` to `172.16.0.1` for routed guests. A guest reaches the Bastion Vault through a NIC on the publish segment alone, as ADR-143 requires. The policy admits no scrape port. Refer to Item E.
 4. The firewalld zone `libvirt` admits DHCP, DNS, and ICMP for NAT guests.
 5. The memlock limits of the operator user are unlimited, because Vault locks memory under rootless Podman.
 
@@ -389,24 +389,24 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 
 ### Item B. Operation Inventory
 
-| Menu Entry                                                                 | Subcommand                               | Effect                                                                     |
-| -------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------- |
-| `[Host] Apply All Workstation Prerequisites`                               | `host apply-all`                         | Runs the SELinux, libvirt, local CA, and Vault Proxy steps with one prompt |
-| `[Host] Verify Host IaC Tools`                                             | `host verify`                            | Reports the presence of Terraform, Vault, and Ansible on `PATH`            |
-| `[Host] Apply Workstation SELinux Policy and File Contexts`                | `host apply-selinux`                     | Runs the playbook described in Section 3 Item B                            |
-| `[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites` | `host apply-libvirt`                     | Runs the playbook described in Section 4 Item C                            |
-| `[Host] Apply Workstation Vault Proxies`                                   | `host apply-vault-proxy`                 | Runs the playbook described in Section 6 Item F                            |
-| `[Host] Apply Workstation Vault Audit Check`                               | `host apply-vault-audit`                 | Installs the audit log check without the become password                   |
-| `[Host] Apply Host Telemetry Scrape Network`                               | `host apply-host-telemetry`              | Runs the playbook described in Section 4 Item E                            |
-| `[Vault] Set up TLS for Bastion Vault`                                     | `vault generate-tls`                     | Clears `vault/tls` and issues two CAs and two listener certificates        |
-| `[Vault] Initialize Bastion Vault`                                         | `vault init`                             | Verifies the factory default of each service, then initializes and unseals |
-| `[Vault] Enable KV-v2 Engine`                                              | `vault enable-kv`                        | Mounts the KV version 2 engine at the path `secret`                        |
-| `[Vault] Unseal Bastion Vault`                                             | `vault unseal`                           | Submits the recorded unseal key                                            |
-| `[Vault] Revoke Root Token After Bootstrap`                                | `vault revoke-root`                      | Revokes the root token once the administrator Vault Proxy logs in          |
-| `[Vault] Generate Root Token for Break-Glass`                              | `vault generate-root`                    | Produces a root token from the stored unseal keys into `~/.vault-token`    |
-| `[Credentials] Rotate Service Admin Passwords`                             | `credentials rotate <credential-key>`    | Generates a password, deploys the password, and commits the value to Vault |
-| `[Credentials] Reconcile Service Admin Passwords with the Live Service`    | `credentials reconcile <credential-key>` | Deploys the value stored in Vault to a drifted live service                |
-| `[Terraform] Audit State Secrets`                                          | `terraform audit-state [--history]`      | Lists state locations containing a secret, see tools/governance Section 11 |
+| Menu Entry                                                                 | Subcommand                               | Effect                                                                          |
+| -------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------- |
+| `[Host] Apply All Workstation Prerequisites`                               | `host apply-all`                         | Runs the SELinux, libvirt, local CA, and Vault Proxy steps with one prompt      |
+| `[Host] Verify Host IaC Tools`                                             | `host verify`                            | Reports the presence of Terraform, Vault, and Ansible on `PATH`                 |
+| `[Host] Apply Workstation SELinux Policy and File Contexts`                | `host apply-selinux`                     | Runs the playbook described in Section 3 Item B                                 |
+| `[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites` | `host apply-libvirt`                     | Runs the playbook described in Section 4 Item C                                 |
+| `[Host] Apply Workstation Vault Proxies`                                   | `host apply-vault-proxy`                 | Runs the playbook described in Section 6 Item F                                 |
+| `[Host] Apply Workstation Vault Audit Check`                               | `host apply-vault-audit`                 | Installs the audit log check without the become password                        |
+| `[Host] Apply Host Telemetry Scrape Network`                               | `host apply-host-telemetry`              | Runs the playbook described in Section 4 Item E                                 |
+| `[Vault] Set up TLS for Bastion Vault`                                     | `vault generate-tls`                     | Clears `vault/tls` and issues two CAs and two listener certificates             |
+| `[Vault] Initialize Bastion Vault`                                         | `vault init`                             | Verifies the factory default of each service, then initializes and unseals      |
+| `[Vault] Enable KV-v2 Engine`                                              | `vault enable-kv`                        | Mounts the KV version 2 engine at the path `secret`                             |
+| `[Vault] Unseal Bastion Vault`                                             | `vault unseal`                           | Submits the recorded unseal key                                                 |
+| `[Vault] Revoke Root Token After Bootstrap`                                | `vault revoke-root`                      | Revokes the root token once the administrator Vault Proxy logs in               |
+| `[Vault] Generate Root Token for Break-Glass`                              | `vault generate-root`                    | Produces a root token from the stored unseal keys into `~/.vault-token`         |
+| `[Credentials] Rotate Service Admin Passwords`                             | `credentials rotate <credential-key>`    | Generates a password, deploys the password, and commits the value to Vault      |
+| `[Credentials] Reconcile Service Admin Passwords with the Live Service`    | `credentials reconcile <credential-key>` | Deploys the value stored in Vault to a drifted live service                     |
+| `[Terraform] Audit State Secrets`                                          | `terraform audit-state [--history]`      | Lists state locations containing a secret. Refer to tools/governance Section 11 |
 
 Each key listed under `service_admin_passwords` of `workstation-topology.yaml` becomes one subcommand under `credentials rotate`, and one more under `credentials reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already stores a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears. The CLI reads the Bastion Vault endpoint and the listener addresses of the TLS material from `vault_bastion` of the same file.
 
