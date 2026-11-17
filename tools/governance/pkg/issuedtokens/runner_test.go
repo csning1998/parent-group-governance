@@ -148,7 +148,7 @@ func assertRunnerConfig(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("config.toml carries mode %o, want 600", info.Mode().Perm())
+		t.Fatalf("config.toml has mode %o, want 600", info.Mode().Perm())
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -176,6 +176,6 @@ func TestWriteRunnerConfig(t *testing.T) {
 	}
 	content, readErr := os.ReadFile(path)
 	if readErr != nil || string(content) != "earlier" {
-		t.Fatalf("config.toml holds %q, %v, want the earlier content", content, readErr)
+		t.Fatalf("config.toml contains %q, %v, want the earlier content", content, readErr)
 	}
 }

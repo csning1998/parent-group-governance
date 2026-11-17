@@ -75,7 +75,7 @@ func readPublishCert(t *testing.T, tlsDir string) *x509.Certificate {
 	}
 	block, _ := pem.Decode(data)
 	if block == nil {
-		t.Fatal("publish.pem holds no PEM block")
+		t.Fatal("publish.pem lacks a PEM block")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {

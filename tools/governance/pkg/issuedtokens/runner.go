@@ -17,7 +17,7 @@ import (
 //go:embed runner_config.toml.tmpl
 var runnerConfigTemplate string
 
-// ErrRunnerConfigExists marks a registration refused because config.toml already holds a runner token.
+// ErrRunnerConfigExists marks a registration refused because config.toml already contains a runner token.
 var ErrRunnerConfigExists = errors.New("issuedtokens: the runner config file exists")
 
 // RunnerCreator creates a group runner and returns the runner authentication token.
@@ -52,7 +52,7 @@ func (r GroupRunnerRegistration) Run(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	if err := writeRunnerConfig(r.ConfigPath, r.Config, r.GitLabURL, created.Token); err != nil {
-		return created.ID, fmt.Errorf("issuedtokens: runner %d exists in GitLab while %s stays unwritten, delete the runner before a retry: %w", created.ID, r.ConfigPath, err)
+		return created.ID, fmt.Errorf("issuedtokens: runner %d exists in GitLab while %s remains unwritten, delete the runner before a retry: %w", created.ID, r.ConfigPath, err)
 	}
 	return created.ID, nil
 }

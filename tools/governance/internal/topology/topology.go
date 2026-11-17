@@ -20,9 +20,9 @@ const FileName = "workstation-topology.yaml"
 type AccessRole string
 
 const (
-	// AccessRoleAdministrator identifies the operator proxy carrying administrator privileges.
+	// AccessRoleAdministrator identifies the operator proxy with administrator privileges.
 	AccessRoleAdministrator AccessRole = "administrator"
-	// AccessRoleCredentialRotator identifies the operator proxy carrying credential rotation privileges.
+	// AccessRoleCredentialRotator identifies the operator proxy with credential rotation privileges.
 	AccessRoleCredentialRotator AccessRole = "credential-rotator"
 )
 
@@ -53,7 +53,7 @@ type ProxyIdentity struct {
 	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // project paths relative to the top-level group which receive the code reviewer CI/CD variables
 }
 
-// IdentityRole holds the access tier, owner code, and KV v2 state token path derived from an identity name.
+// IdentityRole contains the access tier, owner code, and KV v2 state token path derived from an identity name.
 type IdentityRole struct {
 	AccessTier       string
 	OwnerCode        string
@@ -92,11 +92,11 @@ func (v VaultTopology) ListCodeReviewerVariableProjects(topLevelGroup string) []
 
 // StateBackend defines the shared KV v2 mount and field schema across state backend paths.
 type StateBackend struct {
-	VaultKVMount string `yaml:"vault_kv_mount"` // KV v2 mount holding state backend tokens
-	VaultKVField string `yaml:"vault_kv_field"` // secret key holding the GitLab state backend token
+	VaultKVMount string `yaml:"vault_kv_mount"` // KV v2 mount storing state backend tokens
+	VaultKVField string `yaml:"vault_kv_field"` // secret key storing the GitLab state backend token
 }
 
-// OperatorVaultProxy holds client connection parameters and identity mappings for operator Vault proxies.
+// OperatorVaultProxy contains client connection parameters and identity mappings for operator Vault proxies.
 type OperatorVaultProxy struct {
 	GovernanceOwnerCode string `yaml:"governance_owner_code"` // repository owner code assigned to the administrator and credential-rotator identities
 
@@ -130,7 +130,7 @@ func (v VaultTopology) ResolveStateBackendToken(ownerCode string) (KVField, erro
 	return KVField{Mount: backend.VaultKVMount, Path: paths[0], Field: backend.VaultKVField}, nil
 }
 
-// ProxyEndpoint holds the client connection parameters required to communicate with a local operator Vault Proxy.
+// ProxyEndpoint contains the client connection parameters required to communicate with a local operator Vault Proxy.
 type ProxyEndpoint struct {
 	Identity   string // operator proxy identity name (e.g. governance, rotation, foundation)
 	Address    string // loopback HTTPS URL of the local proxy listener (e.g. https://127.0.0.1:8210)
@@ -148,7 +148,7 @@ type HostTelemetryRegistry struct {
 	AddressField string `yaml:"address_field"`
 }
 
-// HostTelemetryScrape holds the Vault registry reference for the host telemetry scrape network.
+// HostTelemetryScrape contains the Vault registry reference for the host telemetry scrape network.
 type HostTelemetryScrape struct {
 	Registry HostTelemetryRegistry `yaml:"registry"`
 }

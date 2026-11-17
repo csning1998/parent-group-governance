@@ -15,11 +15,11 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// ErrStateMissing reports a layer whose backend holds no state.
-var ErrStateMissing = errors.New("stateaudit: the backend holds no state for the layer")
+// ErrStateMissing reports a layer whose backend lacks a state.
+var ErrStateMissing = errors.New("stateaudit: the backend lacks a state for the layer")
 
-// ErrVersionMissing reports a state version which the backend no longer holds.
-var ErrVersionMissing = errors.New("stateaudit: the backend holds no such state version")
+// ErrVersionMissing reports a state version which the backend no longer stores.
+var ErrVersionMissing = errors.New("stateaudit: the backend lacks the requested state version")
 
 // Layer is one Terraform layer and the address of its HTTP backend.
 type Layer struct {

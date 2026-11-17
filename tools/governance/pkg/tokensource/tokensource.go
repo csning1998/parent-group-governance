@@ -23,7 +23,7 @@ type Provider interface {
 	Token(ctx context.Context) (string, error)
 }
 
-// Static holds a credential supplied verbatim by the environment.
+// Static contains a credential supplied verbatim by the environment.
 type Static string
 
 // Token returns the static credential.

@@ -31,13 +31,13 @@ const (
 	tlsNameTerminatorClient = "terminator-client"
 )
 
-// Listeners holds the network IP addresses for Vault listener certificates.
+// Listeners contains the network IP addresses for Vault listener certificates.
 type Listeners struct {
 	Loopback net.IP
 	Publish  net.IP
 }
 
-// signingCA holds a parsed CA certificate with the CA private key which signs subordinate certificates.
+// signingCA contains a parsed CA certificate with the CA private key which signs subordinate certificates.
 type signingCA struct {
 	cert *x509.Certificate
 	key  crypto.Signer
@@ -45,7 +45,7 @@ type signingCA struct {
 
 // GenerateTLS creates the two CAs, the two listener certificates, and the terminator client certificate under the
 // target directory.
-// The publish chain MUST stay EC P-384 until every guest verifier accepts ML-DSA.
+// The publish chain MUST remain EC P-384 until every guest verifier accepts ML-DSA.
 func GenerateTLS(dir string, listeners Listeners) error {
 	if listeners.Loopback == nil || listeners.Publish == nil {
 		return errors.New("vaultops: the listener certificates need valid loopback and publish IP addresses")
@@ -117,7 +117,7 @@ func readCertificate(path string) (*x509.Certificate, error) {
 	}
 	block, _ := pem.Decode(data)
 	if block == nil || block.Type != "CERTIFICATE" {
-		return nil, fmt.Errorf("vaultops: %s holds no CERTIFICATE block", path)
+		return nil, fmt.Errorf("vaultops: %s lacks a CERTIFICATE block", path)
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
@@ -139,7 +139,7 @@ func loadSigningCA(dir, name string) (signingCA, error) {
 	}
 	block, _ := pem.Decode(data)
 	if block == nil || block.Type != "PRIVATE KEY" {
-		return signingCA{}, fmt.Errorf("vaultops: %s holds no PRIVATE KEY block", keyPath)
+		return signingCA{}, fmt.Errorf("vaultops: %s lacks a PRIVATE KEY block", keyPath)
 	}
 	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
@@ -147,13 +147,13 @@ func loadSigningCA(dir, name string) (signingCA, error) {
 	}
 	key, ok := parsed.(crypto.Signer)
 	if !ok {
-		return signingCA{}, fmt.Errorf("vaultops: %s holds no signing key", keyPath)
+		return signingCA{}, fmt.Errorf("vaultops: %s lacks a signing key", keyPath)
 	}
 	return signingCA{cert: cert, key: key}, nil
 }
 
-// EnsureTerminatorClientCert issues the terminator client certificate when the directory holds none, and reports
-// whether the call issued a certificate. The CAs and the listener certificates stay untouched.
+// EnsureTerminatorClientCert issues the terminator client certificate when the directory contains none, and reports
+// whether the call issued a certificate. The CAs and the listener certificates remain untouched.
 func EnsureTerminatorClientCert(dir string) (bool, error) {
 	path := filepath.Join(dir, tlsNameTerminatorClient+".pem")
 	info, err := os.Stat(path)

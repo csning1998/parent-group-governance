@@ -102,7 +102,7 @@ func TestGenerateTLSIssuesEachCertificateWithItsAlgorithm(t *testing.T) {
 
 			key := loadPKCS8Key(t, filepath.Join(tlsDir, c.name+"-key.pem"))
 			if !key.Public().(interface{ Equal(crypto.PublicKey) bool }).Equal(cert.PublicKey) {
-				t.Errorf("%s-key.pem does not hold the private key of %s.pem", c.name, c.name)
+				t.Errorf("%s-key.pem does not contain the private key of %s.pem", c.name, c.name)
 			}
 			assertMode(t, filepath.Join(tlsDir, c.name+"-key.pem"), 0o600)
 			assertMode(t, filepath.Join(tlsDir, c.name+".pem"), 0o644)
@@ -143,7 +143,7 @@ func TestGenerateTLSWritesSeedOnlyMLDSAKeys(t *testing.T) {
 			t.Fatalf("%s-key.pem: unmarshal PKCS #8: %v", name, err)
 		}
 		if len(info.PrivateKey) != 2+mldsa.PrivateKeySize || info.PrivateKey[0] != 0x80 || info.PrivateKey[1] != mldsa.PrivateKeySize {
-			t.Errorf("%s-key.pem holds %d private key bytes, want the [0] seed of %d bytes alone", name, len(info.PrivateKey), mldsa.PrivateKeySize)
+			t.Errorf("%s-key.pem contains %d private key bytes, want the [0] seed of %d bytes alone", name, len(info.PrivateKey), mldsa.PrivateKeySize)
 		}
 	}
 }
@@ -403,7 +403,7 @@ func loadPKCS8Key(t *testing.T, path string) crypto.Signer {
 	}
 	key, ok := parsed.(crypto.Signer)
 	if !ok {
-		t.Fatalf("%s holds %T, want a crypto.Signer", path, parsed)
+		t.Fatalf("%s contains %T, want a crypto.Signer", path, parsed)
 	}
 	return key
 }

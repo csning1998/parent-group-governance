@@ -118,7 +118,7 @@ func TestFormSpecDeployDropsCredentialsOnCrossHostRedirect(t *testing.T) {
 }
 
 // TestFormSpecDeployPreservesInjectionAttemptCharactersVerbatim covers a replacement value
-// carrying CRLF and markup. Form encoding MUST transmit the raw bytes as one opaque field value,
+// containing CRLF and markup. Form encoding MUST transmit the raw bytes as one opaque field value,
 // never as extra headers or extra form fields.
 func TestFormSpecDeployPreservesInjectionAttemptCharactersVerbatim(t *testing.T) {
 	const evil = "x\r\nSet-Cookie: pwned=1\r\n\r\n<script>alert(1)</script>&extra=1"

@@ -21,7 +21,7 @@ func (a *app) newCredentialsCmd() *cobra.Command {
 	}
 	cmd.AddCommand(rotateCmd)
 
-	reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Push a stored credential out to a drifted live service"}
+	reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Apply a stored credential to a drifted live service"}
 	for _, cred := range a.credentials {
 		key := cred.Key
 		reconcileCmd.AddCommand(&cobra.Command{
@@ -173,7 +173,7 @@ func (a *app) newVaultCmd() *cobra.Command {
 	}
 	cmd.AddCommand(rotateCmd)
 
-	reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Push a Vault-stored credential out to a drifted live service"}
+	reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Apply a Vault-stored credential to a drifted live service"}
 	for _, cred := range a.credentials {
 		key := cred.Key
 		reconcileCmd.AddCommand(&cobra.Command{

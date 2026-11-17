@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// unsupportedSigner carries a public key type which x509 neither signs with nor marshals.
+// unsupportedSigner has a public key type which x509 neither signs with nor marshals.
 type unsupportedSigner struct{}
 
 func (unsupportedSigner) Public() crypto.PublicKey { return struct{}{} }

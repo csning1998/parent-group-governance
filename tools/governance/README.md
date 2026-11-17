@@ -1142,7 +1142,7 @@ func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(st
     }
     _, existedBeforeLock := readField(ctx, client, spec.Mount, spec.Path, spec.Field)
     if !existedBeforeLock && isPathDestroyedOutOfBand(ctx, client, spec.Mount, spec.Path) {
-        return "", fmt.Errorf("secretrotate: %s/%s held data before and now reads back empty, refusing to mint a value the live service was never given", spec.Mount, spec.Path)
+        return "", fmt.Errorf("secretrotate: %s/%s contained data before and now reads back empty, refusing to mint a value the live service was never given", spec.Mount, spec.Path)
     }
 
     holder, err := acquireLock(ctx, client, spec.Mount, spec.Path, spec.Field)
@@ -1274,8 +1274,8 @@ func acquireLock(ctx context.Context, client *vaultapi.Client, mount, path, fiel
     var lastErr error
     for range acquireLockMaxAttempts {
         doc, _ := readDocument(ctx, client, mount, path)
-        if lock, held := readActiveLock(doc, field); held {
-            return "", fmt.Errorf("secretrotate: rotation aborted, %s holds the lock on %s/%s#%s until %s",
+        if lock, active := readActiveLock(doc, field); active {
+            return "", fmt.Errorf("secretrotate: rotation aborted, %s owns the lock on %s/%s#%s until %s",
                 lock.Holder, mount, path, field, lock.ExpiresAt.Format(time.RFC3339))
         }
         holder := fmt.Sprintf("rotate-%d", time.Now().UnixNano())
@@ -1865,7 +1865,7 @@ for _, cred := range a.credentials {
 }
 cmd.AddCommand(rotateCmd)
 
-reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Push a stored credential out to a drifted live service"}
+reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Apply a stored credential to a drifted live service"}
 for _, cred := range a.credentials {
     key := cred.Key
     reconcileCmd.AddCommand(&cobra.Command{

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// fakePrivateKey is a PEM private key block whose body carries no real key material.
+// fakePrivateKey is a PEM private key block whose body lacks real key material.
 var fakePrivateKey = "-----BEGIN " + "PRIVATE KEY-----\n" +
 	"MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj\n" +
 	"MzEfYyjiWA4R4/M2bS1GB4t7NXp98C3SC6dVMvDuictGeurT8jNbvJZHtCSuYEvu\n" +

@@ -34,7 +34,7 @@ type app struct {
 	resolveOrigin func(context.Context) (gitlabOrigin, error) // injectable resolver for GitLab endpoints derived from the origin remote
 }
 
-// gitlabOrigin holds the GitLab web URL, the REST API URL, and the top-level group path of the origin remote.
+// gitlabOrigin contains the GitLab web URL, the REST API URL, and the top-level group path of the origin remote.
 type gitlabOrigin struct {
 	WebURL        string
 	APIURL        string

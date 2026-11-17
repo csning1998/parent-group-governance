@@ -1,4 +1,4 @@
-// Package stateaudit reports where a Terraform state holds a confidential value, never the value itself.
+// Package stateaudit reports where a Terraform state contains a confidential value, never the value itself.
 package stateaudit
 
 import (
@@ -25,7 +25,7 @@ const (
 )
 
 // ErrFindings reports a finding or an unused ignore entry.
-var ErrFindings = errors.New("stateaudit: the states hold confidential values")
+var ErrFindings = errors.New("stateaudit: the states contain confidential values")
 
 // Finding is one location of a confidential value.
 type Finding struct {
@@ -39,7 +39,7 @@ type Finding struct {
 	value string
 }
 
-// Report holds the findings, the unused ignore entries, and the scanned versions.
+// Report contains the findings, the unused ignore entries, and the scanned versions.
 type Report struct {
 	Findings      []Finding
 	UnusedIgnores []Ignore
@@ -171,7 +171,7 @@ func (s *scanner) addLeaf(address string, path []string, value string, isSensiti
 }
 
 // mergeJSONRestatements strips <name>_json fields duplicating keys and values in map <name> to avoid reporting the
-// same secret twice. Keys absent from <name> or holding a different value remain under <name>_json.
+// same secret twice. Keys absent from <name> or with a different value remain under <name>_json.
 func mergeJSONRestatements(attributes any) any {
 	attrs, ok := attributes.(map[string]any)
 	if !ok {
@@ -196,12 +196,12 @@ func mergeJSONRestatements(attributes any) any {
 	return merged
 }
 
-// restates reports whether held equals decoded, where a map attribute holds a nested value as JSON text.
-func restates(held, decoded any) bool {
-	if reflect.DeepEqual(held, decoded) {
+// restates reports whether stored equals decoded, where a map attribute stores a nested value as JSON text.
+func restates(stored, decoded any) bool {
+	if reflect.DeepEqual(stored, decoded) {
 		return true
 	}
-	text, ok := held.(string)
+	text, ok := stored.(string)
 	if !ok {
 		return false
 	}

@@ -231,7 +231,7 @@ func assertProbeSealState(t *testing.T, handlerSealed, wantSealed bool) {
 	}
 }
 
-// hangUntilCanceled holds every request open until the client gives up.
+// hangUntilCanceled blocks every request until the client gives up.
 func hangUntilCanceled(w http.ResponseWriter, r *http.Request) {
 	select {
 	case <-r.Context().Done():

@@ -46,7 +46,7 @@ type fakeVaultPayload struct {
 	Cas  *int           `json:"cas"`
 }
 
-// liveService simulates a target service holding a single active password for Spec.Verify and Spec.Deploy.
+// liveService simulates a target service with a single active password for Spec.Verify and Spec.Deploy.
 type liveService struct {
 	current   string
 	deploys   [][2]string
@@ -103,7 +103,7 @@ type roundTripCase struct {
 	evil string
 }
 
-func TestExistsReflectsWhetherVaultHoldsTheField(t *testing.T) {
+func TestExistsReflectsWhetherVaultStoresTheField(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
 
@@ -132,7 +132,7 @@ func TestIsCASConflictRequiresTheCASStatusCode(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "400 carrying the real conflict message is a conflict",
+			name: "400 with the real conflict message is a conflict",
 			err:  &vaultapi.ResponseError{StatusCode: http.StatusBadRequest, Errors: []string{casConflictSubstring}},
 			want: true,
 		},
@@ -142,7 +142,7 @@ func TestIsCASConflictRequiresTheCASStatusCode(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "400 carrying an unrelated message is not a conflict",
+			name: "400 with an unrelated message is not a conflict",
 			err:  &vaultapi.ResponseError{StatusCode: http.StatusBadRequest, Errors: []string{"permission denied"}},
 			want: false,
 		},
@@ -161,8 +161,8 @@ func TestIsCASConflictRequiresTheCASStatusCode(t *testing.T) {
 	}
 }
 
-// TestReconcileAppliesVaultStoredValueAsNext covers pushing a value Vault already holds out to
-// a drifted live service, given the actual current credential the live service holds.
+// TestReconcileAppliesVaultStoredValueAsNext covers applying a value already stored in Vault to
+// a drifted live service, given the actual current credential of the live service.
 func TestReconcileAppliesVaultStoredValueAsNext(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
@@ -292,10 +292,10 @@ func TestReconcileTreatsStoredEmptyStringAsAValidNext(t *testing.T) {
 func TestRotateAuthenticatesWithTheVerifiedLiveCredential(t *testing.T) {
 	cases := []rotateCase{
 		{name: "the vault value is live", vaultValue: "vault-value", hasVaultValue: true, liveValue: "vault-value", wantPrevious: "vault-value"},
-		{name: "a rebuilt service holds only the factory default", vaultValue: "vault-value", hasVaultValue: true, factoryDefault: "admin", liveValue: "admin", wantPrevious: "admin"},
-		{name: "a rebuilt vault holds no value and the service holds the factory default", factoryDefault: "admin", liveValue: "admin", wantPrevious: "admin"},
+		{name: "a rebuilt service has only the factory default", vaultValue: "vault-value", hasVaultValue: true, factoryDefault: "admin", liveValue: "admin", wantPrevious: "admin"},
+		{name: "a rebuilt vault lacks a value and the service uses the factory default", factoryDefault: "admin", liveValue: "admin", wantPrevious: "admin"},
 		{name: "the service accepts no known credential", vaultValue: "vault-value", hasVaultValue: true, factoryDefault: "admin", liveValue: "unknown", wantErr: ErrNoLiveCredential},
-		{name: "a rebuilt vault holds no value and no factory default exists", liveValue: "unknown", wantErr: ErrNoLiveCredential},
+		{name: "a rebuilt vault lacks a value and a factory default", liveValue: "unknown", wantErr: ErrNoLiveCredential},
 	}
 	for _, c := range cases {
 		t.Run(c.name, c.run)
@@ -303,10 +303,10 @@ func TestRotateAuthenticatesWithTheVerifiedLiveCredential(t *testing.T) {
 }
 
 // TestRotateOwnLockLifecycle covers the full lifecycle of the advisory lock Rotate stakes on
-// itself: a concurrent call arriving while the lock is held MUST be rejected before reaching
+// itself: a concurrent call arriving while the lock is active MUST be rejected before reaching
 // Apply, and a later, non-overlapping call MUST succeed once the lock is released.
 func TestRotateOwnLockLifecycle(t *testing.T) {
-	t.Run("rejects a concurrent call while the lock is held", testLockRejectsConcurrentCall)
+	t.Run("rejects a concurrent call while the lock is active", testLockRejectsConcurrentCall)
 	t.Run("releases the lock after completing", testLockReleasesAfterCompleting)
 	t.Run("retries lock acquisition after a transient version conflict", testLockRetriesTransientConflict)
 	t.Run("gives up after exhausting every retry against a persistent conflict", testLockGivesUpAfterPersistentConflict)
@@ -322,7 +322,7 @@ func TestRotatePreservesStagedStateWhenTheRecoveryProbeIsInconclusive(t *testing
 	defer srv.Close()
 	seedField(t, client, "password", "old-value")
 
-	staged := rotationState{Previous: "old-value", PendingNext: "value-the-service-may-hold"}
+	staged := rotationState{Previous: "old-value", PendingNext: "value-the-service-may-use"}
 	if err := writeRotationState(context.Background(), client, "secret", "app/infra", "password", staged); err != nil {
 		t.Fatalf("seed writeRotationState: %v", err)
 	}
@@ -331,7 +331,7 @@ func TestRotatePreservesStagedStateWhenTheRecoveryProbeIsInconclusive(t *testing
 	spec := live.bind(lockTestSpec())
 
 	if _, err := Rotate(context.Background(), client, spec, nil); err == nil {
-		t.Fatal("Rotate: want an error while the state of the live service stays unknown, got nil")
+		t.Fatal("Rotate: want an error while the state of the live service remains unknown, got nil")
 	}
 	if len(live.deploys) != 0 {
 		t.Errorf("deploys = %v, want none", live.deploys)
@@ -341,8 +341,8 @@ func TestRotatePreservesStagedStateWhenTheRecoveryProbeIsInconclusive(t *testing
 	if !ok {
 		t.Fatal("the staged rotation record was cleared, want the record preserved for the next run")
 	}
-	if pending != "value-the-service-may-hold" {
-		t.Errorf("staged pending_next = %q, want %q preserved", pending, "value-the-service-may-hold")
+	if pending != "value-the-service-may-use" {
+		t.Errorf("staged pending_next = %q, want %q preserved", pending, "value-the-service-may-use")
 	}
 }
 
@@ -375,7 +375,7 @@ func TestRotatePreservesUnrelatedFieldsAtTheSamePath(t *testing.T) {
 }
 
 // TestRotatePropagatesApplyFailureWithoutTouchingVault covers a failed Apply against a verified
-// live credential: the failure MUST surface unchanged and the Vault value MUST stay untouched.
+// live credential: the failure MUST surface unchanged and the Vault value MUST remain untouched.
 func TestRotatePropagatesApplyFailureWithoutTouchingVault(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
@@ -398,7 +398,7 @@ func TestRotatePropagatesApplyFailureWithoutTouchingVault(t *testing.T) {
 
 // TestRotateReReadsFieldStateAfterAcquiringTheLock covers a write landing, from outside this
 // rotation, between the pre-lock read of Rotate and the point at which Rotate decides whether to
-// call Apply. Authentication MUST proceed against the field value held once the lock is staked.
+// call Apply. Authentication MUST proceed against the field value stored once the lock is staked.
 func TestRotateReReadsFieldStateAfterAcquiringTheLock(t *testing.T) {
 	cases := []reReadCase{
 		{name: "a genuine credential appears out of band", outOfBand: "external-value"},
@@ -461,7 +461,7 @@ func TestRotateRefusesToApplyInUnsafeSituations(t *testing.T) {
 			},
 		},
 		{
-			name: "another rotation holds the lock",
+			name: "another rotation owns the lock",
 			setup: func(t *testing.T, client *vaultapi.Client, store *fakeKVv2) {
 				if err := writeField(context.Background(), client, "secret", "app/infra", "password", "old-value"); err != nil {
 					t.Fatalf("seed writeField: %v", err)
@@ -518,7 +518,7 @@ func TestRotateRequiresAVerifyFunction(t *testing.T) {
 }
 
 // TestRotateResolvesAgainstAWriterOutsideThisRotation covers an out-of-band write changing the
-// Vault field mid-rotation. Rotate MUST confirm the live service holds the raced-in value before
+// Vault field mid-rotation. Rotate MUST confirm the live service uses the raced-in value before
 // accepting the raced-in value, and MUST NOT report an unverified value as a rotation.
 func TestRotateResolvesAgainstAWriterOutsideThisRotation(t *testing.T) {
 	cases := []outsideWriteCase{
@@ -596,7 +596,7 @@ func TestRotateStagesPendingStateBeforeApplyingToTheLiveService(t *testing.T) {
 }
 
 // TestWriteFieldCreatesOnFirstWriteAfterAPatchRejection covers the boundary on which the
-// probe-free design of writeField depends: a patch against a path holding no document yet MUST
+// probe-free design of writeField depends: a patch against a path with no document yet MUST
 // fall back to a create, at the cost of one rejected patch attempt plus the create itself.
 func TestWriteFieldCreatesOnFirstWriteAfterAPatchRejection(t *testing.T) {
 	srv, client, store := newFakeKVv2Server(t)
@@ -674,7 +674,7 @@ func TestWriteRotationStateKeepsEveryFieldAString(t *testing.T) {
 	data, _ := secret.Data["data"].(map[string]any)
 	for key, value := range data {
 		if _, ok := value.(string); !ok {
-			t.Errorf("field %s holds %T, want string", key, value)
+			t.Errorf("field %s contains %T, want string", key, value)
 		}
 	}
 
@@ -766,7 +766,7 @@ func readStagedRotationFields(t *testing.T, client *vaultapi.Client, mount, path
 	}
 	raw, isString := value.(string)
 	if !isString {
-		t.Fatalf("%s_rotation holds %T, want a JSON string", field, value)
+		t.Fatalf("%s_rotation contains %T, want a JSON string", field, value)
 	}
 	var staging struct {
 		Previous    string `json:"previous"`
@@ -788,7 +788,7 @@ func seedField(t *testing.T, client *vaultapi.Client, field, value string) {
 
 // testLockAdmitsOneInterleavedHolder drives the interleaving Rotate itself performs: both callers
 // clear checkNotLocked before either one reaches acquireLock. Exactly one caller MUST come away
-// holding the lock.
+// with the lock.
 func testLockAdmitsOneInterleavedHolder(t *testing.T) {
 	srv, client, _ := newFakeKVv2Server(t)
 	defer srv.Close()
@@ -853,7 +853,7 @@ func testLockRejectsConcurrentCall(t *testing.T) {
 		t.Fatalf("Rotate: %v", err)
 	}
 	if concurrentErr == nil {
-		t.Fatal("concurrent Rotate: want error while the first call still held the lock, got nil")
+		t.Fatal("concurrent Rotate: want error while the first call still owned the lock, got nil")
 	}
 	if concurrentApplyCalled {
 		t.Error("concurrent Rotate reached Apply, want it rejected by the lock first")
@@ -886,12 +886,12 @@ func testLockReleaseSpareForeignHolder(t *testing.T) {
 	if !ok {
 		t.Fatal("the lock record was cleared, want the record staked by other-process left intact")
 	}
-	var held rotationLock
-	if err := json.Unmarshal([]byte(raw), &held); err != nil {
-		t.Fatalf("Unmarshal held lock: %v", err)
+	var staked rotationLock
+	if err := json.Unmarshal([]byte(raw), &staked); err != nil {
+		t.Fatalf("Unmarshal staked lock: %v", err)
 	}
-	if held.Holder != "other-process" {
-		t.Errorf("lock holder = %q, want %q", held.Holder, "other-process")
+	if staked.Holder != "other-process" {
+		t.Errorf("lock holder = %q, want %q", staked.Holder, "other-process")
 	}
 }
 
@@ -966,8 +966,8 @@ func (s *fakeKVv2) handleGet(w http.ResponseWriter, path string) {
 	})
 }
 
-// handleMetadata answers the Vault metadata endpoint: current_version stays positive once a
-// path has ever held data, even after destroy deletes the data itself.
+// handleMetadata answers the Vault metadata endpoint: current_version remains positive once a
+// path has ever contained data, even after destroy deletes the data itself.
 func (s *fakeKVv2) handleMetadata(w http.ResponseWriter, r *http.Request, path string) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -1059,7 +1059,7 @@ func (s *fakeKVv2) recordRequest(method, path string) {
 
 // rejectCAS reports whether the write MUST be rejected as a check-and-set conflict: either a
 // forced conflict staged by a test through failCASConflicts, or a version mismatch against the
-// requested cas value. rejectCAS assumes the caller already holds s.mu.
+// requested cas value. rejectCAS assumes the caller has already locked s.mu.
 func (s *fakeKVv2) rejectCAS(path string, cas *int) bool {
 	if s.failCASConflicts > 0 {
 		s.failCASConflicts--
