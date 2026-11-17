@@ -131,15 +131,15 @@ resource "terraform_data" "network_allocation_validation" {
   lifecycle {
     precondition {
       condition     = local.network_allocation_valid
-      error_message = "secret/parent-group-governance/network/allocation MUST hold a DNS domain_suffix, a JSON list of DNS label stages, IPv4 network_cidr of /16, and bastion_publish_cidr of segment 0 inside network_cidr."
+      error_message = "secret/parent-group-governance/network/allocation MUST contain a DNS domain_suffix, a JSON list of DNS label stages, IPv4 network_cidr of /16, and bastion_publish_cidr of segment 0 inside network_cidr."
     }
     precondition {
       condition     = local.network_baseline_valid
-      error_message = "secret/parent-group-governance/network/allocation MUST hold network_baseline as a JSON object of host_vip_offset, global_mac_prefix, global_mtu, global_mss, node_exporter_port, cidr_subnet_bits, cidr_nat_offset, and cidr_index_max, with every host segment index above cidr_index_max."
+      error_message = "secret/parent-group-governance/network/allocation MUST contain network_baseline as a JSON object of host_vip_offset, global_mac_prefix, global_mtu, global_mss, node_exporter_port, cidr_subnet_bits, cidr_nat_offset, and cidr_index_max, with every host segment index above cidr_index_max."
     }
     precondition {
       condition     = local.kubernetes_pools_valid
-      error_message = "secret/parent-group-governance/network/allocation MUST hold IPv4 pod_network_cidr and service_network_cidr which overlap neither each other nor network_cidr, each with a prefix length plus cidr_subnet_bits of at most 32."
+      error_message = "secret/parent-group-governance/network/allocation MUST contain IPv4 pod_network_cidr and service_network_cidr which overlap neither each other nor network_cidr, each with a prefix length plus cidr_subnet_bits of at most 32."
     }
     precondition {
       condition     = local.topology_publish_inside_network

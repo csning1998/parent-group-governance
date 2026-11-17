@@ -151,4 +151,4 @@ terraform plan
 ### Item A. Credential Refresh and Destruction Protection
 
 - Local ADC credentials refresh automatically through the Google Cloud CLI helper.
-- Destruction of `google_iam_workload_identity_pool.gitlab_saas` and `google_iam_workload_identity_pool_provider.gitlab_saas` carries `prevent_destroy = true` lifecycle protection to avoid invalidating downstream project federation bindings.
+- Destruction of `google_iam_workload_identity_pool.gitlab_saas` and `google_iam_workload_identity_pool_provider.gitlab_saas` is blocked by `prevent_destroy = true` lifecycle protection to avoid invalidating downstream project federation bindings.

@@ -9,7 +9,7 @@ resource "vault_mount" "registry" {
   description = "Facts which parent-group-governance publishes to tenants. Tenants read, and only parent-group-governance writes."
 }
 
-# Each field holds one category in JSON, and a consumer decodes only the consumed field.
+# Each field stores one category in JSON, and a consumer decodes only the consumed field.
 resource "vault_kv_secret_v2" "registry_platform_network_allocation" {
   provider = vault.bastion
   mount    = vault_mount.registry.path
