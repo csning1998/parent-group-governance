@@ -38,12 +38,12 @@ run "default_github_mirror" {
 
   assert {
     condition     = github_repository.this.auto_init == false
-    error_message = "auto_init must stay disabled"
+    error_message = "auto_init must remain disabled"
   }
 
   assert {
     condition     = github_repository.this.archive_on_destroy == true
-    error_message = "archive_on_destroy must stay enabled"
+    error_message = "archive_on_destroy must remain enabled"
   }
 
   assert {

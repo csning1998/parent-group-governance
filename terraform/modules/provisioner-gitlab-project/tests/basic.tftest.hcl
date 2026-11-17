@@ -17,7 +17,7 @@ run "example_platform_project" {
 
   assert {
     condition     = gitlab_project.this.merge_method == "ff"
-    error_message = "merge_method must stay fast-forward-only"
+    error_message = "merge_method must remain fast-forward-only"
   }
 
   assert {
@@ -27,7 +27,7 @@ run "example_platform_project" {
 
   assert {
     condition     = gitlab_branch_protection.main.allow_force_push == false
-    error_message = "force push to main must stay disabled"
+    error_message = "force push to main must remain disabled"
   }
 
   assert {
@@ -37,7 +37,7 @@ run "example_platform_project" {
 
   assert {
     condition     = gitlab_project_variable.extra["CLAUDE_API_KEY"].masked == true && gitlab_project_variable.extra["CLAUDE_API_KEY"].hidden == true
-    error_message = "a project variable must stay masked and hidden"
+    error_message = "a project variable must remain masked and hidden"
   }
 }
 

@@ -162,7 +162,7 @@ run "anthropic_identifiers_are_published" {
 
   assert {
     condition     = output.federation_bindings["anthropic"].organization_id == "abcdef01-2345-4678-89ab-cdef01234567"
-    error_message = "the anthropic binding must carry the identifiers"
+    error_message = "the anthropic binding must contain the identifiers"
   }
 }
 
@@ -329,7 +329,7 @@ run "google_identifiers_are_published" {
 
   assert {
     condition     = output.federation_bindings["google"].project_id == "test-gcp-project" && output.federation_bindings["google"].pool_id == "gitlab-pool"
-    error_message = "the google binding must carry the federation identifiers"
+    error_message = "the google binding must contain the federation identifiers"
   }
 }
 
@@ -462,7 +462,7 @@ run "azure_identifiers_are_published" {
 
   assert {
     condition     = output.federation_bindings["azure"].tenant_id == "11111111-2222-3333-4444-555555555555" && output.federation_bindings["azure"].openai_endpoint == "https://oai-test-account.openai.azure.com/"
-    error_message = "the azure binding must carry the federation identifiers"
+    error_message = "the azure binding must contain the federation identifiers"
   }
 }
 
