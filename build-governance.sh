@@ -61,7 +61,7 @@ if ! curl -fsS --max-time 5 "${sonar_host_url}/api/system/status" 2>/dev/null | 
     echo "skipped: SonarQube at ${sonar_host_url} is not UP" >&2
 # The analysis MUST be skipped on uncommitted sources because a file without git blame counts entirely as new code.
 elif [[ -n "$(git status --porcelain -- tools terraform ansible)" ]]; then
-    echo "skipped: tools, terraform, or ansible holds uncommitted changes, commit them before the SonarQube analysis" >&2
+    echo "skipped: tools, terraform, or ansible contains uncommitted changes, commit them before the SonarQube analysis" >&2
 elif ! command -v vault-proxy-env >/dev/null; then
     echo "skipped: vault-proxy-env is missing, run the first menu item of ./governance in parent-group-governance" >&2
 # Token resolution MUST isolate proxy environment evaluation to prevent variable leaks and capture execution failures.
