@@ -295,7 +295,7 @@ func TestRotateAuthenticatesWithTheVerifiedLiveCredential(t *testing.T) {
 		{name: "a rebuilt service has only the factory default", vaultValue: "vault-value", hasVaultValue: true, factoryDefault: "admin", liveValue: "admin", wantPrevious: "admin"},
 		{name: "a rebuilt vault lacks a value and the service uses the factory default", factoryDefault: "admin", liveValue: "admin", wantPrevious: "admin"},
 		{name: "the service accepts no known credential", vaultValue: "vault-value", hasVaultValue: true, factoryDefault: "admin", liveValue: "unknown", wantErr: ErrNoLiveCredential},
-		{name: "a rebuilt vault lacks a value and a factory default", liveValue: "unknown", wantErr: ErrNoLiveCredential},
+		{name: "a rebuilt vault lacks a value and the service lacks a factory default", liveValue: "unknown", wantErr: ErrNoLiveCredential},
 	}
 	for _, c := range cases {
 		t.Run(c.name, c.run)

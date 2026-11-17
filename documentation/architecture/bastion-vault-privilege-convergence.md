@@ -692,7 +692,7 @@ The test CA for `pki-intermediate-vault-downstream` does not have a URI SAN. The
 | Subordinate self-signed leaf certificates under `pki-intermediate-vault-downstream` | 2 expected passes succeeded, 5 expected rejections were all rejected                                                                                  |
 | Path length                                                                         | Test CA `pathlen` decrements from 2 to 1. `internal/pkipathlen` verifies the rejections past the limit on a Vault development server                  |
 | `pki-leaf-platform` issuance through a tenant role on 2026-10-04                    | 2 expected passes succeeded. Vault rejected `localhost`, `127.0.0.1`, the Bastion publish address, `gitlab.com`, and a SPIFFE URI                     |
-| `pki-leaf-platform` subordinate CA on 2026-10-04                                    | The CA certificate sets `pathlen:0`, and a tenant call on `root/sign-intermediate` returned 403                                                       |
+| `pki-leaf-platform` subordinate CA on 2026-10-04                                    | The CA certificate has `pathlen:0`, and a tenant call on `root/sign-intermediate` returned 403                                                        |
 
 ### Step E. Secret Scanning on State Files
 

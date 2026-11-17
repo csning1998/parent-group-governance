@@ -11,7 +11,7 @@ resource "vault_mount" "transit_unseal" {
   provider    = vault.bastion
   path        = "transit-unseal"
   type        = "transit"
-  description = "Transit keys with which downstream Vault clusters auto-unseal. The mount is separate from the PKI mounts."
+  description = "Transit keys with which downstream Vault clusters auto-unseal. The mount is separated from the PKI mounts."
 }
 
 # The key never leaves the Bastion Vault. exportable and allow_plaintext_backup cannot return to false once set.

@@ -406,7 +406,7 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 | `[Vault] Generate Root Token for Break-Glass`                              | `vault generate-root`                    | Produces a root token from the stored unseal keys into `~/.vault-token`    |
 | `[Credentials] Rotate Service Admin Passwords`                             | `credentials rotate <credential-key>`    | Generates a password, deploys the password, and commits the value to Vault |
 | `[Credentials] Reconcile Service Admin Passwords with the Live Service`    | `credentials reconcile <credential-key>` | Deploys the value stored in Vault to a drifted live service                |
-| `[Terraform] Audit State Secrets`                                          | `terraform audit-state [--history]`      | Lists state locations with a secret, see tools/governance Section 11       |
+| `[Terraform] Audit State Secrets`                                          | `terraform audit-state [--history]`      | Lists state locations containing a secret, see tools/governance Section 11 |
 
 Each key listed under `service_admin_passwords` of `workstation-topology.yaml` becomes one subcommand under `credentials rotate`, and one more under `credentials reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already stores a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears. The CLI reads the Bastion Vault endpoint and the listener addresses of the TLS material from `vault_bastion` of the same file.
 
@@ -414,12 +414,12 @@ Each key listed under `service_admin_passwords` of `workstation-topology.yaml` b
 
 Every subcommand other than the bare root command bootstraps `.env` before running. The bootstrap populates host identity and the SonarQube database password. The file is rewritten through a temporary file with an atomic rename. Six keys are managed. The file contains neither the Bastion Vault address declared by `workstation-topology.yaml` nor a Vault token.
 
-| Key                     | Source                                                                     |
-| ----------------------- | -------------------------------------------------------------------------- |
-| `PROJECT_ROOT`          | The directory with the `.git` entry nearest above the working directory    |
-| `HOST_UID`, `HOST_GID`  | The operator account identifiers consumed by `compose.yml`                 |
-| `UNAME`, `UHOME`        | The operator user name and home directory                                  |
-| `SONARQUBE_DB_PASSWORD` | Generated once from `crypto/rand` at first bootstrap                       |
+| Key                     | Source                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `PROJECT_ROOT`          | The directory containing the `.git` entry nearest above the working directory |
+| `HOST_UID`, `HOST_GID`  | The operator account identifiers consumed by `compose.yml`                    |
+| `UNAME`, `UHOME`        | The operator user name and home directory                                     |
+| `SONARQUBE_DB_PASSWORD` | Generated once from `crypto/rand` at first bootstrap                          |
 
 The `.env` file serves as the single host record of `SONARQUBE_DB_PASSWORD`. `sonarqube/postgres-data` preserves the password of the first database initialization. If `.env` lacks this entry while `sonarqube/postgres-data` exists, the bootstrap process aborts to prevent generating a mismatched credential rejected by the database. Recovery requires restoring the password into `.env` from backup, or recreating `sonarqube/postgres-data` and `sonarqube/data`.
 
