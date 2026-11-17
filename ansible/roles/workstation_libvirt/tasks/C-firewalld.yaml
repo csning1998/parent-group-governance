@@ -1,5 +1,5 @@
 ---
-# The policy carries priority -1 and target REJECT, hence the policy decides routed guest traffic
+# The policy sets priority -1 and target REJECT, hence the policy decides routed guest traffic
 # to the host before any rule of the zone libvirt-routed, and the Bastion Vault port lives here.
 - name: "C1. Declare the policy for routed guest traffic to the host"
   ansible.builtin.template:
@@ -32,7 +32,7 @@
   changed_when: false
 
 # A source or interface in the zone trusted accepts every port of the host and bypasses C1 and C2.
-- name: "C5. Assert the zone trusted holds no binding"
+- name: "C5. Assert the zone trusted lacks any binding"
   ansible.builtin.assert:
     that:
       - _workstation_libvirt_trusted_zone.stdout is not search('^\s*(interfaces|sources):[ ]+\S', multiline=true)
@@ -49,7 +49,7 @@
 
 # C5 covers the permanent configuration file alone. C7 covers a runtime-only binding added
 # by a prior manual firewall-cmd call outside the permanent configuration.
-- name: "C7. Assert the runtime zone trusted holds no binding"
+- name: "C7. Assert the runtime zone trusted lacks any binding"
   ansible.builtin.assert:
     that:
       - _workstation_libvirt_trusted_zone_runtime.stdout is not search('^\s*(interfaces|sources):[ ]+\S', multiline=true)

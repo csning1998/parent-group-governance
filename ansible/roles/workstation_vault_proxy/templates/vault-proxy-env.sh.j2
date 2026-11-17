@@ -97,7 +97,7 @@ else
   until state_token="$(eval "$(print_proxy_env "${identity}")" && {{ state_read }} "${state_path}" 2>/dev/null)"; do
     attempt=$((attempt + 1))
     if [ "${attempt}" -gt {{ workstation_vault_proxy_login_retry_seconds + 1 }} ]; then
-      echo "vault-proxy-env: the ${identity} Proxy runs but holds no login, or {{ operator_vault_proxy.state_backend.vault_kv_mount }}/${state_path} holds no field {{ operator_vault_proxy.state_backend.vault_kv_field }}." >&2
+      echo "vault-proxy-env: the ${identity} Proxy runs without a login, or {{ operator_vault_proxy.state_backend.vault_kv_mount }}/${state_path} lacks the field {{ operator_vault_proxy.state_backend.vault_kv_field }}." >&2
       echo "vault-proxy-env: journalctl --user -u vault-proxy@${identity}.service names the login error. A missing cert role needs foundation-vault-bastion applied, and a missing token needs the administrator to write the path." >&2
       exit 1
     fi

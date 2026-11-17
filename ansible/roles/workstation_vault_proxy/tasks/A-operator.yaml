@@ -25,7 +25,7 @@
       (operator_vault_proxy.identities.keys() | map('regex_replace', '^', _workstation_vault_proxy_base_dir ~ '/') | list)
     }}
 
-# The copy keeps every caller off the repository path, and the source stays authoritative.
+# The copy decouples every caller from the repository path, and the source remains authoritative.
 - name: "A4. Copy the ML-DSA-87 CA certificate next to the identities"
   ansible.builtin.copy:
     src: "{{ workstation_vault_proxy_ca_dir }}/ca-ml-dsa-87.pem"
