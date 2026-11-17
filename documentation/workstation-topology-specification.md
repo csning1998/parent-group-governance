@@ -72,7 +72,7 @@ The `vault_bastion` map configures the network listener endpoints bound by the l
 - Type: `object`
 - Semantics: The host segment on which the observability scrapers reach the metrics of the host, the third octet 249 of the network allocation (ADR-143). The network allocation facts reside in the Bastion Vault. The file therefore declares the registry location of the segment instead of the segment.
 - Child fields:
-    - `network_name` (`string`): Name of the routed libvirt network which carries the host address on the segment (`host-telemetry-scrape`).
+    - `network_name` (`string`): Name of the routed libvirt network which contains the host address on the segment (`host-telemetry-scrape`).
     - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, and `address_field` of the segment and the host address. `foundation-vault-bastion` publishes both at `registry/platform/network/allocation`.
     - `host_exporter_ports` (`list(number)`): Ports of node_exporter and the libvirt exporter on the host. The scrape ports are these ports and `vault_bastion.metrics_port`.
 
@@ -114,7 +114,7 @@ The `operator_vault_proxy` map configures workstation local forwarding proxies. 
 #### `operator_vault_proxy.governance_owner_code`
 
 - Type: `string`
-- Semantics: Owner code of this repository (`parent-group-governance`). The identities `administrator` and `credential-rotator` carry the owner code. The administrator writes below `secret/<governance_owner_code>/`. The field is the single declaration of the governance owner code for Terraform, Ansible, and the CLI.
+- Semantics: Owner code of this repository (`parent-group-governance`). The identities `administrator` and `credential-rotator` map to the owner code. The administrator writes below `secret/<governance_owner_code>/`. The field is the single declaration of the governance owner code for Terraform, Ansible, and the CLI.
 
 #### `operator_vault_proxy.identities`
 
@@ -127,8 +127,8 @@ The `operator_vault_proxy` map configures workstation local forwarding proxies. 
     - `allowed_read_registry_paths` (`list(string)`): Registry domains below `platform/`, such as `platform/ai-provider` declared by `credential-distributor` and `consumer`.
     - `code_reviewer_variable_projects` (`list(string)`): Project paths below the top level group, such as `platform-engineering-lab/platform-foundation`. Each listed project receives the code reviewer bot variables from `./governance credentials issue code-reviewer-variables`. The CLI prefixes the top level group of the origin remote. Only `workstation-topology.yaml` grants a project the bot tokens. A project cannot register itself.
 - Naming: The identity key determines the access tier and the owner code. The file declares neither field.
-    - `administrator` and `credential-rotator` carry the tier of the same name and `governance_owner_code`.
-    - `credential-distributor-<owner code>` and `consumer-<owner code>` carry the tier of the prefix and the owner code after the prefix.
+    - `administrator` and `credential-rotator` map to the tier of the same name and `governance_owner_code`.
+    - `credential-distributor-<owner code>` and `consumer-<owner code>` map to the tier of the prefix and the owner code after the prefix.
     - Every other key is a tenant. The key equals the owner code of the tenant.
     - Every identity except `credential-rotator` reads the GitLab token of its owner at `<owner code>/terraform/state-backend`. `vault-proxy-env` exports the token as `TF_HTTP_PASSWORD`.
     - The Go package `internal/topology`, the locals of `access-operator-proxy.tf`, and the template `vault-proxy-env.sh.j2` implement the same rule.

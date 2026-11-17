@@ -22,7 +22,7 @@ This document records the privilege boundaries, roots of trust, fact publication
 - **Operator cert role**: The cert auth role `operator-<identity>`. The role admits the client certificate of CN `operator-<identity>` signed by the ML-DSA-87 CA of `vault/tls`.
 - **Assignment Scope**: The set of policy names assignable to a tenant role on one class of auth mount.
 - **registry**: The KV v2 mount `registry` written by pgg alone for the facts needed by tenants.
-- **Name Constraints**: The certificate extension defined by RFC 5280 which restricts the names carried by certificates issued under a given CA certificate.
+- **Name Constraints**: The certificate extension defined by RFC 5280 which restricts the names contained in certificates issued under a given CA certificate.
 
 ## Section 2. Background, Threats, and Design Principles
 
@@ -52,18 +52,18 @@ Each row in the table below represents a threat scenario. The unmitigated conseq
 | T1  | A tenant has write access to both policies and auth roles simultaneously | The tenant writes a policy containing `path "*"` and assigns the policy to a role of the tenant, obtaining full Bastion Vault privileges, including intermediate CA issuance and transit key decryption                                                                                                                                              | Section 3 Item E                     |
 | T2  | `allowed_parameters` matches policy names via glob patterns              | The auth method splits a string such as `<code>-a,other` into two distinct policies. The tenant can thereby assign policies outside its assignment scope                                                                                                                                                                                             | Section 3 Item E.1                   |
 | T3  | Operator login credentials are issued by Terraform                       | Secret IDs or tokens enter state files, outputs, and KV storage, allowing any layer with read access to pgg state to log in as the operator identity indefinitely                                                                                                                                                                                    | Section 3 Item D                     |
-| T4  | mp reads pgg state via `terraform_remote_state`                          | The reader acquires the entire state snapshot. If the GitLab token used for reading carries the Maintainer role, the reader could tamper with pgg state to induce unintended actions during the next apply                                                                                                                                           | Section 4 Item C                     |
+| T4  | mp reads pgg state via `terraform_remote_state`                          | The reader acquires the entire state snapshot. If the GitLab token used for reading has the Maintainer role, the reader could tamper with pgg state to induce unintended actions during the next apply                                                                                                                                               | Section 4 Item C                     |
 | T5  | Published facts reside on paths writable by the tenant                   | The tenant tampers with the domains or CIDR blocks constraining itself, causing subsequent layers reading those facts to apply relaxed values                                                                                                                                                                                                        | Section 4 Item C.2                   |
 | T6  | Network allocation can be overridden by tfvars, `-var`, or `TF_VAR_`     | An uncommitted local value can relax Name Constraints without visibility in the code review process                                                                                                                                                                                                                                                  | Section 4 Item A                     |
 | T7  | Intermediate CAs lack Name Constraints                                   | A compromised SPIRE or Downstream Vault CA can issue certificates for `127.0.0.1` or `10.20.0.1` to spoof the Bastion Vault listener. An attacker controlling the network path, such as DNS or routing, receives the tokens of clients which trust the `pki-root` bundle. Clients pinned to `Vault Transport Root CA` reject the spoofed certificate | Section 4 Item B                     |
 | T8  | Downstream Vault CA is allowed to issue SPIFFE URIs                      | A compromised Downstream Vault can issue arbitrary SVIDs to impersonate any workload identity                                                                                                                                                                                                                                                        | Section 4 Item B.2                   |
 | T9  | The transit unseal policy is assignable on shared mounts                 | A leaked tenant token creates a GitLab CI JWT role with overly broad claims and attaches the transit unseal policy, allowing any CI job with network reachability to the Bastion Vault to decrypt the Downstream Vault root key once the CI job also obtains the encrypted root key from the Downstream Vault storage                                | Section 3 Item E.3                   |
 | T10 | The transit key is exportable or allows plaintext backup                 | An attacker obtaining the key and the encrypted root key from the Downstream Vault storage can decrypt the root key offline without leaving any decrypt entries in audit logs                                                                                                                                                                        | Section 4 Item D                     |
-| T11 | The terminal outputs token accessors                                     | An accessor captured in scrollback can be used by an identity holding `lookup-accessor` or `revoke-accessor` privileges to inspect or revoke operator tokens                                                                                                                                                                                         | Section 5 Item C                     |
+| T11 | The terminal outputs token accessors                                     | An accessor captured in scrollback can be used by an identity with `lookup-accessor` or `revoke-accessor` privileges to inspect or revoke operator tokens                                                                                                                                                                                            | Section 5 Item C                     |
 | T12 | Audit devices are disabled or modified without detection                 | Operations executed by an attacker after disabling audit logging leave no traces, making post-incident investigation impossible                                                                                                                                                                                                                      | Section 5                            |
 | T13 | An operator login credential is intercepted in transit                   | The interceptor replays the credential and logs in as the operator identity, and the legitimate workflow does not notice the second login                                                                                                                                                                                                            | Section 3 Item D.3                   |
 | T14 | The root token or ambient `VAULT_TOKEN` is sent with requests            | The root token reaches a Proxy or an operator shell, effectively elevating the operator identity to root                                                                                                                                                                                                                                             | Section 3 Item D.3, Section 6 Item C |
-| T15 | Operator tokens reside in shell environments                             | Every process of the shell inherits the token, and a token printed or captured from the environment stays valid within its TTL for other processes on the same host                                                                                                                                                                                  | Section 3 Item D.3                   |
+| T15 | Operator tokens reside in shell environments                             | Every process of the shell inherits the token, and a token printed or captured from the environment is valid within its TTL for other processes on the same host                                                                                                                                                                                     | Section 3 Item D.3                   |
 | T16 | A tenant manages leaf roles on an issuing mount without Name Constraints | The tenant creates a role without name restrictions on an issuing mount without Name Constraints and issues a certificate for `127.0.0.1` or `10.20.0.1` which chains to `pki-root`, without compromising any CA                                                                                                                                     | Section 4 Item B.2                   |
 | T17 | A CA signer policy is assignable on the GitLab CI JWT mount              | A CI job assigned `pki-intermediate-spire-signer-<code>` signs a SPIRE CA under `pki-intermediate-spire` and mints any SVID of the trust domain                                                                                                                                                                                                      | Section 3 Item E.3                   |
 
@@ -75,12 +75,12 @@ Each row in the table below represents a threat scenario. The unmitigated conseq
 4. When `allowed_parameters` in ACLs matches via glob patterns, strings containing commas such as `<code>-a,other` are accepted and subsequently split into two separate policies by the auth method.
 5. `terraform_remote_state` downloads the complete state snapshot, giving readers access to all resource attributes. `sensitive = true` only masks values in CLI output.
 6. Reading Terraform state from GitLab requires the Developer role. Writing and locking state requires the Maintainer role.
-7. Destroying a `vault_kv_secret_v2` resource with the default `delete_all_versions = false` soft deletes only the latest version. Earlier versions stay readable, and the latest version stays recoverable until the versions are destroyed or the metadata is deleted.
+7. Destroying a `vault_kv_secret_v2` resource with the default `delete_all_versions = false` soft deletes only the latest version. Earlier versions remain readable, and the latest version remains recoverable until the versions are destroyed or the metadata is deleted.
 8. Vault provider 5.5.0 deprecated the data source `vault_kv_secret_v2`.
 
 ### Item E. Design Principles
 
-1. Every privilege MUST be held by the lowest identity in the hierarchy.
+1. Every privilege MUST be assigned to the lowest identity in the hierarchy.
 2. Every Vault path MUST have only one writer.
 3. Every authorization boundary value MUST have a single declaration source. The declaration source MUST undergo version control and review.
 4. Secrets MUST NOT enter any Terraform state, KV copy, or output.
@@ -112,14 +112,14 @@ Identities on the Bastion Vault are structured into five tiers. Each tier receiv
 ### Item C. L1 pgg Terraform
 
 1. The Terraform runs for pgg are executed on the operator workstation through the Vault Proxy of the identity `administrator`, access tier `administrator`, after the first apply of `foundation-vault-bastion` with the root token.
-2. `foundation-vault-bastion` declares auth mounts, PKI mounts, transit mounts, registry mounts, audit devices, the operator cert auth mount and cert roles, and policies held by pgg.
+2. `foundation-vault-bastion` declares auth mounts, PKI mounts, transit mounts, registry mounts, audit devices, the operator cert auth mount and cert roles, and policies owned by pgg.
 3. `foundation-vault-bastion` also declares the tenant ACL and every policy which a tenant may assign.
 4. The state file of the layer is stored in GitLab project `86417732`, and the state MUST NOT contain any secrets, as verified in Section 9 Step E.
 5. Applies MUST use a saved plan. The operator executes `terraform plan -out=tfplan` first and `terraform apply tfplan` after review.
 
 ### Item D. L2 Operator Vault Proxy
 
-This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non root login to the Bastion Vault passes through the Vault Proxy of one operator identity. A caller does not hold a Vault token. A leaked shell environment or a leaked state file therefore does not expose a credential capable of a login.
+This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non root login to the Bastion Vault passes through the Vault Proxy of one operator identity. A caller never receives a Vault token. A leaked shell environment or a leaked state file therefore does not expose a credential capable of a login.
 
 #### Item D.1 Declaration of the Operator Cert Roles
 
@@ -130,7 +130,7 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non ro
 | `name`                 | `operator-<identity>`                                                                                                                                                            | The role name matches the CN admitted by the role.                                                                                                                                                                                           |
 | `certificate`          | The ML-DSA-87 CA `vault/tls/ca-ml-dsa-87.pem`                                                                                                                                    | The CA of the loopback listener signs the client certificates, hence the operator path trusts one CA alone.                                                                                                                                  |
 | `allowed_common_names` | `operator-<identity>`                                                                                                                                                            | A certificate of one identity cannot log in through the role of another identity.                                                                                                                                                            |
-| `token_policies`       | `operator-<identity>` for tier `credential-distributor`, `consumer`, `administrator`, or `credential-rotator`, and the tenant ACL and `registry-reader-<code>` for tier `tenant` | A credential-distributor identity reads group keys alone. A consumer identity reads the GitLab token of its owner and registry domains alone. Administrator and credential-rotator hold scoped administrative policies. Tenant holds Item E. |
+| `token_policies`       | `operator-<identity>` for tier `credential-distributor`, `consumer`, `administrator`, or `credential-rotator`, and the tenant ACL and `registry-reader-<code>` for tier `tenant` | A credential-distributor identity reads group keys alone. A consumer identity reads the GitLab token of its owner and registry domains alone. Administrator and credential-rotator use scoped administrative policies. Tenant uses Item E.   |
 | `token_ttl`            | 3600s                                                                                                                                                                            | The Proxy renews the token within the TTL.                                                                                                                                                                                                   |
 | `token_max_ttl`        | 14400s                                                                                                                                                                           | The Proxy logs in again after the maximum TTL.                                                                                                                                                                                               |
 | `token_bound_cidrs`    | `127.0.0.1/32`                                                                                                                                                                   | The Proxies connect through the loopback listener, and a token presented from any other source fails.                                                                                                                                        |
@@ -140,7 +140,7 @@ This section addresses T3, T13, T14, and T15 from Section 2 Item C. Every non ro
 1. The topology lacks the identity `administrator` or the identity `credential-rotator`.
 2. The owner code yielded by an identity key is not lowercase words joined by hyphens.
 3. A key without the prefix `credential-distributor-` or `consumer-` names no tenant of `access-tenant.tf`.
-4. A secret path carries a wildcard or an empty segment, a registry path names anything other than one domain below `platform/`, or a consumer identity declares a secret path.
+4. A secret path contains a wildcard or an empty segment, a registry path names anything other than one domain below `platform/`, or a consumer identity declares a secret path.
 
 The local `operator_identity_roles` derives the tier and the owner code from each key. Every identity except `credential-rotator` reads the GitLab token at `<owner code>/terraform/state-backend`. The derivation keeps the governance GitLab token with the identities of `parent-group-governance` because only `administrator` and `credential-distributor-parent-group-governance` yield the `parent-group-governance` owner code.
 
@@ -159,14 +159,14 @@ The role `workstation_vault_proxy` of the first menu item `[Host] Apply All Work
 #### Item D.3 Token Boundary Guarantees
 
 1. The Bastion Vault token of an operator identity MUST reside in the memory of the Proxy alone. The Proxy overwrites the placeholder token of every request.
-2. The Vault provider MUST skip the child token because a child token from `auth/token/create` does not carry `token_bound_cidrs` and the cert role does not grant `auth/token/create`.
+2. The Vault provider MUST skip the child token because a child token from `auth/token/create` does not inherit `token_bound_cidrs` and the cert role does not grant `auth/token/create`.
 3. The long lived credential is the client private key. The key never leaves the operator workstation and never enters a Terraform state, an output, or a KV path.
 4. No secret ID and no wrapping token exist in the operator login, hence no credential crosses the network outside the mTLS handshake.
 5. The identity `root` uses the token helper `~/.vault-token` instead of a Proxy because root applies the cert roles needed by every Proxy.
 
 #### Item D.4 Usage Conditions
 
-1. The platform-foundation Proxy carries every mp layer and Ansible play which reads `registry` or changes a resource on the Bastion Vault.
+1. The platform-foundation Proxy serves every mp layer and Ansible play which reads `registry` or changes a resource on the Bastion Vault.
 2. The layers which require the Proxy are the foundation layer, the SPIRE Parent layers, and the Downstream Vault layers, as listed in `architecture_platform-foundation_deployment-chain.md` within the planning repository.
 3. After the Downstream Vault is established, the remaining mp layers authenticate to the Downstream Vault with SPIRE JWT-SVIDs and do not operate on the Bastion Vault.
 4. Rebooting the Bastion Vault requires only `./governance vault unseal`. The Proxies log in again without an operator action.
@@ -177,7 +177,7 @@ The tenant registry lists platforms alone, and a repository of the group registe
 
 1. The policy `operator-<identity>` of each `credential-distributor` identity reads the GitLab token of the owner of the identity, the paths of `allowed_read_secret_paths`, and the registry domains of `allowed_read_registry_paths` in `workstation-topology.yaml`. The policy does not grant any write because `allowed_write_secret_paths` does not list a prefix.
 2. The paths of `allowed_read_secret_paths` are the group keys: the Anthropic admin key, the GitHub publication token, and the SonarQube analysis token. A `credential-distributor` identity does not read the two bot tokens below `gitlab-ci-with-code-reviewer/integration` because `./governance credentials issue code-reviewer-variables` writes both tokens into each project of `code_reviewer_variable_projects` through the administrator identity.
-3. The Workload Identity Federation module does not write a Vault path. `allowed_write_secret_paths` therefore does not list a prefix. A governance layer does not hold a Vault write privilege.
+3. The Workload Identity Federation module does not write a Vault path. `allowed_write_secret_paths` therefore does not list a prefix. A governance layer lacks a Vault write privilege.
 
 #### Item D.6 Administrator Identity
 
@@ -207,7 +207,7 @@ This section addresses T1, T2, T9, and T17 from Section 2 Item C. Vault OSS does
 2. The tenant ACL MUST NOT grant any write on `sys/policies/acl`.
 3. Every rule which writes auth roles MUST restrict `token_policies` and `policies` through `allowed_parameters` to exact policy names.
 4. A rule MUST NOT use a glob in `allowed_parameters`, because a glob admits a comma separated string split by the auth method into two policies.
-5. `terraform_data.tenant_owner_codes_validation` carries a precondition which stops the plan when an owner code followed by a hyphen prefixes another owner code.
+5. `terraform_data.tenant_owner_codes_validation` declares a precondition which stops the plan when an owner code followed by a hyphen prefixes another owner code.
 
 #### Item E.2 Rule Categories
 
@@ -227,7 +227,7 @@ The tenant ACL comprises five categories of rules.
 2. An assignment scope admits `default`, `registry-reader-<code>`, and the assignable policies which name the scope.
 3. Transit unseal policies remain in the owned scope. The owned scope contains the Kubernetes auth mounts used by the Downstream Vault pods.
 4. `pki-intermediate-spire-signer-<code>` remains in the approle scope. The approle scope contains the AppRole of the SPIRE Parent upstream authority.
-5. The gitlab scope admits neither a signer policy nor an issuer policy, because a CI job role carries claims chosen by the tenant.
+5. The gitlab scope admits neither a signer policy nor an issuer policy, because a CI job role binds claims chosen by the tenant.
 6. `registry/<code>/bastion` publishes the policy names of each scope in the field `assignable_policies`.
 
 | Scope   | Applicable Paths                                     | Assignable Policies                                                                                 |
@@ -240,7 +240,7 @@ The tenant ACL comprises five categories of rules.
 
 1. A component operator is the Terraform identity of one mp component after the Downstream Vault is established.
 2. A component operator logs in to the Downstream Vault with a SPIRE JWT-SVID.
-3. A component operator does not hold any identity on the Bastion Vault.
+3. A component operator lacks an identity on the Bastion Vault.
 4. An mp layer which changes a resource on the Bastion Vault runs through the platform-foundation Proxy, as listed in Item D.4.
 
 ### Item G. L4 Workload
@@ -255,7 +255,7 @@ Workload identities are declared by mp. Permissions on the Bastion side originat
 
 The migration of the SPIRE Parent and the Downstream Vault to these policies is listed in Section 10 Item B.
 
-### Item H. Policies Held by pgg
+### Item H. Policies Owned by pgg
 
 pgg declares five categories of policies. The tenant cannot rewrite these policies, because the tenant ACL does not grant any write on `sys/policies/acl`.
 
@@ -292,7 +292,7 @@ The locals `cilium_hubble_extra_dns_domains` (`hubble-grpc.cilium.io`, `hubble-r
 1. The instance values MUST reside in `secret/parent-group-governance/network/allocation` written by the root token during the bootstrap and by the administrator identity afterwards.
 2. `network-allocation.example.json` documents the fields with example values. Git ignores the instance file `network-allocation.json`.
 3. tfvars, `-var`, and `TF_VAR_` MUST NOT be able to override network allocation facts.
-4. `terraform_data.network_allocation_validation` carries a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, when `network_cidr` is not a `/16`, or when `bastion_publish_cidr` differs from segment 0 of `network_cidr`. Another precondition stops the plan when `network_cidr`, `pod_network_cidr`, and `service_network_cidr` overlap, or when the prefix length of a pool plus `cidr_subnet_bits` exceeds 32. A further precondition stops the plan when `host_log_rendezvous_offset` equals the host number of `vault_bastion.publish_address`.
+4. `terraform_data.network_allocation_validation` declares a precondition which stops the plan when a field is missing or malformed, when `stages` is empty, when `network_cidr` is not a `/16`, or when `bastion_publish_cidr` differs from segment 0 of `network_cidr`. Another precondition stops the plan when `network_cidr`, `pod_network_cidr`, and `service_network_cidr` overlap, or when the prefix length of a pool plus `cidr_subnet_bits` exceeds 32. A further precondition stops the plan when `host_log_rendezvous_offset` equals the host number of `vault_bastion.publish_address`.
 5. A `check` block is not used for the validation, because a failed `check` assertion only produces a warning (refer to the [Terraform check block documentation](https://developer.hashicorp.com/terraform/language/block/check)).
 6. KV v2 keeps every version of the path. A change of the instance values replaces the constrained intermediate certificates in the next plan. The replacement exposes the change during review of the plan.
 7. `vault_bastion.publish_address` of `workstation-topology.yaml` declares the Bastion publish address, and a precondition of `terraform_data.network_allocation_validation` stops the plan when the address lies outside `bastion_publish_cidr`.
@@ -312,7 +312,7 @@ This section addresses T7, T8, and T16 from Section 2 Item C. The trust bundles 
 
 pgg embeds the Name Constraints of `pki-intermediate-spire`, `pki-intermediate-vault-downstream`, and `pki-leaf-platform` into the intermediate CA certificates through `root/sign-intermediate` on `pki-root`. Subordinate callers cannot omit or loosen these restrictions.
 
-Every intermediate mount holds dual issuers: an ECDSA P-384 issuer and an ML-DSA-87 issuer. `pki-root` holds dual root CAs: an ECDSA P-384 root CA expiring on 2035-12-31 and an ML-DSA-87 root CA. Section 7 Item H records the measurements and the trade-offs of the key algorithms.
+Every intermediate mount contains dual issuers: an ECDSA P-384 issuer and an ML-DSA-87 issuer. `pki-root` contains dual root CAs: an ECDSA P-384 root CA expiring on 2035-12-31 and an ML-DSA-87 root CA. Section 7 Item H records the measurements and the trade-offs of the key algorithms.
 
 #### Item B.2 Constraint Details
 
@@ -326,13 +326,13 @@ Every intermediate mount holds dual issuers: an ECDSA P-384 issuer and an ML-DSA
 2. `pki-intermediate-vault-downstream` excludes URIs under the platform domain and every subdomain of the platform domain. The excluded range contains the SPIFFE trust domain. The Downstream Vault therefore cannot issue SVIDs.
 3. `pki-intermediate-vault-downstream` excludes the Bastion publish CIDR. A compromised Downstream Vault therefore cannot issue listener certificates for the Bastion Vault.
 4. `pki-leaf-platform` permits neither a loopback address nor the Bastion publish CIDR, and a tenant leaf role therefore cannot issue a Bastion listener certificate.
-5. The Downstream Vault listener certificate MUST NOT carry `localhost` or `127.0.0.1`.
+5. The Downstream Vault listener certificate MUST NOT contain `localhost` or `127.0.0.1`.
 6. The raft peers of the Downstream Vault MUST join through names under `kubernetes_default_cluster_domain`.
-7. Every intermediate mount below `pki-root` carries Name Constraints.
+7. Every intermediate mount below `pki-root` contains Name Constraints.
 
 #### Item B.3 SAN Requirements for Subordinate CAs
 
-1. When the issuing CA carries Name Constraints, the certificate issued through `root/sign-intermediate` MUST carry at least one SAN.
+1. When the issuing CA contains Name Constraints, the certificate issued through `root/sign-intermediate` MUST contain at least one SAN.
 2. A CSR lacking a SAN is rejected by Vault with the error: `issuer has name constraints but leaf doesn't have a SAN extension`.
 3. With `use_csr_values = false`, Vault takes the SANs from the `alt_names`, `ip_sans`, and `uri_sans` request parameters instead of the CSR. Whether the SPIRE Vault upstream authority plugin supplies `uri_sans` MUST be verified during the SPIRE Parent migration.
 4. The intermediate CA of the Downstream Vault MUST include DNS names within the permitted scope in `alt_names`, and cannot rely solely on `exclude_cn_from_sans`.
@@ -405,7 +405,7 @@ This section addresses T11 and T12 from Section 2 Item C. Vault does not raise a
 | Rule                              | Trigger Condition                                                                                                                      |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Transit key management            | Any path under `transit-unseal/` other than encrypt and decrypt                                                                        |
-| Transit failure                   | Requests under `transit-unseal/` carrying an error                                                                                     |
+| Transit failure                   | Requests under `transit-unseal/` with an error                                                                                         |
 | Transit source                    | Source address of an encrypt or decrypt request outside `workstation_vault_audit_transit_source_cidrs`, skipped when the list is empty |
 | Audit modification                | Writes targeting `sys/audit*`                                                                                                          |
 | root token                        | `auth.policies` containing `root`                                                                                                      |
@@ -476,15 +476,15 @@ For risks associated with rejecting this choice, refer to T1 and T2.
 For risks associated with rejecting this choice, refer to T3, T13, T14, and T15.
 
 1. Constraint: Every non-root operator needs a Bastion Vault login for Terraform, Ansible, and the Vault CLI, and a credential issued by Terraform enters the pgg state.
-2. Decision: One Vault Proxy per operator identity logs in with a client certificate through cert auth, holds the token in memory, and admits only callers presenting the client certificate of the identity.
+2. Decision: One Vault Proxy per operator identity logs in with a client certificate through cert auth, stores the token in memory, and admits only callers presenting the client certificate of the identity.
 3. Cost: The client private key is a long lived credential on the operator workstation. The local CA key signs a client certificate for any identity. The certificates expire after 365 days, and a run of the Proxy role within 30 days of expiry renews the certificates.
 4. Rejected alternatives and rationales are summarized in the table below:
 
 | Alternative                                                      | Rationale for Rejection                                                                                               |
 | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Terraform issues secret IDs and writes the IDs to KV and outputs | Secret IDs never expire and persist in state files                                                                    |
-| A wrapped AppRole secret ID per sub-shell session                | The token lives in the shell environment, every session needs the root token, and editors and direnv lose the session |
-| A token role session per owner code                              | The token lives in the shell environment, and the role needs `allowed_entity_aliases = ["*"]`                         |
+| A wrapped AppRole secret ID per sub-shell session                | The shell environment stores the token, every session needs the root token, and editors and direnv lose the session   |
+| A token role session per owner code                              | The shell environment stores the token, and the role needs `allowed_entity_aliases = ["*"]`                           |
 | The `api_proxy` stanza of Vault Agent                            | HashiCorp deprecated the stanza in favor of Vault Proxy                                                               |
 
 ### Item C. Fact Publication Channel
@@ -493,7 +493,7 @@ For risks associated with rejecting this choice, refer to T4 and T5.
 
 1. Constraint: `terraform_remote_state` downloads the complete state snapshot. Consumers require GitLab tokens with read access to the pgg project, and the Maintainer role confers write access.
 2. Decision: pgg publishes facts to the `registry` mount, and tenants read the facts through Vault ACLs.
-3. Cost: Consumers must hold a Vault token. KV values are stored as strings. Consumers decode and validate the strings independently.
+3. Cost: Consumers must obtain a Vault token. KV values are stored as strings. Consumers decode and validate the strings independently.
 
 | Alternative                                         | Rationale for Rejection                                                                        |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -545,10 +545,10 @@ For risks associated with rejecting this choice, refer to T11.
 ### Item H. Key Algorithm of Intermediate CAs
 
 1. Constraint: A mount generates the key of an intermediate CA once per rotation. The key signs only the certificates issued by the mount. The Bastion Vault signs at the rotation rate of the SPIRE Parent CA, the Downstream Vault CA, and a few listener certificates. The Downstream Vault and SPIRE sign at the request rate of tenants.
-2. Decision: Every intermediate mount of the Bastion Vault holds dual issuers: an ECDSA P-384 issuer and an ML-DSA-87 issuer. `pki-root` also holds dual root CAs: an ECDSA P-384 root CA and an ML-DSA-87 root CA. Intermediate CAs are symmetrically signed by their corresponding Root issuer (`ec-p384` signed by EC Root, `ml-dsa-87` signed by ML-DSA-87 Root). The default issuer across all intermediate mounts is `ec-p384` (`default_follows_latest_issuer = false`). The key name carries the algorithm and mount accessor, preventing collisions on rotation. The Transport Root CA generated by `./governance vault tls-generate` comprises an ECDSA P-384 CA and an ML-DSA-87 CA, and the ML-DSA-87 private key is stored as seed-only PKCS #8.
+2. Decision: Every intermediate mount of the Bastion Vault contains dual issuers: an ECDSA P-384 issuer and an ML-DSA-87 issuer. `pki-root` also contains dual root CAs: an ECDSA P-384 root CA and an ML-DSA-87 root CA. Intermediate CAs are symmetrically signed by their corresponding Root issuer (`ec-p384` signed by EC Root, `ml-dsa-87` signed by ML-DSA-87 Root). The default issuer across all intermediate mounts is `ec-p384` (`default_follows_latest_issuer = false`). The key name contains the algorithm and mount accessor, preventing collisions on rotation. The Transport Root CA generated by `./governance vault tls-generate` comprises an ECDSA P-384 CA and an ML-DSA-87 CA, and the ML-DSA-87 private key is stored as seed-only PKCS #8.
 3. Cost: Dual issuers double the number of issuers per mount (6 intermediate issuers across 3 mounts). Root signing requires matching algorithms between issuer and CSR.
 4. Rejected alternative:
-    - A single ECDSA hierarchy does not hold a quantum resistant chain.
+    - A single ECDSA hierarchy does not provide a quantum resistant chain.
     - Ed25519 does not provide quantum resistance either. Section 6.1.5 of the [CA/Browser Forum Baseline Requirements](https://github.com/cabforum/servercert/blob/main/docs/BR.md) version 2.3.1 permits only RSA keys and ECDSA keys on P-256, P-384, and P-521 for publicly trusted TLS certificates.
     - The [certificate verifier of Chrome](https://boringssl.googlesource.com/boringssl/+/refs/heads/main/pki/signature_algorithm.h) does not define an Ed25519 signature algorithm.
 
@@ -563,7 +563,7 @@ The following measurements ran with `openssl speed -seconds 1` of OpenSSL 3.5.8 
 
 1. The intermediate key algorithm does not limit the tenant count of the Bastion Vault. The Bastion Vault signs a few certificates per rotation, and one core signs 403 RSA 4096 signatures per second.
 2. A TLS handshake verifies the chain. RSA verifies faster than ECDSA, and an RSA key in the chain therefore does not slow a handshake.
-3. A Vault role which generates the leaf key through `issue` spends the key generation cost on every request. RSA 4096 limits one core to about three leaf keys per second. Roles generating ECDSA or ML-DSA leaf certificates spend significantly lower overhead. A `sign` request carries a key from the client, and the request does not spend the key generation cost in Vault.
+3. A Vault role which generates the leaf key through `issue` spends the key generation cost on every request. RSA 4096 limits one core to about three leaf keys per second. Roles generating ECDSA or ML-DSA leaf certificates spend significantly lower overhead. A `sign` request contains a key generated by the client, and the request does not spend the key generation cost in Vault.
 4. NIST SP 800-57 Part 1 assigns 128 bits of security strength to P-256 and 192 bits to P-384. CNSA 1.0 requires P-384 for top-secret classification.
 5. NIST IR 8547 initial public draft Table 2 deprecates digital signatures of 112 bits after 2030 and disallows every quantum-vulnerable digital signature, ECDSA and EdDSA included, after 2035.
 6. `ec-p384` provides 192 bits of security strength and expires on 2035-12-31 before the disallowance date. `ml-dsa-87` is the FIPS 204 parameter set of Security Category 5, and an intermediate issues ML-DSA-87 chains once its `root_ca_id` switches to `ml-dsa-87`.
@@ -692,7 +692,7 @@ The test CA for `pki-intermediate-vault-downstream` does not have a URI SAN. The
 | Subordinate self-signed leaf certificates under `pki-intermediate-vault-downstream` | 2 expected passes succeeded, 5 expected rejections were all rejected                                                                                  |
 | Path length                                                                         | Test CA `pathlen` decrements from 2 to 1. `internal/pkipathlen` verifies the rejections past the limit on a Vault development server                  |
 | `pki-leaf-platform` issuance through a tenant role on 2026-10-04                    | 2 expected passes succeeded. Vault rejected `localhost`, `127.0.0.1`, the Bastion publish address, `gitlab.com`, and a SPIFFE URI                     |
-| `pki-leaf-platform` subordinate CA on 2026-10-04                                    | The CA certificate carries `pathlen:0`, and a tenant call on `root/sign-intermediate` returned 403                                                    |
+| `pki-leaf-platform` subordinate CA on 2026-10-04                                    | The CA certificate sets `pathlen:0`, and a tenant call on `root/sign-intermediate` returned 403                                                       |
 
 ### Step E. Secret Scanning on State Files
 
@@ -727,15 +727,15 @@ Root token usage and rejected role writes MUST appear in the systemd journal.
 
 ### Item A. Residual Risks
 
-1. `vault/keys/unseal.key` holds every unseal key, and a reader of the file produces a root token through generate-root. `enable_unauthenticated_access` admits generate-root without a token. A compromise of the workstation account therefore compromises the Bastion Vault, while the root token itself resides on disk during the bootstrap and a break-glass alone.
+1. `vault/keys/unseal.key` stores every unseal key, and a reader of the file produces a root token through generate-root. `enable_unauthenticated_access` admits generate-root without a token. A compromise of the workstation account therefore compromises the Bastion Vault, while the root token itself resides on disk during the bootstrap and a break-glass alone.
 2. Audit logs lack a remote sink. A compromise of the host allows tampering with the audit logs.
 3. Alerts are written only to journald without push notification channels. The user timer requires systemd linger while the operator is logged out.
 4. The owned scope of `auth/<code>-*` covers JWT auth mounts created by the tenant.
-5. `administration-gitlab-project` of every downstream repository holds the shared GitLab token of `secret/parent-group-governance/terraform/state-backend`. The layers of pgg create the group `csning1998-lab` and write their own states with the token, hence a holder of the token manages the group and writes the state of every project.
+5. `administration-gitlab-project` of every downstream repository reads the shared GitLab token of `secret/parent-group-governance/terraform/state-backend`. The layers of pgg create the group `csning1998-lab` and write their own states with the token, hence a holder of the token manages the group and writes the state of every project.
 6. `workstation-topology.yaml` declares the Bastion publish address, while `bastion_publish_cidr` of the network allocation facts declares the publish network. A precondition ties both, and the two values remain two declaration sources.
 7. The client private key of each operator identity resides below `~/.config/vault-proxy` with mode `0600`. A process of the operator account reads the key and logs in as the identity until the certificate expires.
-8. `vault/tls/ca-ml-dsa-87-key.pem` signs a client certificate for any operator identity, hence the key is equivalent to every operator identity. The file carries mode `0600`.
-9. Classical digital signatures, ECDSA P-384 included, are quantum vulnerable. NIST IR 8547 initial public draft disallows quantum vulnerable signatures after 2035. `pki-root` and every constrained intermediate mount hold an ML-DSA-87 issuer, while the `root_ca_id` of every constrained intermediate remains `ec-p384`, hence every issued chain stays ECDSA until the switch.
+8. `vault/tls/ca-ml-dsa-87-key.pem` signs a client certificate for any operator identity, hence the key is equivalent to every operator identity. The file has mode `0600`.
+9. Classical digital signatures, ECDSA P-384 included, are quantum vulnerable. NIST IR 8547 initial public draft disallows quantum vulnerable signatures after 2035. `pki-root` and every constrained intermediate mount contain an ML-DSA-87 issuer, while the `root_ca_id` of every constrained intermediate remains `ec-p384`, hence every issued chain remains ECDSA until the switch.
 10. Every GitLab token belongs to the personal account of the operator and reaches the workstation through the Bastion Vault. GitLab.com Free does not offer project access tokens bound to a project bot user. A compromise of the workstation account therefore exposes every repository.
 
 ### Item B. Next Steps
