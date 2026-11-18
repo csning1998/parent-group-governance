@@ -67,14 +67,14 @@ services:
         i=0
         while [ "$$i" -lt 150 ]
         do
-          if ip -4 addr show to "$$TERMINATOR_PUBLISH_ADDRESS" 2>/dev/null | grep -q "inet $$TERMINATOR_PUBLISH_ADDRESS/"
+          if ip -4 addr show to "$$TERMINATOR_PUBLISH_IP" 2>/dev/null | grep -q "inet $$TERMINATOR_PUBLISH_IP/"
           then
             exec haproxy -db -f /etc/haproxy/haproxy.cfg
           fi
           i=$$((i + 1))
           sleep 0.2
         done
-        echo "timed out waiting for $$TERMINATOR_PUBLISH_ADDRESS in the host namespace" >&2
+        echo "timed out waiting for $$TERMINATOR_PUBLISH_IP in the host namespace" >&2
         exit 1
     # Ansible role workstation_libvirt renders the environment files from workstation-topology.yaml.
     env_file:

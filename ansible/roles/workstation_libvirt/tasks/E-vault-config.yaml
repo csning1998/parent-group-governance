@@ -70,7 +70,7 @@
     mode: "0644"
   loop:
     - dest: "{{ workstation_libvirt_vault.config_path | dirname }}/vault.env"
-      content: "VAULT_ADDR=https://{{ vault_bastion.loopback_address }}:{{ vault_bastion.api_port }}"
+      content: "VAULT_ADDR=https://{{ vault_bastion.loopback_ip }}:{{ vault_bastion.api_port }}"
     - dest: "{{ workstation_libvirt_terminator.config_dir }}/terminator.env"
       content: "{{ _workstation_libvirt_terminator_env | join('\n') }}"
   loop_control:
@@ -79,7 +79,7 @@
     _workstation_libvirt_scrape_address: "{{ (ansible_local | default({})).host_telemetry.scrape_address | default('') }}"
     _workstation_libvirt_terminator_env: >-
       {{
-        ['TERMINATOR_PUBLISH_ADDRESS=' ~ vault_bastion.publish_address] +
+        ['TERMINATOR_PUBLISH_IP=' ~ vault_bastion.publish_ip] +
         (
           ['TERMINATOR_SCRAPE_ADDRESS=' ~ _workstation_libvirt_scrape_address]
           if _workstation_libvirt_scrape_address else []

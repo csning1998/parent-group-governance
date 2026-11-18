@@ -22,4 +22,4 @@ frontend host_telemetry_metrics
 
 backend vault_metrics
     mode http
-    server vault {{ vault_bastion.loopback_address }}:{{ vault_bastion.metrics_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem"
+    server vault {{ vault_bastion.loopback_ip }}:{{ vault_bastion.metrics_port }} ssl verify required ca-file "{{ workstation_libvirt_terminator.tls_dir }}/ca-ml-dsa-87.pem"

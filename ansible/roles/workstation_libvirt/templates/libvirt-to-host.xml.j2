@@ -12,7 +12,7 @@
   <service name="dns"/>
   <rule family="ipv4">
     <source address="{{ workstation_libvirt_publish_network.source_cidr }}"/>
-    <destination address="{{ vault_bastion.publish_address }}"/>
+    <destination address="{{ vault_bastion.publish_ip }}"/>
     <port protocol="tcp" port="{{ vault_bastion.api_port }}"/>
     <accept/>
   </rule>

@@ -156,7 +156,7 @@ func issuedTopology(t *testing.T, vaultURL string, projects []string) topology.V
 		t.Fatal(err)
 	}
 	return topology.VaultTopology{
-		BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200},
+		BastionVault: topology.BastionVault{LoopbackIP: "127.0.0.1", PublishIP: "192.0.2.10", APIPort: 8200},
 		OperatorVaultProxy: topology.OperatorVaultProxy{
 			GovernanceOwnerCode: "parent-group-governance",
 			UserConfigDir:       issuedProxyDir,

@@ -34,16 +34,16 @@ const (
 
 // BastionVault is the listener topology of the Bastion Vault server.
 type BastionVault struct {
-	LoopbackAddress string `yaml:"loopback_address"` // host loopback address (127.0.0.1) for local processes
-	PublishAddress  string `yaml:"publish_address"`  // hypervisor bridge address (172.16.0.1) for guest VM / runner access
-	APIPort         int    `yaml:"api_port"`         // primary HTTPS API port bound by Vault daemon (8200)
-	ClusterPort     int    `yaml:"cluster_port"`     // Raft cluster request forwarding and HA interconnect port (8201)
-	MetricsPort     int    `yaml:"metrics_port"`     // unauthenticated Prometheus metrics telemetry scraping port (8202)
+	LoopbackIP  string `yaml:"loopback_ip"`  // host loopback address (127.0.0.1) for local processes
+	PublishIP   string `yaml:"publish_ip"`   // hypervisor bridge address (172.16.0.1) for guest VM / runner access
+	APIPort     int    `yaml:"api_port"`     // primary HTTPS API port bound by Vault daemon (8200)
+	ClusterPort int    `yaml:"cluster_port"` // Raft cluster request forwarding and HA interconnect port (8201)
+	MetricsPort int    `yaml:"metrics_port"` // unauthenticated Prometheus metrics telemetry scraping port (8202)
 }
 
 // APIEndpoint returns the loopback API listener URL (e.g. https://127.0.0.1:8200) used by CLI operations.
 func (b BastionVault) APIEndpoint() string {
-	return "https://" + net.JoinHostPort(b.LoopbackAddress, strconv.Itoa(b.APIPort))
+	return "https://" + net.JoinHostPort(b.LoopbackIP, strconv.Itoa(b.APIPort))
 }
 
 // ProxyIdentity defines one operator proxy instance listening on loopback and mapping to a Vault cert role.
@@ -176,7 +176,7 @@ func (v VaultTopology) ResolveProxyEndpoint(home string, role AccessRole) (Proxy
 	base := filepath.Join(home, v.OperatorVaultProxy.UserConfigDir)
 	return ProxyEndpoint{
 		Identity:   name,
-		Address:    "https://" + net.JoinHostPort(v.BastionVault.LoopbackAddress, strconv.Itoa(v.OperatorVaultProxy.Identities[name].ListenPort)),
+		Address:    "https://" + net.JoinHostPort(v.BastionVault.LoopbackIP, strconv.Itoa(v.OperatorVaultProxy.Identities[name].ListenPort)),
 		CACert:     filepath.Join(base, "ca.pem"),
 		ClientCert: filepath.Join(base, name, "client.pem"),
 		ClientKey:  filepath.Join(base, name, "client-key.pem"),
@@ -196,8 +196,8 @@ func Load(path string) (VaultTopology, error) {
 		return VaultTopology{}, fmt.Errorf("topology: parse %s: %w", path, err)
 	}
 	b := v.BastionVault
-	if net.ParseIP(b.LoopbackAddress) == nil || net.ParseIP(b.PublishAddress) == nil {
-		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion MUST declare loopback_address and publish_address as IP addresses", path)
+	if net.ParseIP(b.LoopbackIP) == nil || net.ParseIP(b.PublishIP) == nil {
+		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion MUST declare loopback_ip and publish_ip as IP addresses", path)
 	}
 	if b.APIPort < 1 || b.APIPort > 65535 {
 		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion.api_port %d is outside 1 to 65535", path, b.APIPort)

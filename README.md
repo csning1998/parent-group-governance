@@ -290,16 +290,16 @@ The role `workstation_libvirt` renders `vault/vault.hcl`, `vault/vault.env`, `va
 
 The terminator runs HAProxy 3.2 with OpenSSL 3.5 from the Ubuntu 26.04 packages. The Vault TCP listener exposes no TLS group parameter, hence the terminator enforces the key exchange.
 
-1. The frontend on `publish_address` and `api_port` accepts TLS 1.3 with the groups `MLKEM1024:SecP384r1MLKEM1024` alone. The frontend presents the EC P-384 publish certificate because a guest verifier lacks ML-DSA support. A client which offers `X25519` or `X25519MLKEM768` alone receives alert 40.
+1. The frontend on `publish_ip` and `api_port` accepts TLS 1.3 with the groups `MLKEM1024:SecP384r1MLKEM1024` alone. The frontend presents the EC P-384 publish certificate because a guest verifier lacks ML-DSA support. A client which offers `X25519` or `X25519MLKEM768` alone receives alert 40.
 2. The frontend forwards in TCP mode to `publish_backend_port` with `send-proxy-v2`, verifies the ML-DSA-87 certificate of Vault, presents `terminator-client.pem`, and keeps the guest source address visible to Vault. The source CIDR binding of the SPIRE Parent AppRole therefore remains effective.
-3. The frontend on `publish_address` and `metrics_port` admits `GET /v1/sys/metrics` alone and denies every other method and path.
+3. The frontend on `publish_ip` and `metrics_port` admits `GET /v1/sys/metrics` alone and denies every other method and path.
 4. The terminator mounts `publish.pem`, `publish-key.pem`, `ca-ml-dsa-87.pem`, `terminator-client.pem`, and `terminator-client-key.pem` of `vault/tls` read only. The CA private keys therefore remain outside the container.
 5. The terminator shares the host with `vault-server` because the PROXY protocol listener binds loopback. A Bastion Vault on a virtual machine or on a developer machine runs the same image and the same template beside Vault.
 6. The terminator retires when the Vault TCP listener accepts a TLS group restriction. Go supports `MLKEM1024` from 1.27, where the group MUST appear in `CurvePreferences`.
 
 Both containers read the rendered files at start, hence a changed listener takes effect after the next restart of both services. A reissue of `vault/tls` also takes effect after the restart of both services.
 
-HAProxy exits when a bind fails. The host network namespace can present the publish address later than the start of the container. The entrypoint of `vault-terminator` therefore polls the host namespace for `TERMINATOR_PUBLISH_ADDRESS` at 0.2 second intervals up to 150 attempts before executing HAProxy. `init: true` runs an init process as PID 1. HAProxy as PID 1 ignores SIGTERM. Every stop then waits for the full timeout.
+HAProxy exits when a bind fails. The host network namespace can present the publish address later than the start of the container. The entrypoint of `vault-terminator` therefore polls the host namespace for `TERMINATOR_PUBLISH_IP` at 0.2 second intervals up to 150 attempts before executing HAProxy. `init: true` runs an init process as PID 1. HAProxy as PID 1 ignores SIGTERM. Every stop then waits for the full timeout.
 
 ### Item C. Host Prerequisites of the Vault Containers
 
@@ -328,7 +328,7 @@ ansible-galaxy collection install -r ansible/requirements.yaml
 ./governance host apply-libvirt
 ```
 
-The CLI injects `workstation_libvirt_operator_user` from the operator account because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The publish segment is the /24 network of `vault_bastion.publish_address` of `workstation-topology.yaml`. The role asserts the netmask `255.255.255.0` of the network. The role asserts the injected value before any task runs.
+The CLI injects `workstation_libvirt_operator_user` from the operator account because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The publish segment is the /24 network of `vault_bastion.publish_ip` of `workstation-topology.yaml`. The role asserts the netmask `255.255.255.0` of the network. The role asserts the injected value before any task runs.
 
 ### Item D. SonarQube Bootstrap
 

@@ -207,7 +207,7 @@ func newHostFixture(t *testing.T, becomeAnswer, failOn string) *hostFixture {
 			root:       root,
 			home:       t.TempDir(),
 			ansibleDir: filepath.Join(root, "ansible"),
-			topology:   topology.VaultTopology{BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200}},
+			topology:   topology.VaultTopology{BastionVault: topology.BastionVault{LoopbackIP: "127.0.0.1", PublishIP: "192.0.2.10", APIPort: 8200}},
 			out:        ui.New(io.Discard, io.Discard),
 			in:         bufio.NewReader(strings.NewReader(becomeAnswer + "\n")),
 			resolveOrigin: func(context.Context) (gitlabOrigin, error) {

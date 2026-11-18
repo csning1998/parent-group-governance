@@ -13,7 +13,7 @@
   ansible.builtin.assert:
     that:
       - vault_bastion is mapping
-      - vault_bastion.publish_address is string
+      - vault_bastion.publish_ip is string
       - vault_bastion.api_port is integer
       - workstation_libvirt_publish_network.netmask == "255.255.255.0"
     fail_msg: >-

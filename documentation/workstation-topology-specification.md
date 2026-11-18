@@ -25,14 +25,14 @@ The topology file is organized into five distinct planes:
 
 The `vault_bastion` map configures the network listener endpoints bound by the local Bastion Vault instance.
 
-#### `vault_bastion.loopback_address`
+#### `vault_bastion.loopback_ip`
 
 - Type: `string` (IPv4 address literal)
 - Default: `"127.0.0.1"`
 - Constraint: The address MUST be an IPv4 loopback address bound exclusively to host-local loopback interfaces.
 - Semantics: Dedicated interface for local operator CLI interactions and local Vault Proxy egress traffic. Host firewall rules MUST NOT expose this address to external or virtual networks.
 
-#### `vault_bastion.publish_address`
+#### `vault_bastion.publish_ip`
 
 - Type: `string` (IPv4 address literal)
 - Default: `"172.16.0.1"`
@@ -200,17 +200,17 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 
 | Field                  | Consuming Component                | Source File Path                                                     | Usage Description                                 |
 | ---------------------- | ---------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
-| `loopback_address`     | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `cluster_addr` and loopback listener.   |
-| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `api_addr`.                             |
-| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/libvirt-to-host.xml.j2` | Renders firewalld zone rich rule for VM bridge.   |
+| `loopback_ip`          | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `cluster_addr` and loopback listener.   |
+| `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `api_addr`.                             |
+| `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/libvirt-to-host.xml.j2` | Renders firewalld zone rich rule for VM bridge.   |
 | `api_port`             | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures TCP port on HTTPS listeners.           |
 | `api_port`             | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.vault_bastion_endpoint`.         |
 | `api_port`             | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Resolves `BastionVault.Endpoint` string.          |
 | `cluster_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures Raft cluster synchronization TCP port. |
 | `metrics_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures unauthenticated telemetry TCP port.    |
-| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/haproxy.cfg.j2`         | Binds the terminator frontends.                   |
-| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `TERMINATOR_PUBLISH_ADDRESS`.             |
-| `loopback_address`     | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `VAULT_ADDR` of `vault-server`.           |
+| `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/haproxy.cfg.j2`         | Binds the terminator frontends.                   |
+| `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `TERMINATOR_PUBLISH_IP`.                  |
+| `loopback_ip`          | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `VAULT_ADDR` of `vault-server`.           |
 | `publish_backend_port` | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures the PROXY protocol listener.           |
 | `publish_backend_port` | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/haproxy.cfg.j2`         | Targets the terminator API backend.               |
 

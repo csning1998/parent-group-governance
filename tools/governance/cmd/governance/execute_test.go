@@ -12,8 +12,8 @@ import (
 )
 
 const topologyMinimum = `vault_bastion:
-  loopback_address: "127.0.0.1"
-  publish_address: "172.16.0.1"
+  loopback_ip: "127.0.0.1"
+  publish_ip: "172.16.0.1"
   api_port: 8200
 `
 
