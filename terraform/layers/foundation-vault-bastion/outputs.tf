@@ -30,7 +30,7 @@ output "vault_bastion_pki" {
 output "vault_bastion_auth" {
   description = "Mount paths of the auth backends of the Bastion Vault."
   value = {
-    approle_mount_path                         = vault_auth_backend.approle.path
+    approle_auth_mount                         = vault_auth_backend.approle.path
     gitlab_saas_ci_job_jwt_provider_mount_path = vault_jwt_auth_backend.gitlab_saas.path
   }
 }
