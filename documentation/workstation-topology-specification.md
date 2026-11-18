@@ -204,7 +204,7 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `api_addr`.                             |
 | `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/libvirt-to-host.xml.j2` | Renders firewalld zone rich rule for VM bridge.   |
 | `api_port`             | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures TCP port on HTTPS listeners.           |
-| `api_port`             | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.vault_bastion_endpoint`.         |
+| `api_port`             | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.vault_bastion_url`.              |
 | `api_port`             | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Resolves `BastionVault.Endpoint` string.          |
 | `cluster_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures Raft cluster synchronization TCP port. |
 | `metrics_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures unauthenticated telemetry TCP port.    |

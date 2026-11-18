@@ -3,7 +3,7 @@
 output "vault_bastion" {
   description = "Connection facts of the Bastion Vault instance."
   value = {
-    endpoint             = local.vault_bastion_endpoint
+    endpoint             = local.vault_bastion_url
     listener_ca_cert_pem = local.vault_bastion_listener_ca_bundle_pem
   }
 }
