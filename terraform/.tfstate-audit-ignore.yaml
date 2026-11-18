@@ -23,9 +23,9 @@ ignores:
         - data_json.service_network_cidr
         - data_json.stage_domains
         - data_json.host_telemetry_scrape_cidr
-        - data_json.host_telemetry_scrape_address
+        - data_json.host_telemetry_scrape_ip
         - data_json.host_log_rendezvous_cidr
-        - data_json.host_log_rendezvous_address
+        - data_json.host_log_rendezvous_ip
         - data_json.host_log_rendezvous_server_names
         - data_json.network_baseline
       reason: The registry republishes the network allocation facts, the host segments, and the network baseline.

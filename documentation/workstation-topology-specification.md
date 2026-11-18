@@ -73,7 +73,7 @@ The `vault_bastion` map configures the network listener endpoints bound by the l
 - Semantics: The host segment on which the observability scrapers reach the metrics of the host, the third octet 249 of the network allocation (ADR-143). The network allocation facts reside in the Bastion Vault. The file therefore declares the registry location of the segment instead of the segment.
 - Child fields:
     - `network_name` (`string`): Name of the routed libvirt network which contains the host address on the segment (`host-telemetry-scrape`).
-    - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, and `address_field` of the segment and the host address. `foundation-vault-bastion` publishes both at `registry/platform/network/allocation`.
+    - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, and `ip_field` of the segment and the host address. `foundation-vault-bastion` publishes both at `registry/platform/network/allocation`.
     - `host_exporter_ports` (`list(number)`): Ports of node_exporter and the libvirt exporter on the host. The scrape ports are these ports and `vault_bastion.metrics_port`.
 
 ### Item B. Access Plane: `operator_vault_proxy`

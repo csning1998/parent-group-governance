@@ -104,14 +104,14 @@ services:
         i=0
         while [ "$$i" -lt 150 ]
         do
-          if ip -4 addr show to "$$TERMINATOR_SCRAPE_ADDRESS" 2>/dev/null | grep -q "inet $$TERMINATOR_SCRAPE_ADDRESS/"
+          if ip -4 addr show to "$$TERMINATOR_SCRAPE_IP" 2>/dev/null | grep -q "inet $$TERMINATOR_SCRAPE_IP/"
           then
             exec haproxy -db -f /etc/haproxy/haproxy.cfg
           fi
           i=$$((i + 1))
           sleep 0.2
         done
-        echo "timed out waiting for $$TERMINATOR_SCRAPE_ADDRESS in the host namespace" >&2
+        echo "timed out waiting for $$TERMINATOR_SCRAPE_IP in the host namespace" >&2
         exit 1
     env_file:
       - ./vault/terminator/terminator.env

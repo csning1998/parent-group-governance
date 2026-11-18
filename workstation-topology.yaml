@@ -20,7 +20,7 @@ host_telemetry_scrape:
     vault_kv_mount: "registry"
     vault_kv_path: "platform/network/allocation"
     cidr_field: "host_telemetry_scrape_cidr"
-    address_field: "host_telemetry_scrape_address"
+    ip_field: "host_telemetry_scrape_ip"
   # Host TCP ports exposed to the scrape segment alongside vault_bastion.metrics_port (node_exporter and libvirt_exporter).
   host_exporter_ports: [9100, 9177]
 

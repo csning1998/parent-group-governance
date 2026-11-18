@@ -142,10 +142,10 @@ type ProxyEndpoint struct {
 
 // HostTelemetryRegistry specifies the Vault KV v2 coordinates at which foundation-vault-bastion publishes the scrape subnet.
 type HostTelemetryRegistry struct {
-	Mount        string `yaml:"vault_kv_mount"`
-	Path         string `yaml:"vault_kv_path"`
-	CIDRField    string `yaml:"cidr_field"`
-	AddressField string `yaml:"address_field"`
+	Mount     string `yaml:"vault_kv_mount"`
+	Path      string `yaml:"vault_kv_path"`
+	CIDRField string `yaml:"cidr_field"`
+	IPField   string `yaml:"ip_field"`
 }
 
 // HostTelemetryScrape contains the Vault registry reference for the host telemetry scrape network.

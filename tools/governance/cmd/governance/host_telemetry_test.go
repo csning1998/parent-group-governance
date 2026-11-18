@@ -26,10 +26,10 @@ func newHostTelemetryApp(t *testing.T) (*app, *issuedVault) {
 	t.Helper()
 	a, vault, _ := newIssuedTokensApp(t, nil)
 	a.topology.HostTelemetryScrape = topology.HostTelemetryScrape{Registry: topology.HostTelemetryRegistry{
-		Mount:        "registry",
-		Path:         "platform/network/allocation",
-		CIDRField:    "host_telemetry_scrape_cidr",
-		AddressField: "host_telemetry_scrape_address",
+		Mount:     "registry",
+		Path:      "platform/network/allocation",
+		CIDRField: "host_telemetry_scrape_cidr",
+		IPField:   "host_telemetry_scrape_ip",
 	}}
 	return a, vault
 }
@@ -38,8 +38,8 @@ func newHostTelemetryApp(t *testing.T) (*app, *issuedVault) {
 func TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress(t *testing.T) {
 	a, vault := newHostTelemetryApp(t)
 	vault.secrets["registry/platform/network/allocation"] = map[string]any{
-		"host_telemetry_scrape_cidr":    "192.0.2.0/24",
-		"host_telemetry_scrape_address": "192.0.2.1",
+		"host_telemetry_scrape_cidr": "192.0.2.0/24",
+		"host_telemetry_scrape_ip":   "192.0.2.1",
 	}
 	tlsDir := a.newVaultPaths().TLSDir()
 	err := vaultops.GenerateTLS(tlsDir, vaultops.Listeners{Loopback: net.ParseIP("127.0.0.1"), Publish: net.ParseIP("192.0.2.10")})
@@ -53,10 +53,10 @@ func TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress(t *testi
 
 	pb, err := a.buildHostTelemetryPlaybook(context.Background())
 	want := map[string]any{
-		"workstation_host_telemetry_scrape_cidr":    "192.0.2.0/24",
-		"workstation_host_telemetry_scrape_address": "192.0.2.1",
-		"workstation_libvirt_operator_user":         facts.CurrentUname,
-		"workstation_libvirt_vault_config_path":     filepath.Join(a.root, "vault", "vault.hcl"),
+		"workstation_host_telemetry_scrape_cidr": "192.0.2.0/24",
+		"workstation_host_telemetry_scrape_ip":   "192.0.2.1",
+		"workstation_libvirt_operator_user":      facts.CurrentUname,
+		"workstation_libvirt_vault_config_path":  filepath.Join(a.root, "vault", "vault.hcl"),
 	}
 	if err != nil || pb.file != "playbooks/workstation_host_telemetry.yaml" || !maps.Equal(pb.extraVars, want) {
 		t.Errorf("buildHostTelemetryPlaybook = %+v, %v, want the telemetry playbook with %v", pb, err, want)

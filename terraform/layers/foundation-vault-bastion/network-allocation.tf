@@ -54,8 +54,8 @@ locals {
   # The host keeps the host number of its publish address on every host segment.
   host_number = tonumber(split(".", local.workstation.vault_bastion.publish_ip)[3])
 
-  host_telemetry_scrape_address    = local.host_segment_cidrs.host_telemetry_scrape != "" ? cidrhost(local.host_segment_cidrs.host_telemetry_scrape, local.host_number) : ""
-  host_log_rendezvous_address      = local.host_segment_cidrs.host_log_rendezvous != "" ? cidrhost(local.host_segment_cidrs.host_log_rendezvous, var.host_log_rendezvous_offset) : ""
+  host_telemetry_scrape_ip         = local.host_segment_cidrs.host_telemetry_scrape != "" ? cidrhost(local.host_segment_cidrs.host_telemetry_scrape, local.host_number) : ""
+  host_log_rendezvous_ip           = local.host_segment_cidrs.host_log_rendezvous != "" ? cidrhost(local.host_segment_cidrs.host_log_rendezvous, var.host_log_rendezvous_offset) : ""
   host_log_rendezvous_server_names = [for base in local.stage_domains : "host-log-rendezvous.${base}"]
 }
 
