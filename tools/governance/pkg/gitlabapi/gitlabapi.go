@@ -48,7 +48,7 @@ func (c *Client) UpsertGroupVariable(ctx context.Context, groupID string, v Vari
 	return c.upsertVariable(ctx, "groups/"+url.PathEscape(groupID)+"/variables", v)
 }
 
-// UpsertProjectVariable creates or updates a project-level CI/CD variable at the specified project path.
+// UpsertProjectVariable creates or updates a project CI/CD variable at projectPath.
 func (c *Client) UpsertProjectVariable(ctx context.Context, projectPath string, v Variable) error {
 	return c.upsertVariable(ctx, "projects/"+url.PathEscape(projectPath)+"/variables", v)
 }
@@ -77,7 +77,7 @@ type CreatedRunner struct {
 	Token string `json:"token"`
 }
 
-// CreateGroupRunner provisions a group-level runner linked to the token owner and returns its identifier and authentication token.
+// CreateGroupRunner provisions a group runner linked to the token owner.
 func (c *Client) CreateGroupRunner(ctx context.Context, r GroupRunner) (CreatedRunner, error) {
 	form := url.Values{}
 	form.Set("runner_type", "group_type")
@@ -131,12 +131,14 @@ func (c *Client) send(ctx context.Context, method, path string, form url.Values,
 	if err != nil {
 		return fmt.Errorf("gitlabapi: %s %s: %w", method, endpoint, err)
 	}
+	// Close failure is secondary after reading the response.
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("%w: %s %s", ErrNotFound, method, endpoint)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Body read failure is ignored because the HTTP status code already captures the error.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return fmt.Errorf("gitlabapi: %s %s returned %d: %s", method, endpoint, resp.StatusCode, strings.TrimSpace(string(body)))
 	}

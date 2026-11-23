@@ -35,7 +35,7 @@ func (s Static) Token(context.Context) (string, error) {
 }
 
 // DefaultAuthMountPath specifies the default Vault JWT auth backend mount path.
-// Refer to: terraform/layers/foundation-vault-bastion/auth-shared.tf
+// Refer to terraform/layers/foundation-vault-bastion/access-auth-mounts.tf.
 const DefaultAuthMountPath = "gitlab-saas-ci-job-jwt-provider"
 
 // VaultKVConfig specifies parameters for exchanging a JWT for a secret from Vault.
@@ -51,7 +51,7 @@ type VaultKVConfig struct {
 	HTTPClient    *http.Client
 }
 
-// VaultKV resolves credentials from a HashiCorp Vault KV-v2 secret engine via JWT authentication.
+// VaultKV resolves credentials from a HashiCorp Vault KV v2 secret engine via JWT authentication.
 type VaultKV struct {
 	cfg        VaultKVConfig
 	httpClient *http.Client
@@ -209,6 +209,7 @@ func (v *VaultKV) login(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("tokensource: vault login request failed: %w", err)
 	}
+	// Close failure is secondary after reading the response.
 	defer func() {
 		_ = resp.Body.Close()
 	}()
@@ -253,6 +254,7 @@ func (v *VaultKV) readSecret(ctx context.Context, clientToken string) (string, e
 	if err != nil {
 		return "", fmt.Errorf("tokensource: vault secret request failed: %w", err)
 	}
+	// Close failure is secondary after reading the response.
 	defer func() {
 		_ = resp.Body.Close()
 	}()

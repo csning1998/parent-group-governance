@@ -19,7 +19,6 @@ type Ignore struct {
 	Reason  string
 }
 
-// ignoreEntry is one entry of the ignore file. Each entry names one or more addresses and one or more paths.
 type ignoreEntry struct {
 	Address   string   `yaml:"address"`
 	Addresses []string `yaml:"addresses"`
@@ -37,7 +36,8 @@ func LoadIgnores(path string) ([]Ignore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("stateaudit: open %s: %w", path, err)
 	}
-	defer func() { _ = file.Close() /* WHY: Read-only handle cleanup error is unactionable. */ }()
+	// Close failure is unactionable after reading the ignore file.
+	defer func() { _ = file.Close() }()
 
 	var content struct {
 		Ignores map[string][]ignoreEntry `yaml:"ignores"`
@@ -61,7 +61,6 @@ func LoadIgnores(path string) ([]Ignore, error) {
 	return ignores, nil
 }
 
-// expandIgnoreEntry returns one Ignore per pair of the addresses and the paths of entry.
 func expandIgnoreEntry(layer string, entry ignoreEntry) ([]Ignore, error) {
 	addresses, err := pickOneOrMany(entry.Address, entry.Addresses, "address", "addresses")
 	if err != nil {
@@ -72,7 +71,7 @@ func expandIgnoreEntry(layer string, entry ignoreEntry) ([]Ignore, error) {
 		return nil, err
 	}
 	if entry.Reason == "" {
-		return nil, errors.New("MUST set reason")
+		return nil, errors.New("reason is required")
 	}
 	var ignores []Ignore
 	for _, address := range addresses {
@@ -85,13 +84,13 @@ func expandIgnoreEntry(layer string, entry ignoreEntry) ([]Ignore, error) {
 
 func pickOneOrMany(one string, many []string, oneKey, manyKey string) ([]string, error) {
 	if (one == "") == (len(many) == 0) {
-		return nil, fmt.Errorf("MUST set exactly one of %s and %s", oneKey, manyKey)
+		return nil, fmt.Errorf("set exactly one of %s and %s", oneKey, manyKey)
 	}
 	if one != "" {
 		return []string{one}, nil
 	}
 	if slices.Contains(many, "") {
-		return nil, fmt.Errorf("%s MUST NOT contain an empty item", manyKey)
+		return nil, fmt.Errorf("%s cannot contain an empty item", manyKey)
 	}
 	return many, nil
 }
