@@ -6,7 +6,7 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
-# A saved plan which contains sensitive value of the plan in plain text.
+# Saved Terraform plans contain sensitive values in plain text.
 tfplan
 
 # Ansible

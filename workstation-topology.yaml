@@ -9,7 +9,7 @@ vault_bastion:
   api_port: 8200
   cluster_port: 8201
   metrics_port: 8202
-  # Vault allocates a cluster listener one port above each API listener, reserving port 8203 for the metrics listener.
+  # Vault allocates each cluster listener one port above its API listener. Port 8203 is therefore reserved for metrics.
   publish_backend_port: 8204
 
 # Observability Plane: dedicated libvirt routed segment exposing host metrics to observability scrapers (ADR-143).
@@ -136,8 +136,7 @@ service_admin_passwords:
       admin_username: admin
       factory_default_password: admin
 
-# Credential Issuance Plane: tokens issued by SonarQube and GitLab,
-# and written into the Bastion Vault and GitLab via ./governance.
+# Credential Issuance Plane: Tokens issued via ./governance into Bastion Vault and GitLab.
 service_issued_tokens:
   gitlab_group_registry:
     vault_kv_mount: "registry"

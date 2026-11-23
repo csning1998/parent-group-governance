@@ -37,8 +37,7 @@ if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then
     chcon -t container_file_t -R "${REPO_ROOT}/.git" || true
 fi
 
-# It is intentional to mount .git only since staged scanning
-# and message linting do not require a working tree.
+# Mounts only .git because message linting does not read the working tree.
 podman run --rm \
     -v "${REPO_ROOT}/.git:/repo/.git:ro" \
     -v "$(realpath "${MSG_FILE}"):/repo/COMMIT_EDITMSG:ro" \
