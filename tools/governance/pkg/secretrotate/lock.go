@@ -72,7 +72,7 @@ func (s fieldStore) releaseLock(ctx context.Context, holder string) error {
 	return nil
 }
 
-// checkNotLocked provides a non-authoritative lock check. Only acquireLock guarantees exclusion.
+// checkNotLocked provides an advisory lock check. Only acquireLock guarantees exclusion.
 func (s fieldStore) checkNotLocked(ctx context.Context) error {
 	doc, ok := s.readDocument(ctx)
 	if !ok {

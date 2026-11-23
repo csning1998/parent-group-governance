@@ -142,7 +142,7 @@ func (s fieldStore) hasVersionHistory(ctx context.Context) bool {
 	return parseVersionNumber(secret.Data["current_version"]) > 0
 }
 
-// isDestroyedOutOfBand confirms the data path reads back absent even though metadata records prior versions.
+// isDestroyedOutOfBand confirms that the data path reads back absent even though metadata records prior versions.
 func (s fieldStore) isDestroyedOutOfBand(ctx context.Context) bool {
 	if !s.hasVersionHistory(ctx) {
 		return false

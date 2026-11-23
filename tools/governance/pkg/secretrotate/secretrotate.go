@@ -87,7 +87,7 @@ func Exists(ctx context.Context, client *vaultapi.Client, spec Spec) bool {
 }
 
 // Reconcile deploys the Vault value of spec to a drifted live service without generating or writing to Vault.
-// Non-empty operatorSupplied overrides all other authentication candidates.
+// A non empty operatorSupplied overrides all other authentication candidates.
 func Reconcile(ctx context.Context, client *vaultapi.Client, spec Spec, operatorSupplied string) error {
 	if err := requireVerify(spec); err != nil {
 		return err
@@ -124,7 +124,7 @@ func Reconcile(ctx context.Context, client *vaultapi.Client, spec Spec, operator
 	return spec.Deploy(ctx, live, next)
 }
 
-// Rotate verifies the live credential, generates a replacement, deploys it, and commits it to Vault.
+// Rotate performs an advisory locked credential rotation and commits the new secret to Vault.
 func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(string)) (string, error) {
 	if err := requireVerify(spec); err != nil {
 		return "", err
@@ -149,7 +149,7 @@ func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(st
 		return recovered, err
 	}
 
-	// Rebuilt services accept the factory default while a rebuilt Vault has no stored value.
+	// Rebuilt services accept the factory default. A rebuilt Vault does not store a prior value.
 	var candidates []string
 	if exists {
 		candidates = append(candidates, previous)
@@ -224,7 +224,7 @@ func requireVerify(spec Spec) error {
 	return nil
 }
 
-// resolveDeployedElsewhere accepts raced.Resolved after Verify confirms the live service uses it.
+// resolveDeployedElsewhere accepts raced.Resolved after Verify confirms that the live service uses it.
 func (r rotator) resolveDeployedElsewhere(ctx context.Context, raced *deployRaceResolvedError) (string, error) {
 	live, err := r.spec.Verify(ctx, raced.Resolved)
 	if err != nil {
