@@ -53,7 +53,7 @@ func (c *Client) UpsertProjectVariable(ctx context.Context, projectPath string, 
 	return c.upsertVariable(ctx, "projects/"+url.PathEscape(projectPath)+"/variables", v)
 }
 
-// HasProject verifies token access to the specified project, returning false when GitLab responds with 404 Not Found.
+// HasProject reports whether the token can access projectPath. A 404 response returns false without an error.
 func (c *Client) HasProject(ctx context.Context, projectPath string) (bool, error) {
 	err := c.send(ctx, http.MethodGet, "projects/"+url.PathEscape(projectPath), nil, nil)
 	if errors.Is(err, ErrNotFound) {
@@ -96,7 +96,7 @@ func (c *Client) CreateGroupRunner(ctx context.Context, r GroupRunner) (CreatedR
 	return created, nil
 }
 
-// upsertVariable supplies the hidden attribute only during resource creation, matching immutable GitLab API constraints.
+// upsertVariable sets masked_and_hidden only on creation because GitLab rejects hidden updates via PUT.
 func (c *Client) upsertVariable(ctx context.Context, collection string, v Variable) error {
 	form := url.Values{}
 	form.Set("value", v.Value)

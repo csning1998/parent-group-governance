@@ -1,4 +1,4 @@
-// Package stateaudit reports where a Terraform state contains a confidential value, never the value itself.
+// Package stateaudit reports locations of confidential values in Terraform state without printing values by default.
 package stateaudit
 
 import (
@@ -35,7 +35,7 @@ type Finding struct {
 	Path      string
 	Detection Detection
 
-	// value is set by a revealing audit alone.
+	// value is populated only when reveal mode is enabled.
 	value string
 }
 
@@ -196,7 +196,7 @@ func mergeJSONRestatements(attributes any) any {
 	return merged
 }
 
-// restates reports whether stored equals decoded, where a map attribute stores a nested value as JSON text.
+// restates reports whether stored equals decoded directly or after JSON decoding.
 func restates(stored, decoded any) bool {
 	if reflect.DeepEqual(stored, decoded) {
 		return true
