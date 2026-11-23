@@ -45,7 +45,7 @@ type serviceConfig struct {
 	FactoryDefaultPassword string `yaml:"factory_default_password"`
 }
 
-// Load parses service_admin_passwords of the YAML file at path. A missing file returns a zero Config and no error.
+// Load parses service_admin_passwords of the YAML file at path. A missing file returns a zero Config without error.
 func Load(path string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -76,7 +76,7 @@ func (c Config) BuildCredentials() ([]Credential, error) {
 	creds := make([]Credential, 0, len(c.Credentials))
 	owners := make(map[string]string, len(c.Credentials))
 	for _, raw := range c.Credentials {
-		cred, err := raw.toCredential()
+		cred, err := raw.buildCredential()
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +111,7 @@ func resolveServiceFuncs(s serviceConfig) (secretrotate.DeployFunc, secretrotate
 	}
 }
 
-func (c credentialConfig) toCredential() (Credential, error) {
+func (c credentialConfig) buildCredential() (Credential, error) {
 	deploy, verify, err := resolveServiceFuncs(c.Service)
 	if err != nil {
 		return Credential{}, fmt.Errorf("credentials: %s: %w", c.Key, err)

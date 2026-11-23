@@ -552,7 +552,7 @@ a.topology = topo
         creds := make([]Credential, 0, len(c.Credentials))
         owners := make(map[string]string, len(c.Credentials))
         for _, raw := range c.Credentials {
-            cred, err := raw.toCredential()
+            cred, err := raw.buildCredential()
             if err != nil {
                 return nil, err
             }
@@ -569,12 +569,12 @@ a.topology = topo
 
     碰撞判斷只需要一次向前掃描就足夠，不需要先建完整份清單再回頭比對。因為任何一組碰撞都由兩筆宣告構成，第二筆被讀到的時候，第一筆一定已經在 `owners` 裡面，所以錯誤一定會在第二筆被攔下來，訊息裡也能同時指出先來的宣告者與後來的宣告者
 
-### Item B. `toCredential` 與輸出型別
+### Item B. `buildCredential` 與輸出型別
 
-`toCredential` 是 _Item A_ 那四個輸入型別的匯流點，負責把解析結果轉成後續流程真正使用的 `Credential`：
+`buildCredential` 是 _Item A_ 那四個輸入型別的匯流點，負責把解析結果轉成後續流程真正使用的 `Credential`：
 
 ```go
-func (c credentialConfig) toCredential() (Credential, error) {
+func (c credentialConfig) buildCredential() (Credential, error) {
     deploy, verify, err := resolveServiceFuncs(c.Service)
     if err != nil {
         return Credential{}, fmt.Errorf("credentials: %s: %w", c.Key, err)
