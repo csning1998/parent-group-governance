@@ -16,7 +16,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultops"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vault"
 )
 
 const labelHostTelemetry = "[Host] Apply Host Telemetry Scrape Network"
@@ -24,25 +24,25 @@ const labelHostTelemetry = "[Host] Apply Host Telemetry Scrape Network"
 // newHostTelemetryApp wires the issued tokens fixture to the registry location of the host telemetry segment.
 func newHostTelemetryApp(t *testing.T) (*app, *issuedVault) {
 	t.Helper()
-	a, vault, _ := newIssuedTokensApp(t, nil)
+	a, fakeVault, _ := newIssuedTokensApp(t, nil)
 	a.topology.HostTelemetryScrape = topology.HostTelemetryScrape{Registry: topology.HostTelemetryRegistry{
 		Mount:     "registry",
 		Path:      "platform/network/allocation",
 		CIDRField: "host_telemetry_scrape_cidr",
 		IPField:   "host_telemetry_scrape_ip",
 	}}
-	return a, vault
+	return a, fakeVault
 }
 
 // TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress verifies the injected scrape network variables and confirms the publish listener certificate SAN includes the scrape IP.
 func TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress(t *testing.T) {
-	a, vault := newHostTelemetryApp(t)
-	vault.secrets["registry/platform/network/allocation"] = map[string]any{
+	a, fakeVault := newHostTelemetryApp(t)
+	fakeVault.secrets["registry/platform/network/allocation"] = map[string]any{
 		"host_telemetry_scrape_cidr": "192.0.2.0/24",
 		"host_telemetry_scrape_ip":   "192.0.2.1",
 	}
 	tlsDir := a.newVaultPaths().TLSDir()
-	err := vaultops.GenerateTLS(tlsDir, vaultops.Listeners{Loopback: net.ParseIP("127.0.0.1"), Publish: net.ParseIP("192.0.2.10")})
+	err := vault.GenerateTLS(tlsDir, vault.Listeners{Loopback: net.ParseIP("127.0.0.1"), Publish: net.ParseIP("192.0.2.10")})
 	if err != nil {
 		t.Fatalf("GenerateTLS: %v", err)
 	}

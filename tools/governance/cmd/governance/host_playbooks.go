@@ -9,10 +9,10 @@ import (
 
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
 
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ansibleops"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ansible"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultops"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vault"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/issuedtokens"
 )
 
@@ -85,7 +85,7 @@ func (a *app) playbookStep(build func() (hostPlaybook, error)) hostStep {
 
 func (a *app) executePlaybook(ctx context.Context, pb hostPlaybook, becomePass string) error {
 	opts := &playbook.AnsiblePlaybookOptions{Inventory: "inventory/localhost.yaml", ExtraVars: pb.extraVars}
-	err := ansibleops.Run(ctx, ansibleops.PlaybookRequest{
+	err := ansible.ExecutePlaybook(ctx, ansible.PlaybookRequest{
 		AnsibleDir:   a.ansibleDir,
 		RunDir:       a.ansibleDir,
 		PlaybookFile: pb.file,
@@ -158,7 +158,7 @@ func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, err
 		return hostPlaybook{}, err
 	}
 	// Reissue the publish listener certificate to include the scrape IP in its SAN before HAProxy binds the metrics frontend.
-	if _, err := vaultops.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(scrapeIP)); err != nil {
+	if _, err := vault.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(scrapeIP)); err != nil {
 		return hostPlaybook{}, err
 	}
 	facts, err := config.DetectHostFacts()

@@ -1,4 +1,4 @@
-package vaultops
+package vault
 
 import (
 	"context"
@@ -112,8 +112,8 @@ func TestUnsealFailsWhenUnsealAPIErrors(t *testing.T) {
 
 	op := newTestOperator(t, p, srv.URL)
 	err := op.Unseal(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "vaultops: unseal:") {
-		t.Fatalf("Unseal = %v, want error containing %q", err, "vaultops: unseal:")
+	if err == nil || !strings.Contains(err.Error(), "vault: unseal:") {
+		t.Fatalf("Unseal = %v, want error containing %q", err, "vault: unseal:")
 	}
 }
 

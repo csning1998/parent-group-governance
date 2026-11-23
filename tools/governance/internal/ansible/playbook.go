@@ -1,5 +1,5 @@
-// Package ansibleops runs ansible-playbook tasks via go-ansible with explicit ANSIBLE_CONFIG scoping.
-package ansibleops
+// Package ansible executes ansible-playbook tasks via go-ansible with explicit ANSIBLE_CONFIG scoping.
+package ansible
 
 import (
 	"context"
@@ -20,10 +20,10 @@ type PlaybookRequest struct {
 	ExtraEnv     map[string]string
 }
 
-// Run executes req.PlaybookFile with ANSIBLE_CONFIG pointing to req.AnsibleDir/ansible.cfg.
-// When req.RunDir is specified, Run executes from req.RunDir to resolve relative playbook paths.
+// ExecutePlaybook executes req.PlaybookFile with ANSIBLE_CONFIG pointing to req.AnsibleDir/ansible.cfg.
+// When req.RunDir is specified, ExecutePlaybook executes from req.RunDir to resolve relative playbook paths.
 // A nil req.ExtraEnv map is valid.
-func Run(ctx context.Context, req PlaybookRequest) error {
+func ExecutePlaybook(ctx context.Context, req PlaybookRequest) error {
 	cmd := playbook.NewAnsiblePlaybookCmd(
 		playbook.WithPlaybooks(req.PlaybookFile),
 		playbook.WithPlaybookOptions(req.Options),
@@ -49,15 +49,4 @@ func Run(ctx context.Context, req PlaybookRequest) error {
 		return fmt.Errorf("%s failed, the task output above names the failing task", req.PlaybookFile)
 	}
 	return nil
-}
-
-// RunPlaybook executes playbookFile by delegating to Run.
-func RunPlaybook(ctx context.Context, ansibleDir, runDir, playbookFile string, opts *playbook.AnsiblePlaybookOptions, extraEnv map[string]string) error {
-	return Run(ctx, PlaybookRequest{
-		AnsibleDir:   ansibleDir,
-		RunDir:       runDir,
-		PlaybookFile: playbookFile,
-		Options:      opts,
-		ExtraEnv:     extraEnv,
-	})
 }

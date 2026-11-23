@@ -1,4 +1,4 @@
-package vaultops
+package vault
 
 import (
 	"context"
@@ -108,7 +108,7 @@ func TestPersistInitOutputReportsFilesystemFailures(t *testing.T) {
 		}
 		op := &Operator{paths: Paths{ProjectRoot: root}}
 		err := op.persistInitOutput(&vaultapi.InitResponse{KeysB64: []string{"key"}})
-		if err == nil || !strings.Contains(err.Error(), "vaultops: mkdir") {
+		if err == nil || !strings.Contains(err.Error(), "vault: mkdir") {
 			t.Fatalf("persistInitOutput = %v, want a mkdir error", err)
 		}
 	})
@@ -119,7 +119,7 @@ func TestPersistInitOutputReportsFilesystemFailures(t *testing.T) {
 		}
 		op := &Operator{paths: p}
 		err := op.persistInitOutput(&vaultapi.InitResponse{KeysB64: []string{"key"}})
-		if err == nil || !strings.Contains(err.Error(), "vaultops: write "+p.InitFile()) {
+		if err == nil || !strings.Contains(err.Error(), "vault: write "+p.InitFile()) {
 			t.Fatalf("persistInitOutput = %v, want an init-file write error", err)
 		}
 	})
@@ -130,7 +130,7 @@ func TestPersistInitOutputReportsFilesystemFailures(t *testing.T) {
 		}
 		op := &Operator{paths: p}
 		err := op.persistInitOutput(&vaultapi.InitResponse{KeysB64: []string{"key"}})
-		if err == nil || !strings.Contains(err.Error(), "vaultops: write "+p.UnsealKeyFile()) {
+		if err == nil || !strings.Contains(err.Error(), "vault: write "+p.UnsealKeyFile()) {
 			t.Fatalf("persistInitOutput = %v, want an unseal-file write error", err)
 		}
 	})

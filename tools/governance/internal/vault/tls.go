@@ -1,4 +1,4 @@
-package vaultops
+package vault
 
 import (
 	"crypto"
@@ -46,13 +46,13 @@ type signingCA struct {
 // The publish chain remains EC P-384 until every guest verifier accepts ML-DSA.
 func GenerateTLS(dir string, listeners Listeners) error {
 	if listeners.Loopback == nil || listeners.Publish == nil {
-		return errors.New("vaultops: the listener certificates need valid loopback and publish IP addresses")
+		return errors.New("vault: the listener certificates need valid loopback and publish IP addresses")
 	}
 	if err := os.RemoveAll(dir); err != nil {
-		return fmt.Errorf("vaultops: remove %s: %w", dir, err)
+		return fmt.Errorf("vault: remove %s: %w", dir, err)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("vaultops: mkdir %s: %w", dir, err)
+		return fmt.Errorf("vault: mkdir %s: %w", dir, err)
 	}
 
 	mldsaCA, err := issueSelfSignedRootCA(dir, tlsNameMLDSACA, "Vault Transport Root CA ML-DSA-87", generateMLDSA87Key)
@@ -85,7 +85,7 @@ func GenerateTLS(dir string, listeners Listeners) error {
 // When absent, EnsurePublishCertCovers reissues the certificate under the EC P-384 CA and returns true.
 func EnsurePublishCertCovers(dir string, address net.IP) (bool, error) {
 	if address == nil {
-		return false, errors.New("vaultops: the publish certificate needs a valid IP address to cover")
+		return false, errors.New("vault: the publish certificate needs a valid IP address to cover")
 	}
 	current, err := readCertificate(filepath.Join(dir, tlsNamePublish+".pem"))
 	if err != nil {
@@ -111,15 +111,15 @@ func EnsurePublishCertCovers(dir string, address net.IP) (bool, error) {
 func readCertificate(path string) (*x509.Certificate, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("vaultops: read %s: %w", path, err)
+		return nil, fmt.Errorf("vault: read %s: %w", path, err)
 	}
 	block, _ := pem.Decode(data)
 	if block == nil || block.Type != "CERTIFICATE" {
-		return nil, fmt.Errorf("vaultops: %s lacks a CERTIFICATE block", path)
+		return nil, fmt.Errorf("vault: %s lacks a CERTIFICATE block", path)
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("vaultops: parse %s: %w", path, err)
+		return nil, fmt.Errorf("vault: parse %s: %w", path, err)
 	}
 	return cert, nil
 }
@@ -132,19 +132,19 @@ func loadSigningCA(dir, name string) (signingCA, error) {
 	keyPath := filepath.Join(dir, name+"-key.pem")
 	data, err := os.ReadFile(keyPath)
 	if err != nil {
-		return signingCA{}, fmt.Errorf("vaultops: read %s: %w", keyPath, err)
+		return signingCA{}, fmt.Errorf("vault: read %s: %w", keyPath, err)
 	}
 	block, _ := pem.Decode(data)
 	if block == nil || block.Type != "PRIVATE KEY" {
-		return signingCA{}, fmt.Errorf("vaultops: %s lacks a PRIVATE KEY block", keyPath)
+		return signingCA{}, fmt.Errorf("vault: %s lacks a PRIVATE KEY block", keyPath)
 	}
 	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		return signingCA{}, fmt.Errorf("vaultops: parse %s: %w", keyPath, err)
+		return signingCA{}, fmt.Errorf("vault: parse %s: %w", keyPath, err)
 	}
 	key, ok := parsed.(crypto.Signer)
 	if !ok {
-		return signingCA{}, fmt.Errorf("vaultops: %s lacks a signing key", keyPath)
+		return signingCA{}, fmt.Errorf("vault: %s lacks a signing key", keyPath)
 	}
 	return signingCA{cert: cert, key: key}, nil
 }
@@ -158,9 +158,9 @@ func EnsureTerminatorClientCert(dir string) (bool, error) {
 	case err == nil && info.Mode().IsRegular():
 		return false, nil
 	case err == nil:
-		return false, fmt.Errorf("vaultops: %s is not a regular file; remove the path and rerun", path)
+		return false, fmt.Errorf("vault: %s is not a regular file; remove the path and rerun", path)
 	case !errors.Is(err, fs.ErrNotExist):
-		return false, fmt.Errorf("vaultops: stat %s: %w", path, err)
+		return false, fmt.Errorf("vault: stat %s: %w", path, err)
 	}
 	if err := issueTerminatorClientCert(dir); err != nil {
 		return false, err
@@ -171,7 +171,7 @@ func EnsureTerminatorClientCert(dir string) (bool, error) {
 func issueTerminatorClientCert(dir string) error {
 	key, err := generateECP384Key()
 	if err != nil {
-		return fmt.Errorf("vaultops: generate %s key: %w", tlsNameTerminatorClient, err)
+		return fmt.Errorf("vault: generate %s key: %w", tlsNameTerminatorClient, err)
 	}
 	template := &x509.Certificate{
 		Subject:     pkix.Name{CommonName: "vault-terminator"},
@@ -196,7 +196,7 @@ func generateECP384Key() (crypto.Signer, error) {
 func issueSelfSignedRootCA(dir, name, commonName string, generateKey func() (crypto.Signer, error)) (signingCA, error) {
 	key, err := generateKey()
 	if err != nil {
-		return signingCA{}, fmt.Errorf("vaultops: generate %s key: %w", name, err)
+		return signingCA{}, fmt.Errorf("vault: generate %s key: %w", name, err)
 	}
 	template := &x509.Certificate{
 		Subject:               pkix.Name{CommonName: commonName},
@@ -210,7 +210,7 @@ func issueSelfSignedRootCA(dir, name, commonName string, generateKey func() (cry
 	}
 	cert, err := x509.ParseCertificate(der)
 	if err != nil {
-		return signingCA{}, fmt.Errorf("vaultops: parse %s certificate: %w", name, err)
+		return signingCA{}, fmt.Errorf("vault: parse %s certificate: %w", name, err)
 	}
 	if err := writeCertificatePair(dir, name, der, key); err != nil {
 		return signingCA{}, err
@@ -221,7 +221,7 @@ func issueSelfSignedRootCA(dir, name, commonName string, generateKey func() (cry
 func issueListenerCert(dir, name string, template *x509.Certificate, ca signingCA, generateKey func() (crypto.Signer, error)) error {
 	key, err := generateKey()
 	if err != nil {
-		return fmt.Errorf("vaultops: generate %s key: %w", name, err)
+		return fmt.Errorf("vault: generate %s key: %w", name, err)
 	}
 	template.KeyUsage = x509.KeyUsageDigitalSignature
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
@@ -243,7 +243,7 @@ func createCertificate(name string, template, parent *x509.Certificate, pub cryp
 	template.NotAfter = time.Now().AddDate(1, 0, 0)
 	der, err := x509.CreateCertificate(rand.Reader, template, parent, pub, signer)
 	if err != nil {
-		return nil, fmt.Errorf("vaultops: create %s certificate: %w", name, err)
+		return nil, fmt.Errorf("vault: create %s certificate: %w", name, err)
 	}
 	return der, nil
 }
@@ -252,7 +252,7 @@ func generateCertificateSerial() (*big.Int, error) {
 	limit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serial, err := rand.Int(rand.Reader, limit)
 	if err != nil {
-		return nil, fmt.Errorf("vaultops: generate certificate serial: %w", err)
+		return nil, fmt.Errorf("vault: generate certificate serial: %w", err)
 	}
 	return serial, nil
 }
@@ -262,7 +262,7 @@ func generateCertificateSerial() (*big.Int, error) {
 func writeCertificatePair(dir, name string, der []byte, key crypto.Signer) error {
 	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
-		return fmt.Errorf("vaultops: marshal %s key: %w", name, err)
+		return fmt.Errorf("vault: marshal %s key: %w", name, err)
 	}
 	if err := writePEMFile(filepath.Join(dir, name+"-key.pem"), "PRIVATE KEY", keyDER, 0o600); err != nil {
 		return err
@@ -273,15 +273,15 @@ func writeCertificatePair(dir, name string, der []byte, key crypto.Signer) error
 func writePEMFile(path, blockType string, der []byte, perm os.FileMode) (err error) {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
-		return fmt.Errorf("vaultops: create %s: %w", path, err)
+		return fmt.Errorf("vault: create %s: %w", path, err)
 	}
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("vaultops: close %s: %w", path, closeErr)
+			err = fmt.Errorf("vault: close %s: %w", path, closeErr)
 		}
 	}()
 	if err := pem.Encode(f, &pem.Block{Type: blockType, Bytes: der}); err != nil {
-		return fmt.Errorf("vaultops: pem encode %s: %w", path, err)
+		return fmt.Errorf("vault: pem encode %s: %w", path, err)
 	}
 	return nil
 }

@@ -13,7 +13,7 @@ import (
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultops"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vault"
 )
 
 // newOperationsApp constructs an operational test app with predetermined prompt answers and proxy identities.
@@ -35,7 +35,7 @@ func newOperationsApp(t *testing.T, answer string, withLocalCA bool, identities 
 		in:  bufio.NewReader(strings.NewReader(answer + "\n")),
 	}
 	if withLocalCA {
-		if err := vaultops.GenerateTLS(a.newVaultPaths().TLSDir(), a.newBastionVaultListeners()); err != nil {
+		if err := vault.GenerateTLS(a.newVaultPaths().TLSDir(), a.newBastionVaultListeners()); err != nil {
 			t.Fatalf("GenerateTLS: %v", err)
 		}
 	}
@@ -70,7 +70,7 @@ func TestRevokeRootTokenStopsAtTheFirstMissingPrerequisite(t *testing.T) {
 	}{
 		{name: "cancelled", answer: "n", identities: administratorOnly()},
 		{name: "no administrator identity", answer: "y", identities: rotatorOnly(), want: "access_tier administrator"},
-		{name: "no local CA", answer: "y", identities: administratorOnly(), want: "vaultops: build client"},
+		{name: "no local CA", answer: "y", identities: administratorOnly(), want: "vault: build client"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -82,8 +82,8 @@ func TestRevokeRootTokenStopsAtTheFirstMissingPrerequisite(t *testing.T) {
 
 func TestRevokeRootTokenRequiresTheStoredRootToken(t *testing.T) {
 	a := newOperationsApp(t, "y", true, administratorOnly())
-	if err := a.revokeRootToken(context.Background()); !errors.Is(err, vaultops.ErrNoRootToken) {
-		t.Fatalf("revokeRootToken error = %v, want vaultops.ErrNoRootToken", err)
+	if err := a.revokeRootToken(context.Background()); !errors.Is(err, vault.ErrNoRootToken) {
+		t.Fatalf("revokeRootToken error = %v, want vault.ErrNoRootToken", err)
 	}
 }
 
@@ -112,8 +112,8 @@ func TestGenerateRootTokenStopsAtTheFirstMissingPrerequisite(t *testing.T) {
 		want        string
 	}{
 		{name: "cancelled", answer: "n"},
-		{name: "no local CA", answer: "y", want: "vaultops: build client"},
-		{name: "no unseal keys", answer: "y", withLocalCA: true, want: "vaultops: unseal keys not found"},
+		{name: "no local CA", answer: "y", want: "vault: build client"},
+		{name: "no unseal keys", answer: "y", withLocalCA: true, want: "vault: unseal keys not found"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -172,13 +172,13 @@ func TestVaultOperationsStopAtTheFirstMissingPrerequisite(t *testing.T) {
 		run           func(*app, context.Context) error
 		withoutSecret string
 	}{
-		{name: "enableVaultKV", run: (*app).enableVaultKV, withoutSecret: "vaultops: root token not found"},
-		{name: "unsealVault", run: (*app).unsealVault, withoutSecret: "vaultops: unseal keys not found"},
+		{name: "enableVaultKV", run: (*app).enableVaultKV, withoutSecret: "vault: root token not found"},
+		{name: "unsealVault", run: (*app).unsealVault, withoutSecret: "vault: unseal keys not found"},
 	}
 	for _, op := range operations {
 		t.Run(op.name+" without a local CA", func(t *testing.T) {
 			err := op.run(newOperationsApp(t, "", false, administratorOnly()), context.Background())
-			assertOperationError(t, err, "vaultops: build client")
+			assertOperationError(t, err, "vault: build client")
 		})
 		t.Run(op.name+" without a stored secret", func(t *testing.T) {
 			err := op.run(newOperationsApp(t, "", true, administratorOnly()), context.Background())

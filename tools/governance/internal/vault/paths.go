@@ -1,4 +1,4 @@
-package vaultops
+package vault
 
 import (
 	"path/filepath"

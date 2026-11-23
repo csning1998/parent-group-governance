@@ -13,7 +13,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultops"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vault"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/secretrotate"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
@@ -65,7 +65,7 @@ func (a *app) ensureLocalCA(_ context.Context) error {
 	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err != nil {
 		return a.issueVaultTLS()
 	}
-	issued, err := vaultops.EnsureTerminatorClientCert(a.newVaultPaths().TLSDir())
+	issued, err := vault.EnsureTerminatorClientCert(a.newVaultPaths().TLSDir())
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (a *app) ensureLocalCA(_ context.Context) error {
 }
 
 func (a *app) issueVaultTLS() error {
-	if err := vaultops.GenerateTLS(a.newVaultPaths().TLSDir(), a.newBastionVaultListeners()); err != nil {
+	if err := vault.GenerateTLS(a.newVaultPaths().TLSDir(), a.newBastionVaultListeners()); err != nil {
 		return err
 	}
 	a.out.Print(ui.OK, "Vault TLS certificates generated.")

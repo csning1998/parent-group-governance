@@ -1,4 +1,4 @@
-package vaultops
+package vault
 
 import (
 	"crypto"
@@ -48,8 +48,8 @@ func TestGenerateTLSReportsAnUnusableDirectory(t *testing.T) {
 		dir  string
 		want string
 	}{
-		{name: "below a regular file", dir: filepath.Join(file, "tls"), want: "vaultops: remove"},
-		{name: "below a read-only directory", dir: filepath.Join(readOnly, "tls"), want: "vaultops: mkdir"},
+		{name: "below a regular file", dir: filepath.Join(file, "tls"), want: "vault: remove"},
+		{name: "below a read-only directory", dir: filepath.Join(readOnly, "tls"), want: "vault: mkdir"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -65,9 +65,9 @@ func TestIssueSelfSignedRootCAReportsEachFailingStep(t *testing.T) {
 		generateKey func() (crypto.Signer, error)
 		want        string
 	}{
-		{name: "key generation", dir: t.TempDir(), generateKey: failKeyGeneration, want: "vaultops: generate example-ca key"},
-		{name: "certificate creation", dir: t.TempDir(), generateKey: generateUnsupportedKey, want: "vaultops: create example-ca certificate"},
-		{name: "key file write", dir: filepath.Join(t.TempDir(), "absent"), generateKey: generateECP384Key, want: "vaultops: create "},
+		{name: "key generation", dir: t.TempDir(), generateKey: failKeyGeneration, want: "vault: generate example-ca key"},
+		{name: "certificate creation", dir: t.TempDir(), generateKey: generateUnsupportedKey, want: "vault: create example-ca certificate"},
+		{name: "key file write", dir: filepath.Join(t.TempDir(), "absent"), generateKey: generateECP384Key, want: "vault: create "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -93,8 +93,8 @@ func TestIssueListenerCertReportsEachFailingStep(t *testing.T) {
 		generateKey func() (crypto.Signer, error)
 		want        string
 	}{
-		{name: "key generation", ca: ca, generateKey: failKeyGeneration, want: "vaultops: generate example-listener key"},
-		{name: "a CA key which does not match the CA certificate", ca: signingCA{cert: ca.cert, key: foreignKey}, generateKey: generateECP384Key, want: "vaultops: create example-listener certificate"},
+		{name: "key generation", ca: ca, generateKey: failKeyGeneration, want: "vault: generate example-listener key"},
+		{name: "a CA key which does not match the CA certificate", ca: signingCA{cert: ca.cert, key: foreignKey}, generateKey: generateECP384Key, want: "vault: create example-listener certificate"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestIssueListenerCertReportsEachFailingStep(t *testing.T) {
 func TestWriteCertificatePairRefusesAKeyWithoutPKCS8Form(t *testing.T) {
 	dir := t.TempDir()
 	err := writeCertificatePair(dir, "example", []byte("certificate"), unsupportedSigner{})
-	assertErrorContains(t, err, "vaultops: marshal example key")
+	assertErrorContains(t, err, "vault: marshal example key")
 	if _, statErr := os.Stat(filepath.Join(dir, "example.pem")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Errorf("example.pem stat error = %v, want no certificate without its key", statErr)
 	}
