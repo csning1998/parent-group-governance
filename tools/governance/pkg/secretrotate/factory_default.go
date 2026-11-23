@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// ErrServiceNotReady reports a service which answered no verification before ctx ended.
+// ErrServiceNotReady reports a service failing to answer verification before ctx expires.
 var ErrServiceNotReady = errors.New("secretrotate: the service answered no verification")
 
 // AwaitFactoryDefault verifies the factory default every interval until the service answers, and reports whether the

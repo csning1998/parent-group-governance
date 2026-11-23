@@ -7,129 +7,45 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
 )
 
-const acquireLockMaxAttempts = 3
-
 const casConflictSubstring = "check-and-set parameter did not match the current version"
 
-const defaultRotationLockTTL = 5 * time.Minute
-
-const rotationLockTTLBuffer = 30 * time.Second
-
-// acquireLock stakes the claim of the current Rotate call on the lock. acquireLock returns the written holder identifier.
-func acquireLock(ctx context.Context, client *vaultapi.Client, mount, path, field string) (string, error) {
-	var lastErr error
-	for range acquireLockMaxAttempts {
-		doc, _ := readDocument(ctx, client, mount, path)
-		if lock, active := readActiveLock(doc, field); active {
-			return "", fmt.Errorf("secretrotate: rotation aborted, %s owns the lock on %s/%s#%s until %s",
-				lock.Holder, mount, path, field, lock.ExpiresAt.Format(time.RFC3339))
-		}
-		holder := fmt.Sprintf("rotate-%d", time.Now().UnixNano())
-		raw, err := json.Marshal(rotationLock{Holder: holder, ExpiresAt: time.Now().Add(computeRotationLockTTL(ctx))})
-		if err != nil {
-			return "", fmt.Errorf("secretrotate: encode lock record: %w", err)
-		}
-		if err := writeFieldCAS(ctx, client, mount, path, field+"_lock", string(raw), doc.version); err != nil {
-			if !isCASConflict(err) {
-				return "", fmt.Errorf("secretrotate: acquire lock: %w", err)
-			}
-			lastErr = err
-			continue
-		}
-		return holder, nil
-	}
-	return "", fmt.Errorf("secretrotate: acquire lock: gave up after %d version conflicts: %w", acquireLockMaxAttempts, lastErr)
+// documentSnapshot represents a consistent view of a KV v2 document.
+type documentSnapshot struct {
+	fields  map[string]any
+	version int
 }
 
-// releaseLock clears the lock at mount/path/field only when the record staked there still names holder.
-func releaseLock(ctx context.Context, client *vaultapi.Client, mount, path, field, holder string) error {
-	doc, ok := readDocument(ctx, client, mount, path)
+func (d documentSnapshot) readStringField(name string) (string, bool) {
+	value, ok := d.fields[name].(string)
+	return value, ok
+}
+
+type fieldStore struct {
+	client *vaultapi.Client
+	mount  string
+	path   string
+	field  string
+}
+
+func newFieldStore(client *vaultapi.Client, mount, path, field string) fieldStore {
+	return fieldStore{client: client, mount: mount, path: path, field: field}
+}
+
+func (s fieldStore) dataPath() string           { return s.mount + "/data/" + s.path }
+func (s fieldStore) metadataPath() string       { return s.mount + "/metadata/" + s.path }
+func (s fieldStore) lockField() string          { return s.field + "_lock" }
+func (s fieldStore) rotationStateField() string { return s.field + "_rotation" }
+
+func (s fieldStore) readRotationState(ctx context.Context) (rotationState, bool) {
+	doc, ok := s.readDocument(ctx)
 	if !ok {
-		return nil
-	}
-	lock, ok := readRawLockRecord(doc, field)
-	if !ok || lock.Holder != holder {
-		return nil
-	}
-	writePath := resolveDataPath(mount, path)
-	body := map[string]any{
-		"data":    map[string]any{field + "_lock": nil},
-		"options": map[string]any{"cas": doc.version},
-	}
-	if _, err := client.Logical().JSONMergePatch(ctx, writePath, body); err != nil {
-		if isCASConflict(err) {
-			return nil
-		}
-		return fmt.Errorf("secretrotate: release lock at %s: %w", writePath, err)
-	}
-	return nil
-}
-
-// checkNotLocked is a non-authoritative peek. acquireLock alone provides exclusion.
-func checkNotLocked(ctx context.Context, client *vaultapi.Client, mount, path, field string) error {
-	doc, ok := readDocument(ctx, client, mount, path)
-	if !ok {
-		return nil
-	}
-	lock, active := readActiveLock(doc, field)
-	if !active {
-		return nil
-	}
-	return fmt.Errorf("secretrotate: rotation aborted, %s owns the lock on %s/%s#%s until %s",
-		lock.Holder, mount, path, field, lock.ExpiresAt.Format(time.RFC3339))
-}
-
-// readActiveLock reports the unexpired lock a different rotation left at field, within doc.
-func readActiveLock(doc documentSnapshot, field string) (rotationLock, bool) {
-	lock, ok := readRawLockRecord(doc, field)
-	if !ok || time.Now().After(lock.ExpiresAt) {
-		return rotationLock{}, false
-	}
-	return lock, true
-}
-
-// readRawLockRecord reads the raw lock record staked at field, ignoring expiry.
-func readRawLockRecord(doc documentSnapshot, field string) (rotationLock, bool) {
-	raw, ok := doc.readStringField(field + "_lock")
-	if !ok {
-		return rotationLock{}, false
-	}
-	return parseLock(raw)
-}
-
-func parseLock(raw string) (rotationLock, bool) {
-	var lock rotationLock
-	if err := json.Unmarshal([]byte(raw), &lock); err != nil {
-		return rotationLock{}, false
-	}
-	return lock, true
-}
-
-// computeRotationLockTTL sizes the lock against a deadline attached to ctx when one is present.
-func computeRotationLockTTL(ctx context.Context) time.Duration {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return defaultRotationLockTTL
-	}
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return rotationLockTTLBuffer
-	}
-	return remaining + rotationLockTTLBuffer
-}
-
-func readRotationState(ctx context.Context, client *vaultapi.Client, mount, path, field string) (rotationState, bool) {
-	secret, err := client.Logical().ReadWithContext(ctx, resolveDataPath(mount, path))
-	if err != nil || secret == nil {
 		return rotationState{}, false
 	}
-	data, _ := secret.Data["data"].(map[string]any)
-	raw, ok := data[formatRotationStateField(field)].(string)
+	raw, ok := doc.readStringField(s.rotationStateField())
 	if !ok {
 		return rotationState{}, false
 	}
@@ -140,60 +56,58 @@ func readRotationState(ctx context.Context, client *vaultapi.Client, mount, path
 	return st, true
 }
 
-// writeRotationState stores the record as a JSON string because Terraform reads every field of the path as a string.
-func writeRotationState(ctx context.Context, client *vaultapi.Client, mount, path, field string, st rotationState) error {
+// writeRotationState stores the state as a JSON string because Terraform reads every field as a string.
+func (s fieldStore) writeRotationState(ctx context.Context, st rotationState) error {
 	raw, err := json.Marshal(st)
 	if err != nil {
 		return fmt.Errorf("secretrotate: encode rotation state: %w", err)
 	}
 	body := map[string]any{"data": map[string]any{
-		formatRotationStateField(field): string(raw),
+		s.rotationStateField(): string(raw),
 	}}
-	if err := patchOrInitDocument(ctx, client, mount, path, body); err != nil {
-		return fmt.Errorf("secretrotate: stage rotation state at %s: %w", resolveDataPath(mount, path), err)
+	if err := s.patchOrInitDocument(ctx, body); err != nil {
+		return fmt.Errorf("secretrotate: stage rotation state at %s: %w", s.dataPath(), err)
 	}
 	return nil
 }
 
-func clearRotationState(ctx context.Context, client *vaultapi.Client, mount, path, field string) error {
-	writePath := resolveDataPath(mount, path)
-	body := map[string]any{"data": map[string]any{formatRotationStateField(field): nil}}
-	if _, err := client.Logical().JSONMergePatch(ctx, writePath, body); err != nil {
+func (s fieldStore) clearRotationState(ctx context.Context) error {
+	writePath := s.dataPath()
+	body := map[string]any{"data": map[string]any{s.rotationStateField(): nil}}
+	if _, err := s.client.Logical().JSONMergePatch(ctx, writePath, body); err != nil {
 		return fmt.Errorf("secretrotate: clear rotation state at %s: %w", writePath, err)
 	}
 	return nil
 }
 
-func formatRotationStateField(field string) string { return field + "_rotation" }
-
-func readField(ctx context.Context, client *vaultapi.Client, mount, path, field string) (value string, ok bool) {
-	doc, exists := readDocument(ctx, client, mount, path)
+func (s fieldStore) readField(ctx context.Context) (string, bool) {
+	doc, exists := s.readDocument(ctx)
 	if !exists {
 		return "", false
 	}
-	return doc.readStringField(field)
+	return doc.readStringField(s.field)
 }
 
-func writeField(ctx context.Context, client *vaultapi.Client, mount, path, field, value string) error {
-	return patchOrInitDocument(ctx, client, mount, path, map[string]any{"data": map[string]any{field: value}})
+func (s fieldStore) writeField(ctx context.Context, value string) error {
+	return s.patchOrInitDocument(ctx, map[string]any{"data": map[string]any{s.field: value}})
 }
 
-func writeFieldCAS(ctx context.Context, client *vaultapi.Client, mount, path, field, value string, version int) error {
-	writePath := resolveDataPath(mount, path)
+func (s fieldStore) writeFieldCAS(ctx context.Context, targetField, value string, version int) error {
+	writePath := s.dataPath()
 	body := map[string]any{
-		"data":    map[string]any{field: value},
+		"data":    map[string]any{targetField: value},
 		"options": map[string]any{"cas": version},
 	}
 	if version > 0 {
-		_, err := client.Logical().JSONMergePatch(ctx, writePath, body)
+		_, err := s.client.Logical().JSONMergePatch(ctx, writePath, body)
 		return err
 	}
-	_, err := client.Logical().WriteWithContext(ctx, writePath, body)
+	_, err := s.client.Logical().WriteWithContext(ctx, writePath, body)
 	return err
 }
 
-func readDocument(ctx context.Context, client *vaultapi.Client, mount, path string) (documentSnapshot, bool) {
-	secret, err := client.Logical().ReadWithContext(ctx, resolveDataPath(mount, path))
+func (s fieldStore) readDocument(ctx context.Context) (documentSnapshot, bool) {
+	secret, err := s.client.Logical().ReadWithContext(ctx, s.dataPath())
 	if err != nil || secret == nil {
 		return documentSnapshot{}, false
 	}
@@ -205,43 +119,36 @@ func readDocument(ctx context.Context, client *vaultapi.Client, mount, path stri
 	return documentSnapshot{fields: fields, version: version}, true
 }
 
-func (d documentSnapshot) readStringField(name string) (string, bool) {
-	value, ok := d.fields[name].(string)
-	return value, ok
-}
-
-// patchOrInitDocument patches body into mount/path, falling back to an outright create only when the
-// patch is rejected because no document exists yet.
-func patchOrInitDocument(ctx context.Context, client *vaultapi.Client, mount, path string, body map[string]any) error {
-	writePath := resolveDataPath(mount, path)
-	if _, err := client.Logical().JSONMergePatch(ctx, writePath, body); err != nil {
+// patchOrInitDocument falls back to full write on 404 when no document exists yet.
+func (s fieldStore) patchOrInitDocument(ctx context.Context, body map[string]any) error {
+	writePath := s.dataPath()
+	if _, err := s.client.Logical().JSONMergePatch(ctx, writePath, body); err != nil {
 		if !isMissingDocument(err) {
 			return fmt.Errorf("secretrotate: patch %s: %w", writePath, err)
 		}
-		if _, err := client.Logical().WriteWithContext(ctx, writePath, body); err != nil {
+		if _, err := s.client.Logical().WriteWithContext(ctx, writePath, body); err != nil {
 			return fmt.Errorf("secretrotate: write %s: %w", writePath, err)
 		}
 	}
 	return nil
 }
 
-func hasDocument(ctx context.Context, client *vaultapi.Client, mount, path string) bool {
-	secret, err := client.Logical().ReadWithContext(ctx, resolveDataPath(mount, path))
-	return err == nil && secret != nil
-}
-
-// hasVersionHistory reports whether path once contained data. Callers MUST also confirm hasDocument is
-// false before treating this as a destroyed field.
-func hasVersionHistory(ctx context.Context, client *vaultapi.Client, mount, path string) bool {
-	secret, err := client.Logical().ReadWithContext(ctx, mount+"/metadata/"+path)
+// hasVersionHistory reports whether the metadata path records any prior version.
+func (s fieldStore) hasVersionHistory(ctx context.Context) bool {
+	secret, err := s.client.Logical().ReadWithContext(ctx, s.metadataPath())
 	if err != nil || secret == nil {
 		return false
 	}
 	return parseVersionNumber(secret.Data["current_version"]) > 0
 }
 
-func isPathDestroyedOutOfBand(ctx context.Context, client *vaultapi.Client, mount, path string) bool {
-	return !hasDocument(ctx, client, mount, path) && hasVersionHistory(ctx, client, mount, path)
+// isDestroyedOutOfBand confirms the data path reads back absent even though metadata records prior versions.
+func (s fieldStore) isDestroyedOutOfBand(ctx context.Context) bool {
+	if !s.hasVersionHistory(ctx) {
+		return false
+	}
+	_, exists := s.readDocument(ctx)
+	return !exists
 }
 
 func isCASConflict(err error) bool {
@@ -273,11 +180,28 @@ func parseVersionNumber(raw any) int {
 	case float64:
 		return int(v)
 	case json.Number:
-		n, _ := v.Int64()
+		n, err := v.Int64()
+		if err != nil {
+			return 0
+		}
 		return int(n)
 	default:
 		return 0
 	}
 }
 
-func resolveDataPath(mount, path string) string { return mount + "/data/" + path }
+func readField(ctx context.Context, client *vaultapi.Client, mount, path, field string) (string, bool) {
+	return newFieldStore(client, mount, path, field).readField(ctx)
+}
+
+func writeField(ctx context.Context, client *vaultapi.Client, mount, path, field, value string) error {
+	return newFieldStore(client, mount, path, field).writeField(ctx, value)
+}
+
+func readRotationState(ctx context.Context, client *vaultapi.Client, mount, path, field string) (rotationState, bool) {
+	return newFieldStore(client, mount, path, field).readRotationState(ctx)
+}
+
+func writeRotationState(ctx context.Context, client *vaultapi.Client, mount, path, field string, st rotationState) error {
+	return newFieldStore(client, mount, path, field).writeRotationState(ctx, st)
+}
