@@ -205,7 +205,7 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/libvirt-to-host.xml.j2` | Renders firewalld zone rich rule for VM bridge.   |
 | `api_port`             | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures TCP port on HTTPS listeners.           |
 | `api_port`             | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.vault_bastion_url`.              |
-| `api_port`             | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Resolves `BastionVault.Endpoint` string.          |
+| `api_port`             | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Resolves `BastionVault.APIEndpoint()` URL.        |
 | `cluster_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures Raft cluster synchronization TCP port. |
 | `metrics_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures unauthenticated telemetry TCP port.    |
 | `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/haproxy.cfg.j2`         | Binds the terminator frontends.                   |
@@ -239,7 +239,7 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `service_admin_passwords` | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/access-operator-proxy.tf` | Generates paths for `vault_policy.operator_credential_rotator`. |
 | `service_admin_passwords` | Go CLI credentials package         | `tools/governance/pkg/credentials/credentials.go`                    | Implements Vault KV retrieval and persistence.                  |
 | `service_admin_passwords` | Go CLI httprotate package          | `tools/governance/pkg/httprotate/httprotate.go`                      | Executes HTTP form-based authentication and rotation.           |
-| `service_admin_passwords` | Go CLI operations                  | `tools/governance/cmd/governance/operations.go`                      | Drives the password rotation loop in `runCredentialsRotate`.    |
+| `service_admin_passwords` | Go CLI operations                  | `tools/governance/cmd/governance/operations.go`                      | Drives credential rotation in `rotateCredential`.               |
 | `service_admin_passwords` | Go CLI menu                        | `tools/governance/cmd/governance/menu.go`                            | Exposes TUI menu items for credential rotation.                 |
 
 ### Item D. Credential Issuance Plane Consumers
