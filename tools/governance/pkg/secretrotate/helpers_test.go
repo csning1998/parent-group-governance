@@ -170,8 +170,7 @@ func (s *fakeKVv2) destroy(path string) {
 	delete(s.data, path)
 }
 
-// handlePatch applies an RFC 7396 JSON merge patch, scoped to the "data" object only: fields
-// already present at path survive, only the patched fields change.
+// failNextPatches makes the next n PATCH requests fail with HTTP 500 before any merge is applied.
 func (s *fakeKVv2) failNextPatches(n int) {
 	s.mu.Lock()
 	s.failPatchesRemaining = n
@@ -216,6 +215,7 @@ func (s *fakeKVv2) handleMetadata(w http.ResponseWriter, r *http.Request, path s
 	})
 }
 
+// handlePatch applies an RFC 7396 JSON merge patch to the "data" object to preserve unmodified sibling fields.
 func (s *fakeKVv2) handlePatch(w http.ResponseWriter, r *http.Request, path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

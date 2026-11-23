@@ -39,8 +39,8 @@ func TestInitFailsWhenVaultInitAPIErrors(t *testing.T) {
 	op := newTestOperator(t, p, srv.URL)
 
 	err := op.Init(context.Background())
-	if err == nil {
-		t.Fatal("Init: want error, got nil")
+	if err == nil || !strings.Contains(err.Error(), "vault: init against ") {
+		t.Fatalf("Init = %v, want error containing %q", err, "vault: init against ")
 	}
 	if _, statErr := os.Stat(p.InitFile()); statErr == nil {
 		t.Error("InitFile was created despite a failed Vault init API call")

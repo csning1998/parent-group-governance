@@ -48,7 +48,7 @@ func (op *Operator) Init(ctx context.Context) error {
 		SecretThreshold: 3,
 	})
 	if err != nil {
-		return fmt.Errorf("vault: vault init against %s: %w", op.client.Address(), err)
+		return fmt.Errorf("vault: init against %s: %w", op.client.Address(), err)
 	}
 
 	if resp.RootToken == "" {
