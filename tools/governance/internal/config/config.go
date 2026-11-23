@@ -3,7 +3,9 @@ package config
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"regexp"
 	"strconv"
@@ -14,27 +16,25 @@ var envLineRe = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*("(?:[^"\\]|
 
 var envRefRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
-// Env represents an environment configuration file structure, preserving key declaration
-// order via a slice and mapping key-value pairs using double-quoted KEY="VALUE" formatting.
+// Env stores entries from a .env file in declaration order and serializes them as KEY="VALUE" lines.
 type Env struct {
 	path   string
 	order  []string
 	values map[string]string
 }
 
-// Load parses the environment configuration file at path. Non-existent target paths return
-// an initialized, empty Env structure without error.
+// Load parses the .env file at path. Missing files return an empty Env without error.
 func Load(path string) (*Env, error) {
 	e := &Env{path: path, values: map[string]string{}}
 
 	f, err := os.Open(path)
-	if os.IsNotExist(err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		return e, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("config: open %s: %w", path, err)
 	}
-	// Closing a read-only file handle safely ignores any late close error.
+	// Closing a file opened for reading ignores any late close error.
 	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
@@ -52,8 +52,8 @@ func Load(path string) (*Env, error) {
 	return e, nil
 }
 
-// Environ expands variable references within KEY=value pairs against local configuration keys and
-// host environment variables. Environ returns the expanded pairs as a KEY=value slice.
+// Environ expands ${VAR} references against earlier keys in e and the host environment.
+// It returns the expanded pairs as a KEY=value slice.
 func (e *Env) Environ() []string {
 	resolved := map[string]string{}
 	out := make([]string, 0, len(e.order))
@@ -72,7 +72,7 @@ func (e *Env) Environ() []string {
 	return out
 }
 
-// Get returns the value associated with key, or an empty string if undefined.
+// Get returns the value for key, or an empty string when key is unset.
 func (e *Env) Get(key string) string {
 	if e == nil || e.values == nil {
 		return ""
@@ -80,7 +80,7 @@ func (e *Env) Get(key string) string {
 	return e.values[key]
 }
 
-// Save atomically writes all key-value pairs back to path in insertion order using KEY="VALUE" format.
+// Save writes all entries atomically to path in insertion order using KEY="VALUE" format.
 func (e *Env) Save() error {
 	var b strings.Builder
 	for _, key := range e.order {
@@ -97,7 +97,7 @@ func (e *Env) Save() error {
 	return nil
 }
 
-// Set mutates key to value in place, inserting key into ordering sequence if previously undefined.
+// Set updates key to value in place and appends key to the write order when previously absent.
 func (e *Env) Set(key, value string) {
 	e.set(key, value)
 }

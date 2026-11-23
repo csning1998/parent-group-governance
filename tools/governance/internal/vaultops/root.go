@@ -26,7 +26,7 @@ var (
 	ErrGenerateRootInProgress = errors.New("vaultops: a generate-root attempt is in progress, cancel it with vault operator generate-root -cancel")
 )
 
-// GenerateRoot generates a break-glass root token from stored unseal keys and writes the token to ~/.vault-token.
+// GenerateRoot creates a recovery root token from stored unseal keys and writes it to ~/.vault-token.
 func (op *Operator) GenerateRoot(ctx context.Context) error {
 	if vaultclient.ReadTokenFile(op.paths.Home) != "" {
 		return ErrRootTokenPresent
@@ -50,7 +50,7 @@ func (op *Operator) GenerateRoot(ctx context.Context) error {
 
 	encoded, err := op.submitGenerateRootKeys(ctx, attempt.Nonce, keysRaw)
 	if err != nil {
-		// Attempt cancellation is best-effort cleanup after key submission failure.
+		// Cancellation is best effort cleanup after key submission failure.
 		_ = op.client.Sys().GenerateRootCancelWithContext(context.WithoutCancel(ctx))
 		return err
 	}
@@ -129,7 +129,7 @@ func (op *Operator) submitGenerateRootKeys(ctx context.Context, nonce string, ke
 	return "", errors.New("vaultops: the stored unseal keys did not reach the generate-root threshold")
 }
 
-// decodeRootToken MUST unmask the encoded payload with the one-time password per the Vault generate root protocol.
+// decodeRootToken unmasks the base64 payload by XORing it with the OTP per the Vault generate-root protocol.
 func decodeRootToken(encoded, otp string) (string, error) {
 	raw, err := base64.RawStdEncoding.DecodeString(encoded)
 	if err != nil {
@@ -154,12 +154,12 @@ func (op *Operator) clearInitRootToken() error {
 	if err != nil {
 		return fmt.Errorf("vaultops: read %s: %w", path, err)
 	}
-	var init map[string]any
-	if err := json.Unmarshal(data, &init); err != nil {
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
 		return fmt.Errorf("vaultops: parse %s: %w", path, err)
 	}
-	init["root_token"] = ""
-	raw, err := json.Marshal(init)
+	payload["root_token"] = ""
+	raw, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("vaultops: marshal %s: %w", path, err)
 	}

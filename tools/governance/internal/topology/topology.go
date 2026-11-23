@@ -34,11 +34,11 @@ const (
 
 // BastionVault is the listener topology of the Bastion Vault server.
 type BastionVault struct {
-	LoopbackIP  string `yaml:"loopback_ip"`  // host loopback address (127.0.0.1) for local processes
-	PublishIP   string `yaml:"publish_ip"`   // hypervisor bridge address (172.16.0.1) for guest VM / runner access
-	APIPort     int    `yaml:"api_port"`     // primary HTTPS API port bound by Vault daemon (8200)
-	ClusterPort int    `yaml:"cluster_port"` // Raft cluster request forwarding and HA interconnect port (8201)
-	MetricsPort int    `yaml:"metrics_port"` // unauthenticated Prometheus metrics telemetry scraping port (8202)
+	LoopbackIP  string `yaml:"loopback_ip"`
+	PublishIP   string `yaml:"publish_ip"`
+	APIPort     int    `yaml:"api_port"`
+	ClusterPort int    `yaml:"cluster_port"`
+	MetricsPort int    `yaml:"metrics_port"`
 }
 
 // APIEndpoint returns the loopback API listener URL (e.g. https://127.0.0.1:8200) used by CLI operations.
@@ -48,16 +48,18 @@ func (b BastionVault) APIEndpoint() string {
 
 // ProxyIdentity defines one operator proxy instance listening on loopback and mapping to a Vault cert role.
 type ProxyIdentity struct {
-	ListenPort int `yaml:"listen_port"` // local TCP port on 127.0.0.1 bound by this proxy instance (e.g. 8210)
+	ListenPort int `yaml:"listen_port"`
 
-	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // project paths relative to the top-level group which receive the code reviewer CI/CD variables
+	// CodeReviewerVariableProjects lists project paths relative to the top level group.
+	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"`
 }
 
 // IdentityRole contains the access tier, owner code, and KV v2 state token path derived from an identity name.
 type IdentityRole struct {
-	AccessTier       string
-	OwnerCode        string
-	StateBackendPath string // omitted for credential-rotator because the rotator identity does not execute Terraform
+	AccessTier string
+	OwnerCode  string
+	// Empty for credential-rotator because the rotator identity does not run Terraform.
+	StateBackendPath string
 }
 
 // ResolveIdentityRole derives the access tier, owner code, and state token path from the identity naming convention
@@ -92,19 +94,21 @@ func (v VaultTopology) ListCodeReviewerVariableProjects(topLevelGroup string) []
 
 // StateBackend defines the shared KV v2 mount and field schema across state backend paths.
 type StateBackend struct {
-	VaultKVMount string `yaml:"vault_kv_mount"` // KV v2 mount storing state backend tokens
-	VaultKVField string `yaml:"vault_kv_field"` // secret key storing the GitLab state backend token
+	VaultKVMount string `yaml:"vault_kv_mount"`
+	VaultKVField string `yaml:"vault_kv_field"`
 }
 
 // OperatorVaultProxy contains client connection parameters and identity mappings for operator Vault proxies.
 type OperatorVaultProxy struct {
-	GovernanceOwnerCode string `yaml:"governance_owner_code"` // repository owner code assigned to the administrator and credential-rotator identities
+	GovernanceOwnerCode string `yaml:"governance_owner_code"`
 
-	CertAuthMount    string                   `yaml:"cert_auth_mount"`   // Vault TLS certificate auth mount path matching CN operator-<identity>
-	UserConfigDir    string                   `yaml:"user_config_dir"`   // directory relative to user $HOME storing mTLS client certs and systemd units
-	PlaceholderToken string                   `yaml:"placeholder_token"` // dummy token string required by client headers and replaced by the proxy
-	StateBackend     StateBackend             `yaml:"state_backend"`     // KV v2 location of the GitLab state token of each owner code
-	Identities       map[string]ProxyIdentity `yaml:"identities"`        // operator role entries mapped to their local listener ports and tiers
+	CertAuthMount string `yaml:"cert_auth_mount"`
+	// Relative to $HOME.
+	UserConfigDir string `yaml:"user_config_dir"`
+	// Replaced by the local proxy over mTLS.
+	PlaceholderToken string                   `yaml:"placeholder_token"`
+	StateBackend     StateBackend             `yaml:"state_backend"`
+	Identities       map[string]ProxyIdentity `yaml:"identities"`
 }
 
 // KVField specifies the location of a single field within a KV v2 secret.
@@ -124,23 +128,24 @@ func (v VaultTopology) ResolveStateBackendToken(ownerCode string) (KVField, erro
 		}
 	}
 	if len(paths) != 1 {
-		return KVField{}, fmt.Errorf("topology: operator_vault_proxy MUST declare the identity %s-%s, found %d", accessTierCredentialDistributor, ownerCode, len(paths))
+		return KVField{}, fmt.Errorf("topology: operator_vault_proxy requires identity %s-%s, found %d", accessTierCredentialDistributor, ownerCode, len(paths))
 	}
 	backend := v.OperatorVaultProxy.StateBackend
 	return KVField{Mount: backend.VaultKVMount, Path: paths[0], Field: backend.VaultKVField}, nil
 }
 
-// ProxyEndpoint contains the client connection parameters required to communicate with a local operator Vault Proxy.
+// ProxyEndpoint holds connection parameters for a local operator Vault Proxy.
 type ProxyEndpoint struct {
-	Identity   string // operator proxy identity name (e.g. governance, rotation, foundation)
-	Address    string // loopback HTTPS URL of the local proxy listener (e.g. https://127.0.0.1:8210)
-	CACert     string // absolute filesystem path to local root CA certificate bundle (ca.pem)
-	ClientCert string // absolute filesystem path to operator mTLS client certificate (client.pem)
-	ClientKey  string // absolute filesystem path to operator mTLS client private key (client-key.pem)
-	Token      string // dummy placeholder token (proxy-supplied) replaced by the proxy via mTLS
+	Identity   string
+	Address    string
+	CACert     string
+	ClientCert string
+	ClientKey  string
+	// Replaced by the local proxy via mTLS.
+	Token string
 }
 
-// HostTelemetryRegistry specifies the Vault KV v2 coordinates at which foundation-vault-bastion publishes the scrape subnet.
+// HostTelemetryRegistry holds the Vault KV v2 coordinates of the scrape subnet published by foundation-vault-bastion.
 type HostTelemetryRegistry struct {
 	Mount     string `yaml:"vault_kv_mount"`
 	Path      string `yaml:"vault_kv_path"`
@@ -155,9 +160,9 @@ type HostTelemetryScrape struct {
 
 // VaultTopology represents the Bastion Vault and operator proxy network endpoints declared in workstation-topology.yaml.
 type VaultTopology struct {
-	BastionVault        BastionVault        `yaml:"vault_bastion"`         // Bastion Vault network listener bindings
-	OperatorVaultProxy  OperatorVaultProxy  `yaml:"operator_vault_proxy"`  // local operator mTLS proxies configuration
-	HostTelemetryScrape HostTelemetryScrape `yaml:"host_telemetry_scrape"` // observability scrape network configuration
+	BastionVault        BastionVault        `yaml:"vault_bastion"`
+	OperatorVaultProxy  OperatorVaultProxy  `yaml:"operator_vault_proxy"`
+	HostTelemetryScrape HostTelemetryScrape `yaml:"host_telemetry_scrape"`
 }
 
 // ResolveProxyEndpoint resolves the proxy connection parameters of the single identity with access role.
@@ -170,7 +175,7 @@ func (v VaultTopology) ResolveProxyEndpoint(home string, role AccessRole) (Proxy
 	}
 	if len(names) != 1 {
 		slices.Sort(names)
-		return ProxyEndpoint{}, fmt.Errorf("topology: operator_vault_proxy MUST declare exactly one identity with access_tier %s, found %v", role, names)
+		return ProxyEndpoint{}, fmt.Errorf("topology: operator_vault_proxy requires exactly one identity with access_tier %s, found %v", role, names)
 	}
 	name := names[0]
 	base := filepath.Join(home, v.OperatorVaultProxy.UserConfigDir)
@@ -197,7 +202,7 @@ func Load(path string) (VaultTopology, error) {
 	}
 	b := v.BastionVault
 	if net.ParseIP(b.LoopbackIP) == nil || net.ParseIP(b.PublishIP) == nil {
-		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion MUST declare loopback_ip and publish_ip as IP addresses", path)
+		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion requires valid IP addresses for loopback_ip and publish_ip", path)
 	}
 	if b.APIPort < 1 || b.APIPort > 65535 {
 		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion.api_port %d is outside 1 to 65535", path, b.APIPort)

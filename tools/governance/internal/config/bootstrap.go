@@ -28,7 +28,7 @@ type HostFacts struct {
 	CurrentUname string
 }
 
-// RandomToken represents a high-entropy cryptographically random string.
+// RandomToken represents a cryptographically random string.
 type RandomToken string
 
 // ToolCheck reports whether one required tool is installed.
@@ -60,7 +60,10 @@ func BootstrapEnv(root string, out *ui.Printer) (*Env, error) {
 	}
 
 	_, statErr := os.Stat(envPath)
-	isNewFile := os.IsNotExist(statErr)
+	if statErr != nil && !errors.Is(statErr, fs.ErrNotExist) {
+		return nil, fmt.Errorf("config: stat %s: %w", envPath, statErr)
+	}
+	isNewFile := errors.Is(statErr, fs.ErrNotExist)
 
 	if isNewFile {
 		out.Print(ui.Info, "Creating new .env file...")
@@ -77,7 +80,7 @@ func BootstrapEnv(root string, out *ui.Printer) (*Env, error) {
 	return e, nil
 }
 
-// refuseSonarDBPasswordRegeneration stops the bootstrap when .env lacks the password and sonarqube/postgres-data exists.
+// Regenerating SONARQUBE_DB_PASSWORD breaks authentication against an existing Postgres volume.
 func refuseSonarDBPasswordRegeneration(e *Env, root, envPath string) error {
 	if e.Get(KeySonarQubeDBPassword) != "" {
 		return nil
@@ -121,7 +124,6 @@ func VerifyHostEnvironment() []ToolCheck {
 	return checks
 }
 
-// generateRandomToken returns a random URL-safe base64 token decoded from byteLength bytes of crypto/rand output.
 func generateRandomToken(byteLength int) (RandomToken, error) {
 	buf := make([]byte, byteLength)
 	if _, err := rand.Read(buf); err != nil {
@@ -130,8 +132,6 @@ func generateRandomToken(byteLength int) (RandomToken, error) {
 	return RandomToken(base64.RawURLEncoding.EncodeToString(buf)), nil
 }
 
-// patchExistingEnv refreshes host-identity fields on every run and backfills only the fields
-// an existing .env file is still missing.
 func patchExistingEnv(e *Env, root string, facts HostFacts, out *ui.Printer) error {
 	e.Set(KeyHostUID, strconv.Itoa(facts.CurrentUID))
 	e.Set(KeyHostGID, strconv.Itoa(facts.CurrentGID))
@@ -147,7 +147,6 @@ func patchExistingEnv(e *Env, root string, facts HostFacts, out *ui.Printer) err
 	return nil
 }
 
-// populateNewEnv sets every default field a freshly created .env file needs, unconditionally.
 func populateNewEnv(e *Env, root string, facts HostFacts) error {
 	sonarDBPassword, err := generateRandomToken(24)
 	if err != nil {

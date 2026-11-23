@@ -1,44 +1,63 @@
-// Package ansibleops executes ansible-playbook tasks via go-ansible under ANSIBLE_CONFIG scoping.
+// Package ansibleops runs ansible-playbook tasks via go-ansible with explicit ANSIBLE_CONFIG scoping.
 package ansibleops
 
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 
 	"github.com/apenella/go-ansible/v2/pkg/execute"
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
 )
 
-// RunPlaybook executes playbookFile using opts while injecting ANSIBLE_CONFIG derived from ansibleDir.
-// If runDir is non-empty, sets the command execution directory to runDir to resolve relative playbook paths.
-// extraEnv is merged into the child process environment. A nil map is valid.
-func RunPlaybook(ctx context.Context, ansibleDir, runDir, playbookFile string, opts *playbook.AnsiblePlaybookOptions, extraEnv map[string]string) error {
+// PlaybookRequest holds the paths, options, and environment overrides for an ansible-playbook run.
+type PlaybookRequest struct {
+	AnsibleDir   string
+	RunDir       string
+	PlaybookFile string
+	Options      *playbook.AnsiblePlaybookOptions
+	ExtraEnv     map[string]string
+}
+
+// Run executes req.PlaybookFile with ANSIBLE_CONFIG pointing to req.AnsibleDir/ansible.cfg.
+// When req.RunDir is set, Run executes from req.RunDir to resolve relative playbook paths.
+// A nil req.ExtraEnv map is valid.
+func Run(ctx context.Context, req PlaybookRequest) error {
 	cmd := playbook.NewAnsiblePlaybookCmd(
-		playbook.WithPlaybooks(playbookFile),
-		playbook.WithPlaybookOptions(opts),
+		playbook.WithPlaybooks(req.PlaybookFile),
+		playbook.WithPlaybookOptions(req.Options),
 	)
 
 	env := map[string]string{
-		"ANSIBLE_CONFIG":      filepath.Join(ansibleDir, "ansible.cfg"),
+		"ANSIBLE_CONFIG":      filepath.Join(req.AnsibleDir, "ansible.cfg"),
 		"ANSIBLE_FORCE_COLOR": "1",
 	}
-	for k, v := range extraEnv {
-		env[k] = v
-	}
+	maps.Copy(env, req.ExtraEnv)
 
 	execOpts := []execute.ExecuteOptions{
 		execute.WithCmd(cmd),
 		execute.WithEnvVars(env),
 	}
-	if runDir != "" {
-		execOpts = append(execOpts, execute.WithCmdRunDir(runDir))
+	if req.RunDir != "" {
+		execOpts = append(execOpts, execute.WithCmdRunDir(req.RunDir))
 	}
 
-	// The go-ansible error lists every variable of extraEnv, including the become password. The error does not wrap a cause.
-	// The playbook output already shows the failing task on the terminal.
+	// The go-ansible error lists every variable of extraEnv, including the become password.
+	// Omit err because it wraps no cause and terminal output already shows the failing task.
 	if err := execute.NewDefaultExecute(execOpts...).Execute(ctx); err != nil {
-		return fmt.Errorf("%s failed, the task output above names the failing task", playbookFile)
+		return fmt.Errorf("%s failed, the task output above names the failing task", req.PlaybookFile)
 	}
 	return nil
+}
+
+// RunPlaybook executes playbookFile by delegating to Run.
+func RunPlaybook(ctx context.Context, ansibleDir, runDir, playbookFile string, opts *playbook.AnsiblePlaybookOptions, extraEnv map[string]string) error {
+	return Run(ctx, PlaybookRequest{
+		AnsibleDir:   ansibleDir,
+		RunDir:       runDir,
+		PlaybookFile: playbookFile,
+		Options:      opts,
+		ExtraEnv:     extraEnv,
+	})
 }
