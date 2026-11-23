@@ -88,31 +88,24 @@ func (p *Printer) PromptInput(in *bufio.Reader, msg, def string) string {
 	return line
 }
 
-// PromptMultiSelect displays a numbered list of options and returns the chosen zero based indices.
-// Tokens may be separated by commas, whitespace, or both.
-// It returns ok=false when input is empty or any token is invalid or out of range.
+// PromptMultiSelect displays numbered options and returns the selected zero based indices.
+// Input tokens accept comma or whitespace delimiters. Invalid or empty input returns ok=false.
 func (p *Printer) PromptMultiSelect(in *bufio.Reader, prompt string, options []string) (indices []int, ok bool) {
 	for i, opt := range options {
 		writef(p.out, "%d) %s\n", i+1, opt)
 	}
 	p.Print(Input, prompt)
-	line := readTrimmedLine(in)
-	if line == "" {
-		return nil, false
-	}
-
-	tokens := strings.FieldsFunc(line, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' })
+	tokens := strings.FieldsFunc(readTrimmedLine(in), isMultiSelectDelimiter)
 	if len(tokens) == 0 {
 		return nil, false
 	}
 
 	seen := make(map[int]bool, len(tokens))
 	for _, tok := range tokens {
-		n, err := strconv.Atoi(tok)
-		if err != nil || n < 1 || n > len(options) {
+		index, valid := parseOptionIndex(tok, len(options))
+		if !valid {
 			return nil, false
 		}
-		index := n - 1
 		if !seen[index] {
 			seen[index] = true
 			indices = append(indices, index)
@@ -145,7 +138,7 @@ func (p *Printer) PromptSecret(in *bufio.Reader, fd int, msg string) (string, er
 }
 
 // PromptSelect displays a numbered list of options and returns the chosen zero based index.
-// It returns ok=false when input is empty, nonnumeric, or out of range.
+// PromptSelect returns ok=false when input is empty, nonnumeric, or out of range.
 func (p *Printer) PromptSelect(in *bufio.Reader, prompt string, options []string) (index int, ok bool) {
 	for i, opt := range options {
 		writef(p.out, "%d) %s\n", i+1, opt)
@@ -175,10 +168,22 @@ func writeln(w io.Writer, args ...any) {
 	_, _ = fmt.Fprintln(w, args...)
 }
 
-// EOF and read errors yield the trimmed partial line or an empty string so callers fall back to defaults.
+// EOF and read errors yield the trimmed partial line or an empty string. Callers treat an empty return value as a prompt default.
 func readTrimmedLine(in *bufio.Reader) string {
 	line, _ := in.ReadString('\n')
 	return strings.TrimSpace(line)
+}
+
+func isMultiSelectDelimiter(r rune) bool {
+	return r == ',' || r == ' ' || r == '\t'
+}
+
+func parseOptionIndex(tok string, count int) (int, bool) {
+	n, err := strconv.Atoi(tok)
+	if err != nil || n < 1 || n > count {
+		return 0, false
+	}
+	return n - 1, true
 }
 
 func (l Level) label() (tag, color string) {

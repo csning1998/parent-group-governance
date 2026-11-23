@@ -26,7 +26,7 @@ var (
 	ErrGenerateRootInProgress = errors.New("vaultops: a generate-root attempt is in progress, cancel it with vault operator generate-root -cancel")
 )
 
-// GenerateRoot creates a recovery root token from stored unseal keys and writes it to ~/.vault-token.
+// GenerateRoot creates a recovery root token from stored unseal keys and writes the token to ~/.vault-token.
 func (op *Operator) GenerateRoot(ctx context.Context) error {
 	if vaultclient.ReadTokenFile(op.paths.Home) != "" {
 		return ErrRootTokenPresent
@@ -129,7 +129,7 @@ func (op *Operator) submitGenerateRootKeys(ctx context.Context, nonce string, ke
 	return "", errors.New("vaultops: the stored unseal keys did not reach the generate-root threshold")
 }
 
-// decodeRootToken unmasks the base64 payload by XORing it with the OTP per the Vault generate-root protocol.
+// decodeRootToken unmasks the base64 payload by XORing the payload with the OTP per the Vault generate-root protocol.
 func decodeRootToken(encoded, otp string) (string, error) {
 	raw, err := base64.RawStdEncoding.DecodeString(encoded)
 	if err != nil {

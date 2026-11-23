@@ -11,7 +11,7 @@ import (
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
 )
 
-// PlaybookRequest holds the paths, options, and environment overrides for an ansible-playbook run.
+// PlaybookRequest contains the paths, options, and environment overrides for an ansible-playbook run.
 type PlaybookRequest struct {
 	AnsibleDir   string
 	RunDir       string
@@ -21,7 +21,7 @@ type PlaybookRequest struct {
 }
 
 // Run executes req.PlaybookFile with ANSIBLE_CONFIG pointing to req.AnsibleDir/ansible.cfg.
-// When req.RunDir is set, Run executes from req.RunDir to resolve relative playbook paths.
+// When req.RunDir is specified, Run executes from req.RunDir to resolve relative playbook paths.
 // A nil req.ExtraEnv map is valid.
 func Run(ctx context.Context, req PlaybookRequest) error {
 	cmd := playbook.NewAnsiblePlaybookCmd(
@@ -44,7 +44,7 @@ func Run(ctx context.Context, req PlaybookRequest) error {
 	}
 
 	// The go-ansible error lists every variable of extraEnv, including the become password.
-	// Omit err because it wraps no cause and terminal output already shows the failing task.
+	// Omit err because the go-ansible error does not wrap a cause and terminal output already shows the failing task.
 	if err := execute.NewDefaultExecute(execOpts...).Execute(ctx); err != nil {
 		return fmt.Errorf("%s failed, the task output above names the failing task", req.PlaybookFile)
 	}

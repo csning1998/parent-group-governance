@@ -134,7 +134,7 @@ func (v VaultTopology) ResolveStateBackendToken(ownerCode string) (KVField, erro
 	return KVField{Mount: backend.VaultKVMount, Path: paths[0], Field: backend.VaultKVField}, nil
 }
 
-// ProxyEndpoint holds connection parameters for a local operator Vault Proxy.
+// ProxyEndpoint contains connection parameters for a local operator Vault Proxy.
 type ProxyEndpoint struct {
 	Identity   string
 	Address    string
@@ -145,7 +145,7 @@ type ProxyEndpoint struct {
 	Token string
 }
 
-// HostTelemetryRegistry holds the Vault KV v2 coordinates of the scrape subnet published by foundation-vault-bastion.
+// HostTelemetryRegistry specifies the Vault KV v2 coordinates of the scrape subnet published by foundation-vault-bastion.
 type HostTelemetryRegistry struct {
 	Mount     string `yaml:"vault_kv_mount"`
 	Path      string `yaml:"vault_kv_path"`

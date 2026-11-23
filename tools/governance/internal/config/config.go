@@ -14,9 +14,7 @@ import (
 
 var envLineRe = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*("(?:[^"\\]|\\.)*"|[^\r\n]*)\s*$`)
 
-var envRefRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
-
-// Env stores entries from a .env file in declaration order and serializes them as KEY="VALUE" lines.
+// Env stores entries from a .env file in declaration order and serializes entries as KEY="VALUE" lines.
 type Env struct {
 	path   string
 	order  []string
@@ -50,26 +48,6 @@ func Load(path string) (*Env, error) {
 		return nil, fmt.Errorf("config: read %s: %w", path, err)
 	}
 	return e, nil
-}
-
-// Environ expands ${VAR} references against earlier keys in e and the host environment.
-// It returns the expanded pairs as a KEY=value slice.
-func (e *Env) Environ() []string {
-	resolved := map[string]string{}
-	out := make([]string, 0, len(e.order))
-
-	for _, key := range e.order {
-		expanded := envRefRe.ReplaceAllStringFunc(e.values[key], func(ref string) string {
-			refKey := envRefRe.FindStringSubmatch(ref)[1]
-			if v, ok := resolved[refKey]; ok {
-				return v
-			}
-			return os.Getenv(refKey)
-		})
-		resolved[key] = expanded
-		out = append(out, key+"="+expanded)
-	}
-	return out
 }
 
 // Get returns the value for key, or an empty string when key is unset.
