@@ -8,7 +8,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultenv"
 )
 
-// The suite builds Vault clients, hence the ambient Vault environment of the developer shell MUST NOT reach the clients.
+// Clears ambient Vault environment variables to isolate test clients from the developer shell.
 func TestMain(m *testing.M) {
 	err := vaultenv.Clear()
 	if err != nil {

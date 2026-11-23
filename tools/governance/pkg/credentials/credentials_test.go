@@ -95,8 +95,7 @@ func TestConfigRegistryDerivesVaultFieldFromKey(t *testing.T) {
 	}
 }
 
-// TestConfigRegistryDuplicateKeysLookupReturnsFirst covers two credentials declaring the same key.
-// Registry MUST NOT silently drop either entry, and Lookup MUST resolve to the first-declared one deterministically.
+// Verifies BuildCredentials preserves duplicate keys and Lookup returns the first entry.
 func TestConfigRegistryDuplicateKeysLookupReturnsFirst(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "workstation-topology.yaml")
 	dup := `
@@ -140,9 +139,7 @@ service_admin_passwords:
 	}
 }
 
-// TestConfigRegistryRejectsFieldCollisionAcrossDifferentKeys covers two differently-spelled keys
-// (dash vs underscore) that normalize to the same Vault field at the same Vault path. Registry
-// MUST reject the collision by name instead of letting one silently overwrite the other value.
+// Verifies BuildCredentials rejects distinct keys normalizing to the same Vault field path.
 func TestConfigRegistryRejectsFieldCollisionAcrossDifferentKeys(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "workstation-topology.yaml")
 	collision := `
@@ -182,8 +179,7 @@ service_admin_passwords:
 	}
 }
 
-// TestConfigRegistryRejectsHTTPFormWithoutVerifyEndpoint covers a declaration which leaves the
-// live credential unobservable. The registry MUST reject the declaration by name.
+// Verifies BuildCredentials rejects http_form declarations missing verify_endpoint.
 func TestConfigRegistryRejectsHTTPFormWithoutVerifyEndpoint(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "workstation-topology.yaml")
 	unverifiable := `

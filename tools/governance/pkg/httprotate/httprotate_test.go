@@ -91,9 +91,7 @@ func TestFormSpecDeployConnectionRefused(t *testing.T) {
 	}
 }
 
-// TestFormSpecDeployDropsCredentialsOnCrossHostRedirect covers a compromised or misconfigured
-// endpoint redirecting the request elsewhere. Basic Auth credentials MUST NOT follow a redirect
-// to a different host.
+// Ensures Basic Auth credentials are not forwarded across cross host redirects.
 func TestFormSpecDeployDropsCredentialsOnCrossHostRedirect(t *testing.T) {
 	leaked := false
 	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -117,9 +115,7 @@ func TestFormSpecDeployDropsCredentialsOnCrossHostRedirect(t *testing.T) {
 	}
 }
 
-// TestFormSpecDeployPreservesInjectionAttemptCharactersVerbatim covers a replacement value
-// containing CRLF and markup. Form encoding MUST transmit the raw bytes as one opaque field value,
-// never as extra headers or extra form fields.
+// Ensures form encoding keeps CRLF and markup characters inside one opaque password field.
 func TestFormSpecDeployPreservesInjectionAttemptCharactersVerbatim(t *testing.T) {
 	const evil = "x\r\nSet-Cookie: pwned=1\r\n\r\n<script>alert(1)</script>&extra=1"
 	var gotPassword string
@@ -148,8 +144,7 @@ func TestFormSpecDeployPreservesInjectionAttemptCharactersVerbatim(t *testing.T)
 	}
 }
 
-// TestFormSpecVerifyReportsWhetherTheServiceAcceptsTheSecret covers the read only observation
-// used by the secretrotate package in place of a change request whenever the live credential is unknown.
+// Verifies read only credential probing without invoking the password change endpoint.
 func TestFormSpecVerifyReportsWhetherTheServiceAcceptsTheSecret(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/validate" {
