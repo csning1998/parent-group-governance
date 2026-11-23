@@ -12,7 +12,7 @@ import (
 // ErrMissingProjects marks a publication refused because a listed project is absent from GitLab.
 var ErrMissingProjects = errors.New("issuedtokens: listed projects are absent from GitLab")
 
-// ErrNoBotTokens marks a publication refused because the configuration declares no bot token.
+// ErrNoBotTokens marks a publication refused when the configuration does not list any bot token.
 var ErrNoBotTokens = errors.New("issuedtokens: code_reviewer_variables declares no bot_tokens")
 
 // SecretReader reads one field of a KV v2 secret.
@@ -34,7 +34,7 @@ type CodeReviewerVariablesPublication struct {
 	GitLab   ProjectVariableWriter
 }
 
-// Run checks every listed project before any write and writes nothing while a listed project is absent.
+// Run verifies that every listed project exists before writing. Any missing project aborts before the first write.
 func (p CodeReviewerVariablesPublication) Run(ctx context.Context) error {
 	if len(p.Config.BotTokens) == 0 {
 		return ErrNoBotTokens

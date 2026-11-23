@@ -41,7 +41,7 @@ type Options struct {
 	TerraformDir string
 }
 
-// AuditStates scans the current state of every layer, and every historical version with cfg.History.
+// AuditStates scans the current state of every layer. Historical versions are also scanned when cfg.History is true.
 func AuditStates(ctx context.Context, cfg Config) (Report, error) {
 	var report Report
 	var findings []Finding
@@ -115,7 +115,7 @@ func NewCommand(resolve func(opts Options) (Config, error)) *cobra.Command {
 	return cmd
 }
 
-// AuditAndReport audits cfg, writes the report to w, and returns ErrFindings on a finding or an unused ignore entry.
+// AuditAndReport writes the audit report for cfg to w. Any finding or unused ignore returns ErrFindings.
 func AuditAndReport(ctx context.Context, cfg Config, w io.Writer) error {
 	report, err := AuditStates(ctx, cfg)
 	if err != nil {

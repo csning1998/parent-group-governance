@@ -77,7 +77,6 @@ type pathStep struct {
 	Value json.RawMessage `json:"value"`
 }
 
-// scanner collects the findings of one state version.
 type scanner struct {
 	layer, version string
 	detector       ValueDetector
@@ -151,7 +150,6 @@ func (s *scanner) scanValue(address string, value any, path []string, isSensitiv
 	})
 }
 
-// addLeaf records the marked detection of a sensitive leaf, and the detector results of any other leaf.
 func (s *scanner) addLeaf(address string, path []string, value string, isSensitive bool, marked Detection) {
 	detections := []Detection{marked}
 	if !isSensitive {
@@ -209,7 +207,6 @@ func restates(stored, decoded any) bool {
 	return json.Unmarshal([]byte(text), &parsed) == nil && reflect.DeepEqual(parsed, decoded)
 }
 
-// walkLeaves calls visit for every non-empty string below value.
 func walkLeaves(value any, path []string, visit func(path []string, value string)) {
 	switch v := value.(type) {
 	case map[string]any:

@@ -19,30 +19,30 @@ var fullComplexityClasses = []secretgen.CharClass{
 
 // Config is the service_admin_passwords list of workstation-topology.yaml.
 type Config struct {
-	Credentials []credentialConfig `yaml:"service_admin_passwords"` // rotatable external service administrator credentials
+	Credentials []credentialConfig `yaml:"service_admin_passwords"`
 }
 
 // Credential pairs a lookup Key with the secretrotate.Spec rotating the named secret.
 type Credential struct {
-	Key           string            // unique identifier for the credential within the rotation registry
-	AdminUsername string            // administrator username authenticated by this service credential
-	Spec          secretrotate.Spec // rotation specification and driver functions
+	Key           string
+	AdminUsername string
+	Spec          secretrotate.Spec
 }
 
 type credentialConfig struct {
-	Key          string        `yaml:"key"`            // unique identifier for the credential within the rotation registry
-	VaultKVMount string        `yaml:"vault_kv_mount"` // Vault KVv2 secrets engine mount path (e.g. "secret")
-	VaultKVPath  string        `yaml:"vault_kv_path"`  // secret path within KVv2 mount where credentials are stored
-	Length       int           `yaml:"length"`         // generated password length in characters
-	Service      serviceConfig `yaml:"service"`        // external service API endpoints and authentication details
+	Key          string        `yaml:"key"`
+	VaultKVMount string        `yaml:"vault_kv_mount"`
+	VaultKVPath  string        `yaml:"vault_kv_path"`
+	Length       int           `yaml:"length"`
+	Service      serviceConfig `yaml:"service"`
 }
 
 type serviceConfig struct {
-	Mechanism              string `yaml:"mechanism"`                // rotation protocol driver (e.g. "http_form")
-	RotateEndpoint         string `yaml:"rotate_endpoint"`          // target service REST API endpoint for password change requests
-	VerifyEndpoint         string `yaml:"verify_endpoint"`          // target service REST API endpoint for read-only credential authentication checks
-	AdminUsername          string `yaml:"admin_username"`           // administrative user account name on target service (e.g. "admin")
-	FactoryDefaultPassword string `yaml:"factory_default_password"` // out-of-the-box uninitialized password before rotation
+	Mechanism              string `yaml:"mechanism"`
+	RotateEndpoint         string `yaml:"rotate_endpoint"`
+	VerifyEndpoint         string `yaml:"verify_endpoint"`
+	AdminUsername          string `yaml:"admin_username"`
+	FactoryDefaultPassword string `yaml:"factory_default_password"`
 }
 
 // Load parses service_admin_passwords of the YAML file at path. A missing file returns a zero Config and no error.
@@ -71,8 +71,7 @@ func Lookup(creds []Credential, key string) (Credential, bool) {
 	return Credential{}, false
 }
 
-// BuildCredentials converts every entry in Config.Credentials into a Credential, rejecting two keys
-// whose derived Vault location collides.
+// BuildCredentials converts each configured entry into a Credential. Duplicate derived Vault fields return an error.
 func (c Config) BuildCredentials() ([]Credential, error) {
 	creds := make([]Credential, 0, len(c.Credentials))
 	owners := make(map[string]string, len(c.Credentials))
@@ -95,7 +94,6 @@ func formatVaultFieldName(key string) string {
 	return strings.ReplaceAll(key, "-", "_")
 }
 
-// resolveServiceFuncs builds the change and the read only validation of one service mechanism.
 func resolveServiceFuncs(s serviceConfig) (secretrotate.DeployFunc, secretrotate.VerifyFunc, error) {
 	switch s.Mechanism {
 	case "http_form":

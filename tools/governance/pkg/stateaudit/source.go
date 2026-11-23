@@ -33,7 +33,7 @@ type StateSource interface {
 	FetchVersion(ctx context.Context, address string, serial int) ([]byte, error)
 }
 
-// ErrStateBaseMissing indicates an HTTP backend block without a literal address while the fallback state base URL is empty.
+// ErrStateBaseMissing reports an HTTP backend missing a literal address with an empty fallback state base URL.
 var ErrStateBaseMissing = errors.New("stateaudit: the backend \"http\" omits the address and GITLAB_TERRAFORM_STATE_BASE is empty")
 
 // DiscoverLayers enumerates HTTP backend layers under layersDir and derives omitted state URLs from stateBase.
