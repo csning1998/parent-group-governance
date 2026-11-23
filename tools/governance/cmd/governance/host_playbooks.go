@@ -24,33 +24,6 @@ type hostPlaybook struct {
 
 type hostStep func(ctx context.Context, becomePass string) error
 
-func (a *app) playbookStep(build func() (hostPlaybook, error)) hostStep {
-	return func(ctx context.Context, becomePass string) error {
-		pb, err := build()
-		if err != nil {
-			return err
-		}
-		return a.executePlaybook(ctx, pb, becomePass)
-	}
-}
-
-func (a *app) runHostSteps(ctx context.Context, steps ...hostStep) error {
-	becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
-	if err != nil {
-		return fmt.Errorf("read ANSIBLE_BECOME_PASS: %w", err)
-	}
-	if becomePass == "" {
-		a.out.Print(ui.Info, msgCancelled)
-		return nil
-	}
-	for _, step := range steps {
-		if err := step(ctx, becomePass); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // runHostAll runs workstation prerequisites in bootstrap order under a single privilege escalation prompt.
 func (a *app) runHostAll(ctx context.Context) error {
 	return a.runHostSteps(
@@ -81,6 +54,33 @@ func (a *app) runHostTelemetryPlaybook(ctx context.Context) error {
 // runHostVaultAuditPlaybook omits privilege escalation because the audit systemd units are managed under the operator user session.
 func (a *app) runHostVaultAuditPlaybook(ctx context.Context) error {
 	return a.executePlaybook(ctx, a.buildVaultAuditPlaybook(), "")
+}
+
+func (a *app) runHostSteps(ctx context.Context, steps ...hostStep) error {
+	becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
+	if err != nil {
+		return fmt.Errorf("read ANSIBLE_BECOME_PASS: %w", err)
+	}
+	if becomePass == "" {
+		a.out.Print(ui.Info, msgCancelled)
+		return nil
+	}
+	for _, step := range steps {
+		if err := step(ctx, becomePass); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *app) playbookStep(build func() (hostPlaybook, error)) hostStep {
+	return func(ctx context.Context, becomePass string) error {
+		pb, err := build()
+		if err != nil {
+			return err
+		}
+		return a.executePlaybook(ctx, pb, becomePass)
+	}
 }
 
 func (a *app) executePlaybook(ctx context.Context, pb hostPlaybook, becomePass string) error {

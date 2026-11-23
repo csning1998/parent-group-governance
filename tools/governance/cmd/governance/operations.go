@@ -32,7 +32,7 @@ const serviceReadyTimeout = 5 * time.Minute
 // errRetainedServiceState indicates a target service rejecting its factory default password before Vault initialization.
 var errRetainedServiceState = errors.New("a service retains a rotated password absent from a fresh Bastion Vault")
 
-func proxyConfigFromEndpoint(ep topology.ProxyEndpoint) vaultclient.Config {
+func newProxyConfig(ep topology.ProxyEndpoint) vaultclient.Config {
 	return vaultclient.Config{
 		Address:    ep.Address,
 		CACertPath: ep.CACert,
@@ -48,7 +48,7 @@ func (a *app) buildProxyConfig(role topology.AccessRole) (vaultclient.Config, er
 	if err != nil {
 		return vaultclient.Config{}, err
 	}
-	return proxyConfigFromEndpoint(ep), nil
+	return newProxyConfig(ep), nil
 }
 
 func (a *app) enableVaultKV(ctx context.Context) error {
@@ -179,7 +179,7 @@ func (a *app) revokeRootToken(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := op.RevokeRoot(ctx, proxyConfigFromEndpoint(ep), "operator-"+ep.Identity); err != nil {
+	if err := op.RevokeRoot(ctx, newProxyConfig(ep), "operator-"+ep.Identity); err != nil {
 		return err
 	}
 	a.out.Print(ui.Info, "./governance vault generate-root restores a root token for break-glass.")

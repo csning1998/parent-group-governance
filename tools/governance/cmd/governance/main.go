@@ -41,6 +41,10 @@ type gitlabOrigin struct {
 	TopLevelGroup string
 }
 
+func main() {
+	os.Exit(execute(os.Args[1:]))
+}
+
 func execute(args []string) int {
 	out := ui.New(os.Stdout, os.Stderr)
 	a, err := loadApp(out)
@@ -147,10 +151,6 @@ func (a *app) newRootCmd() *cobra.Command {
 		a.newEnvCmd(),
 	)
 	return rootCmd
-}
-
-func main() {
-	os.Exit(execute(os.Args[1:]))
 }
 
 func resolveProjectRoot(start string) (string, error) {

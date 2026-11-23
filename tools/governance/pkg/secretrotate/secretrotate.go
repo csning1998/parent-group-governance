@@ -74,7 +74,7 @@ func newRotator(client *vaultapi.Client, spec Spec, log func(string)) rotator {
 	}
 }
 
-func (r rotator) logf(msg string) {
+func (r rotator) emitLog(msg string) {
 	if r.log != nil {
 		r.log(msg)
 	}
@@ -140,7 +140,7 @@ func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(st
 	}
 	defer func() {
 		if err := r.store.releaseLock(ctx, holder); err != nil {
-			r.logf("Warning: failed to release the rotation lock, the lock will expire at its own TTL: " + err.Error())
+			r.emitLog("Warning: failed to release the rotation lock, the lock will expire at its own TTL: " + err.Error())
 		}
 	}()
 
@@ -190,7 +190,7 @@ func (r rotator) commit(ctx context.Context, read vaultField, live, next string)
 	if err := r.store.clearRotationState(ctx); err != nil {
 		return "", fmt.Errorf("secretrotate: rotated and committed but clearing the staged rotation state failed: %w", err)
 	}
-	r.logf("New value stored at " + r.spec.Mount + "/" + r.spec.Path + "#" + r.spec.Field + ".")
+	r.emitLog("New value stored at " + r.spec.Mount + "/" + r.spec.Path + "#" + r.spec.Field + ".")
 	return next, nil
 }
 
@@ -213,7 +213,7 @@ func (r rotator) recoverPending(ctx context.Context) (string, bool, error) {
 	if err := r.store.clearRotationState(ctx); err != nil {
 		return "", false, fmt.Errorf("secretrotate: recovered and committed but clearing the staged rotation state failed: %w", err)
 	}
-	r.logf("Recovered a rotation the live service already accepted before a prior run was interrupted.")
+	r.emitLog("Recovered a rotation the live service already accepted before a prior run was interrupted.")
 	return st.PendingNext, true, nil
 }
 
@@ -236,7 +236,7 @@ func (r rotator) resolveDeployedElsewhere(ctx context.Context, raced *deployRace
 	if err := r.store.clearRotationState(ctx); err != nil {
 		return "", fmt.Errorf("secretrotate: %w, and clearing the stale rotation state failed: %w", raced, err)
 	}
-	r.logf("Deploy failed against a stale previous, but the Vault field already reflects a rotation completed elsewhere; accepting the raced value.")
+	r.emitLog("Deploy failed against a stale previous, but the Vault field already reflects a rotation completed elsewhere; accepting the raced value.")
 	return raced.Resolved, nil
 }
 
@@ -265,7 +265,7 @@ func (r rotator) stageAndDeploy(ctx context.Context, read vaultField, live, next
 	}
 	deployErr := r.spec.Deploy(ctx, live, next)
 	if deployErr == nil {
-		r.logf("Credential rotated against the live service.")
+		r.emitLog("Credential rotated against the live service.")
 		return nil
 	}
 	if current, ok := r.store.readField(ctx); ok && (!read.exists || current != read.value) {

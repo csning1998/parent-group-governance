@@ -158,14 +158,14 @@ func (a *app) newVaultCmd() *cobra.Command {
 }
 
 func (a *app) newRotateCredentialsCmd(short string) *cobra.Command {
-	return a.newCredentialSubcommandsCmd("rotate", short, prefixRotate, a.rotateCredential)
+	return a.newCredentialActionCmd("rotate", short, prefixRotate, a.rotateCredential)
 }
 
 func (a *app) newReconcileCredentialsCmd(short string) *cobra.Command {
-	return a.newCredentialSubcommandsCmd("reconcile", short, prefixReconcile, a.reconcileCredential)
+	return a.newCredentialActionCmd("reconcile", short, prefixReconcile, a.reconcileCredential)
 }
 
-func (a *app) newCredentialSubcommandsCmd(use, short, prefix string, run func(context.Context, string) error) *cobra.Command {
+func (a *app) newCredentialActionCmd(use, short, prefix string, run func(context.Context, string) error) *cobra.Command {
 	cmd := &cobra.Command{Use: use, Short: short}
 	for _, cred := range a.credentials {
 		key := cred.Key
