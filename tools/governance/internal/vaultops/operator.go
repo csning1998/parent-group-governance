@@ -1,5 +1,5 @@
 // Package vaultops provides Vault TLS certificate generation, initialization, unsealing,
-// KV-v2 engine mounting, and root token lifecycle operations.
+// KV v2 engine mounting, and root token lifecycle operations.
 package vaultops
 
 import (
@@ -36,7 +36,7 @@ func NewOperator(paths Paths, server vaultclient.Config, out *ui.Printer) (*Oper
 	}, nil
 }
 
-// Init initializes Vault with 3-of-5 Shamir secret shares, persists unseal keys and the root token,
+// Init initializes Vault with 3 of 5 Shamir secret shares, persists unseal keys and the root token,
 // and unseals the instance.
 func (op *Operator) Init(ctx context.Context) error {
 	if _, err := os.Stat(op.paths.InitFile()); err == nil {
@@ -108,7 +108,7 @@ func (op *Operator) Unseal(ctx context.Context) error {
 	return nil
 }
 
-// EnableKVEngine mounts the kv-v2 secrets engine at secret/ when the mount is absent.
+// EnableKVEngine mounts the kv-v2 secrets engine at secret/ when absent.
 func (op *Operator) EnableKVEngine(ctx context.Context) error {
 	token := vaultclient.ReadTokenFile(op.paths.Home)
 	if token == "" {

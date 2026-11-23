@@ -26,8 +26,8 @@ const (
 	tlsNameECCA     = "ca-ec-p384"
 	tlsNameLoopback = "loopback"
 	tlsNamePublish  = "publish"
-	// The PROXY protocol listener trusts the self signed terminator client certificate alone.
-	// The listener therefore rejects every leaf certificate of the local CAs.
+	// The PROXY protocol listener trusts only the self signed terminator client certificate.
+	// The listener rejects every leaf certificate issued by the local CAs.
 	tlsNameTerminatorClient = "terminator-client"
 )
 
@@ -37,15 +37,13 @@ type Listeners struct {
 	Publish  net.IP
 }
 
-// signingCA contains a parsed CA certificate with the CA private key which signs subordinate certificates.
 type signingCA struct {
 	cert *x509.Certificate
 	key  crypto.Signer
 }
 
-// GenerateTLS creates the two CAs, the two listener certificates, and the terminator client certificate under the
-// target directory.
-// The publish chain MUST remain EC P-384 until every guest verifier accepts ML-DSA.
+// GenerateTLS creates the two CAs, the two listener certificates, and the terminator client certificate under dir.
+// The publish chain remains EC P-384 until every guest verifier accepts ML-DSA.
 func GenerateTLS(dir string, listeners Listeners) error {
 	if listeners.Loopback == nil || listeners.Publish == nil {
 		return errors.New("vaultops: the listener certificates need valid loopback and publish IP addresses")
@@ -83,8 +81,8 @@ func GenerateTLS(dir string, listeners Listeners) error {
 	return issueTerminatorClientCert(dir)
 }
 
-// EnsurePublishCertCovers checks whether the publish listener certificate SAN contains address, reissuing the
-// certificate under the EC P-384 CA when absent and reporting whether reissuance occurred.
+// EnsurePublishCertCovers checks that the publish listener certificate SAN includes address.
+// When absent, EnsurePublishCertCovers reissues the certificate under the EC P-384 CA and returns true.
 func EnsurePublishCertCovers(dir string, address net.IP) (bool, error) {
 	if address == nil {
 		return false, errors.New("vaultops: the publish certificate needs a valid IP address to cover")
@@ -126,7 +124,6 @@ func readCertificate(path string) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-// loadSigningCA loads the PEM certificate and PKCS #8 private key pair of the named local CA.
 func loadSigningCA(dir, name string) (signingCA, error) {
 	cert, err := readCertificate(filepath.Join(dir, name+".pem"))
 	if err != nil {
@@ -152,8 +149,8 @@ func loadSigningCA(dir, name string) (signingCA, error) {
 	return signingCA{cert: cert, key: key}, nil
 }
 
-// EnsureTerminatorClientCert issues the terminator client certificate when the directory contains none, and reports
-// whether the call issued a certificate. The CAs and the listener certificates remain untouched.
+// EnsureTerminatorClientCert issues terminator-client.pem in dir when the certificate file is absent.
+// EnsureTerminatorClientCert returns true when a certificate is issued and leaves existing CAs and listener certificates untouched.
 func EnsureTerminatorClientCert(dir string) (bool, error) {
 	path := filepath.Join(dir, tlsNameTerminatorClient+".pem")
 	info, err := os.Stat(path)
