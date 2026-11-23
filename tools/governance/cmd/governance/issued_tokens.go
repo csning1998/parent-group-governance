@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,7 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
 
-// vaultKV reads individual KV v2 fields and replaces the target secret payload upon write.
+// vaultKV reads individual KV v2 fields and replaces the full secret payload on write.
 type vaultKV struct {
 	client *vaultapi.Client
 }
@@ -41,7 +42,6 @@ func (v vaultKV) WriteField(ctx context.Context, f issuedtokens.VaultField, valu
 	return nil
 }
 
-// newAdministratorKV initializes a Vault client using the administrator proxy identity to access issued token paths.
 func (a *app) newAdministratorKV() (vaultKV, error) {
 	cfg, err := a.buildProxyConfig(accessAdministrator)
 	if err != nil {
@@ -54,8 +54,7 @@ func (a *app) newAdministratorKV() (vaultKV, error) {
 	return vaultKV{client: client}, nil
 }
 
-// newGitLabClient authenticates against apiURL with the GitLab token of the governance owner code and reads the
-// top-level group ID from the registry.
+// newGitLabClient returns an authenticated GitLab client and the top level group ID from Vault.
 func (a *app) newGitLabClient(ctx context.Context, kv vaultKV, apiURL string) (*gitlabapi.Client, string, error) {
 	location, err := a.topology.ResolveStateBackendToken(a.topology.OperatorVaultProxy.GovernanceOwnerCode)
 	if err != nil {
@@ -72,7 +71,6 @@ func (a *app) newGitLabClient(ctx context.Context, kv vaultKV, apiURL string) (*
 	return gitlabapi.New(apiURL, token), groupID, nil
 }
 
-// issueSonarQubeAnalysisToken rotates the group CI analysis token and revokes prior tokens.
 func (a *app) issueSonarQubeAnalysisToken(ctx context.Context) error {
 	cfg := a.issuedTokens.SonarQubeAnalysisToken
 	admin, ok := credentials.Lookup(a.credentials, cfg.AdminPasswordKey)
@@ -113,7 +111,6 @@ func (a *app) issueSonarQubeAnalysisToken(ctx context.Context) error {
 	return nil
 }
 
-// registerGitLabGroupRunner provisions the group runner in GitLab and renders the corresponding config.toml.
 func (a *app) registerGitLabGroupRunner(ctx context.Context) error {
 	cfg := a.issuedTokens.GitLabGroupRunner
 	kv, err := a.newAdministratorKV()
@@ -137,10 +134,9 @@ func (a *app) registerGitLabGroupRunner(ctx context.Context) error {
 	return nil
 }
 
-// publishCodeReviewerVariables distributes code reviewer bot tokens to CI/CD variables across configured target projects.
 func (a *app) publishCodeReviewerVariables(ctx context.Context) error {
 	if len(a.issuedTokens.CodeReviewerVariables.BotTokens) == 0 {
-		return fmt.Errorf("service_issued_tokens.code_reviewer_variables lists no bot_tokens")
+		return errors.New("service_issued_tokens.code_reviewer_variables lists no bot_tokens")
 	}
 	origin, err := a.resolveOrigin(ctx)
 	if err != nil {
@@ -148,7 +144,7 @@ func (a *app) publishCodeReviewerVariables(ctx context.Context) error {
 	}
 	projects := a.topology.ListCodeReviewerVariableProjects(origin.TopLevelGroup)
 	if len(projects) == 0 {
-		return fmt.Errorf("no identity of operator_vault_proxy lists code_reviewer_variable_projects")
+		return errors.New("no identity of operator_vault_proxy lists code_reviewer_variable_projects")
 	}
 	kv, err := a.newAdministratorKV()
 	if err != nil {

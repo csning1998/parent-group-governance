@@ -87,7 +87,7 @@ func (c deployedElsewhereCase) newTestSpec(t *testing.T, client *vaultapi.Client
 	}
 	spec.Deploy = func(ctx context.Context, previous, next string) error {
 		outsiderWrote = true
-		if err := writeField(context.Background(), client, "secret", "app/infra", "password", raced); err != nil {
+		if err := newFieldStore(client, "secret", "app/infra", "password").writeField(context.Background(), raced); err != nil {
 			t.Fatalf("simulate an out-of-band write: %v", err)
 		}
 		if c.failClear {

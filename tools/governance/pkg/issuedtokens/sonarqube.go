@@ -20,7 +20,7 @@ type AnalysisTokenService interface {
 	Revoke(ctx context.Context, name string) error
 }
 
-// SecretWriter writes a single secret field into Vault KV v2, replacing existing payload data at the target path.
+// SecretWriter overwrites the target Vault KV v2 secret path with a single field.
 type SecretWriter interface {
 	WriteField(ctx context.Context, field VaultField, value string) error
 }

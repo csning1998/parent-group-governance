@@ -1,4 +1,4 @@
-package vaultops
+package vault
 
 import (
 	"context"
@@ -17,40 +17,40 @@ import (
 
 var (
 	// ErrNoRootToken reports a token helper file without a live token of the root policy.
-	ErrNoRootToken = errors.New("vaultops: the token helper file does not contain a live root token")
+	ErrNoRootToken = errors.New("vault: the token helper file does not contain a live root token")
 	// ErrSuccessorNotReady reports a successor operator identity without an active login with its policy.
-	ErrSuccessorNotReady = errors.New("vaultops: the successor identity lacks a login with its policy")
+	ErrSuccessorNotReady = errors.New("vault: the successor identity lacks a login with its policy")
 	// ErrRootTokenPresent reports a token helper file with an existing token before generate-root runs.
-	ErrRootTokenPresent = errors.New("vaultops: the token helper file already contains a token, revoke the token first")
+	ErrRootTokenPresent = errors.New("vault: the token helper file already contains a token, revoke the token first")
 	// ErrGenerateRootInProgress reports an unfinished generate-root attempt.
-	ErrGenerateRootInProgress = errors.New("vaultops: a generate-root attempt is in progress, cancel it with vault operator generate-root -cancel")
+	ErrGenerateRootInProgress = errors.New("vault: a generate-root attempt is in progress, cancel it with vault operator generate-root -cancel")
 )
 
-// GenerateRoot generates a break-glass root token from stored unseal keys and writes the token to ~/.vault-token.
+// GenerateRoot creates a recovery root token from stored unseal keys and writes the token to ~/.vault-token.
 func (op *Operator) GenerateRoot(ctx context.Context) error {
 	if vaultclient.ReadTokenFile(op.paths.Home) != "" {
 		return ErrRootTokenPresent
 	}
 	keysRaw, err := os.ReadFile(op.paths.UnsealKeyFile())
 	if err != nil {
-		return fmt.Errorf("vaultops: unseal keys not found at %s: %w", op.paths.UnsealKeyFile(), err)
+		return fmt.Errorf("vault: unseal keys not found at %s: %w", op.paths.UnsealKeyFile(), err)
 	}
 
 	status, err := op.client.Sys().GenerateRootStatusWithContext(ctx)
 	if err != nil {
-		return fmt.Errorf("vaultops: generate-root status: %w", err)
+		return fmt.Errorf("vault: generate-root status: %w", err)
 	}
 	if status.Started {
 		return ErrGenerateRootInProgress
 	}
 	attempt, err := op.client.Sys().GenerateRootInitWithContext(ctx, "", "")
 	if err != nil {
-		return fmt.Errorf("vaultops: generate-root init: %w", err)
+		return fmt.Errorf("vault: generate-root init: %w", err)
 	}
 
 	encoded, err := op.submitGenerateRootKeys(ctx, attempt.Nonce, keysRaw)
 	if err != nil {
-		// Attempt cancellation is best-effort cleanup after key submission failure.
+		// Cancellation is best effort cleanup after key submission failure.
 		_ = op.client.Sys().GenerateRootCancelWithContext(context.WithoutCancel(ctx))
 		return err
 	}
@@ -83,19 +83,19 @@ func (op *Operator) RevokeRoot(ctx context.Context, successor vaultclient.Config
 
 	rootClient, err := op.client.Clone()
 	if err != nil {
-		return fmt.Errorf("vaultops: clone client: %w", err)
+		return fmt.Errorf("vault: clone client: %w", err)
 	}
 	rootClient.SetToken(token)
 
 	rootPolicies, err := lookupPolicies(ctx, rootClient)
 	if err != nil {
-		return fmt.Errorf("vaultops: lookup root token policies: %w", err)
+		return fmt.Errorf("vault: lookup root token policies: %w", err)
 	}
 	if !slices.Contains(rootPolicies, "root") {
 		return ErrNoRootToken
 	}
 	if err := rootClient.Auth().Token().RevokeSelfWithContext(ctx, ""); err != nil {
-		return fmt.Errorf("vaultops: revoke the root token: %w", err)
+		return fmt.Errorf("vault: revoke the root token: %w", err)
 	}
 
 	if err := vaultclient.RemoveTokenFile(op.paths.Home); err != nil {
@@ -116,7 +116,7 @@ func (op *Operator) submitGenerateRootKeys(ctx context.Context, nonce string, ke
 		}
 		status, err := op.client.Sys().GenerateRootUpdateWithContext(ctx, key, nonce)
 		if err != nil {
-			return "", fmt.Errorf("vaultops: generate-root update: %w", err)
+			return "", fmt.Errorf("vault: generate-root update: %w", err)
 		}
 		if status.Complete {
 			token := status.EncodedToken
@@ -126,17 +126,17 @@ func (op *Operator) submitGenerateRootKeys(ctx context.Context, nonce string, ke
 			return token, nil
 		}
 	}
-	return "", errors.New("vaultops: the stored unseal keys did not reach the generate-root threshold")
+	return "", errors.New("vault: the stored unseal keys did not reach the generate-root threshold")
 }
 
-// decodeRootToken MUST unmask the encoded payload with the one-time password per the Vault generate root protocol.
+// decodeRootToken unmasks the base64 payload by XORing the payload with the OTP per the Vault generate-root protocol.
 func decodeRootToken(encoded, otp string) (string, error) {
 	raw, err := base64.RawStdEncoding.DecodeString(encoded)
 	if err != nil {
-		return "", fmt.Errorf("vaultops: decode the encoded root token: %w", err)
+		return "", fmt.Errorf("vault: decode the encoded root token: %w", err)
 	}
 	if len(raw) != len(otp) {
-		return "", fmt.Errorf("vaultops: the encoded root token has %d bytes, while the one-time password has %d", len(raw), len(otp))
+		return "", fmt.Errorf("vault: the encoded root token has %d bytes, while the one-time password has %d", len(raw), len(otp))
 	}
 	token := make([]byte, len(raw))
 	for i := range raw {
@@ -152,19 +152,19 @@ func (op *Operator) clearInitRootToken() error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("vaultops: read %s: %w", path, err)
+		return fmt.Errorf("vault: read %s: %w", path, err)
 	}
-	var init map[string]any
-	if err := json.Unmarshal(data, &init); err != nil {
-		return fmt.Errorf("vaultops: parse %s: %w", path, err)
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return fmt.Errorf("vault: parse %s: %w", path, err)
 	}
-	init["root_token"] = ""
-	raw, err := json.Marshal(init)
+	payload["root_token"] = ""
+	raw, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("vaultops: marshal %s: %w", path, err)
+		return fmt.Errorf("vault: marshal %s: %w", path, err)
 	}
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		return fmt.Errorf("vaultops: write %s: %w", path, err)
+		return fmt.Errorf("vault: write %s: %w", path, err)
 	}
 	return nil
 }

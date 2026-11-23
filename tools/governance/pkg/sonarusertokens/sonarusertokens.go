@@ -87,9 +87,11 @@ func (c *Client) send(ctx context.Context, method, action string, form url.Value
 	if err != nil {
 		return fmt.Errorf("sonarusertokens: %s %s: %w", method, endpoint, err)
 	}
+	// Close failure is secondary after reading the response.
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Body read failure is ignored because the HTTP status code already captures the error.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return fmt.Errorf("sonarusertokens: %s %s returned %d: %s", method, endpoint, resp.StatusCode, strings.TrimSpace(string(body)))
 	}

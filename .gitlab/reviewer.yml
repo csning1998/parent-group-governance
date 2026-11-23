@@ -112,7 +112,7 @@ models:
 
 slots:
   primary: claude-sonnet-5.5
-  fast: gemini-3.8-flash
+  fast: gemini-4-hydrogen
   # balanced: openai-gpt-6-sol
   # enterprise: azure-gpt-6-sol
   # grok: grok-4-7

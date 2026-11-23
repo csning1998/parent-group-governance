@@ -10,7 +10,6 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
 
-// msgInvalidOption is the single rejection message every prompt in this menu reports.
 const msgInvalidOption = "Invalid option"
 
 type menuOption struct {
@@ -18,7 +17,7 @@ type menuOption struct {
 	run   func(ctx context.Context) error
 }
 
-// buildMenuOptions returns the interactive menu entries, ending with Quit.
+// buildMenuOptions returns interactive menu entries with Apply All first and Quit last.
 func (a *app) buildMenuOptions() []menuOption {
 	options := []menuOption{
 		{"[Host] Apply All Workstation Prerequisites", func(ctx context.Context) error { return a.runHostAll(ctx) }},
@@ -124,9 +123,7 @@ func (a *app) runMenu(ctx context.Context) error {
 	}
 }
 
-// runReconcileCredentialMenu prompts for one or more credentials with a value in Vault.
-// Each chosen credential is reconciled in turn after a prompt for its current live password.
-// A failure on one credential does not stop the rest.
+// runReconcileCredentialMenu reconciles each selected Vault credential in turn without stopping on a single failure.
 func (a *app) runReconcileCredentialMenu(ctx context.Context) error {
 	client, err := a.newRotationClient()
 	if err != nil {
@@ -151,20 +148,12 @@ func (a *app) runReconcileCredentialMenu(ctx context.Context) error {
 		a.out.Print(ui.Error, msgInvalidOption)
 		return nil
 	}
-
-	var lastErr error
-	for _, index := range indices {
-		if err := a.reconcileCredential(ctx, keys[index]); err != nil {
-			a.out.Print(ui.Error, keys[index]+": "+err.Error())
-			lastErr = err
-		}
-	}
-	return lastErr
+	return a.runSelectedCredentials(keys, indices, func(key string) error {
+		return a.reconcileCredential(ctx, key)
+	})
 }
 
-// runRotateCredentialMenu prompts for one or more of the declared credential keys.
-// Each chosen credential is rotated in turn. A failure on one credential does not stop the rest.
-// Each listed key indicates whether Vault already stores a value for the credential.
+// runRotateCredentialMenu rotates each selected credential in turn without stopping on a single failure.
 func (a *app) runRotateCredentialMenu(ctx context.Context) error {
 	keys := make([]string, len(a.credentials))
 	labels := make([]string, len(a.credentials))
@@ -188,10 +177,15 @@ func (a *app) runRotateCredentialMenu(ctx context.Context) error {
 		a.out.Print(ui.Error, msgInvalidOption)
 		return nil
 	}
+	return a.runSelectedCredentials(keys, indices, func(key string) error {
+		return a.rotateCredential(ctx, key)
+	})
+}
 
+func (a *app) runSelectedCredentials(keys []string, indices []int, run func(string) error) error {
 	var lastErr error
 	for _, index := range indices {
-		if err := a.rotateCredential(ctx, keys[index]); err != nil {
+		if err := run(keys[index]); err != nil {
 			a.out.Print(ui.Error, keys[index]+": "+err.Error())
 			lastErr = err
 		}

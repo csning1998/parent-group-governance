@@ -35,7 +35,7 @@ func (s Static) Token(context.Context) (string, error) {
 }
 
 // DefaultAuthMountPath specifies the default Vault JWT auth backend mount path.
-// Refer to: terraform/layers/foundation-vault-bastion/auth-shared.tf
+// Refer to terraform/layers/foundation-vault-bastion/access-auth-mounts.tf.
 const DefaultAuthMountPath = "gitlab-saas-ci-job-jwt-provider"
 
 // VaultKVConfig specifies parameters for exchanging a JWT for a secret from Vault.
@@ -51,10 +51,167 @@ type VaultKVConfig struct {
 	HTTPClient    *http.Client
 }
 
-// VaultKV resolves credentials from a HashiCorp Vault KV-v2 secret engine via JWT authentication.
+// VaultKV resolves credentials from a HashiCorp Vault KV v2 secret engine via JWT authentication.
 type VaultKV struct {
 	cfg        VaultKVConfig
 	httpClient *http.Client
+}
+
+// NewVaultKV constructs a VaultKV token source.
+func NewVaultKV(cfg VaultKVConfig) (*VaultKV, error) {
+	if err := validateVaultKVConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	if cfg.AuthMountPath == "" {
+		cfg.AuthMountPath = DefaultAuthMountPath
+	}
+
+	client, err := buildHTTPClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &VaultKV{
+		cfg:        cfg,
+		httpClient: client,
+	}, nil
+}
+
+// Token exchanges the configured JWT for a Vault client token and retrieves the secret field value.
+func (v *VaultKV) Token(ctx context.Context) (string, error) {
+	clientToken, err := v.login(ctx)
+	if err != nil {
+		return "", err
+	}
+	return v.readSecret(ctx, clientToken)
+}
+
+func (v *VaultKV) login(ctx context.Context) (string, error) {
+	vaultAddr := strings.TrimRight(v.cfg.VaultAddr, "/")
+	authMount := strings.Trim(v.cfg.AuthMountPath, "/")
+	loginURL := fmt.Sprintf("%s/v1/auth/%s/login", vaultAddr, authMount)
+
+	var loginResp struct {
+		Auth struct {
+			ClientToken string `json:"client_token"`
+		} `json:"auth"`
+	}
+	err := v.doJSON(ctx, vaultRequest{
+		op:      "login",
+		method:  http.MethodPost,
+		url:     loginURL,
+		payload: map[string]string{"role": v.cfg.Role, "jwt": v.cfg.JWT},
+	}, &loginResp)
+	if err != nil {
+		return "", err
+	}
+	if loginResp.Auth.ClientToken == "" {
+		return "", errors.New("tokensource: vault login response missing client_token")
+	}
+
+	return loginResp.Auth.ClientToken, nil
+}
+
+func (v *VaultKV) readSecret(ctx context.Context, clientToken string) (string, error) {
+	vaultAddr := strings.TrimRight(v.cfg.VaultAddr, "/")
+	mountPath := strings.Trim(v.cfg.MountPath, "/")
+	secretPath := strings.Trim(v.cfg.SecretPath, "/")
+	secretURL := fmt.Sprintf("%s/v1/%s/data/%s", vaultAddr, mountPath, secretPath)
+
+	var kvResp struct {
+		Data struct {
+			Data map[string]any `json:"data"`
+		} `json:"data"`
+	}
+	err := v.doJSON(ctx, vaultRequest{
+		op:     "secret read",
+		method: http.MethodGet,
+		url:    secretURL,
+		token:  clientToken,
+	}, &kvResp)
+	if err != nil {
+		return "", err
+	}
+
+	if kvResp.Data.Data == nil {
+		return "", errors.New("tokensource: vault secret payload contains no data")
+	}
+
+	val, ok := kvResp.Data.Data[v.cfg.SecretField]
+	if !ok {
+		return "", fmt.Errorf("tokensource: field %q not found in vault secret data", v.cfg.SecretField)
+	}
+
+	strVal, ok := val.(string)
+	if !ok || strVal == "" {
+		return "", fmt.Errorf("tokensource: field %q in vault secret data is not a non-empty string", v.cfg.SecretField)
+	}
+
+	return strVal, nil
+}
+
+type vaultRequest struct {
+	op      string
+	method  string
+	url     string
+	token   string
+	payload any
+}
+
+func (v *VaultKV) doJSON(ctx context.Context, r vaultRequest, out any) error {
+	var bodyReader io.Reader
+	if r.payload != nil {
+		raw, err := json.Marshal(r.payload)
+		if err != nil {
+			return fmt.Errorf("tokensource: marshal %s payload: %w", r.op, err)
+		}
+		bodyReader = bytes.NewReader(raw)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, r.method, r.url, bodyReader)
+	if err != nil {
+		return fmt.Errorf("tokensource: create %s request: %w", r.op, err)
+	}
+	if r.payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if r.token != "" {
+		req.Header.Set("X-Vault-Token", r.token)
+	}
+
+	resp, err := v.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("tokensource: vault %s request failed: %w", r.op, err)
+	}
+	// Close failure is secondary after reading the response.
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("tokensource: read %s response body: %w", r.op, err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("tokensource: vault %s failed with status %d: %s", r.op, resp.StatusCode, sanitizeVaultError(resp.StatusCode, body))
+	}
+
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("tokensource: unmarshal %s response: %w", r.op, err)
+	}
+	return nil
+}
+
+func sanitizeVaultError(statusCode int, body []byte) string {
+	var errResp struct {
+		Errors []string `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &errResp); err == nil && len(errResp.Errors) > 0 {
+		return strings.Join(errResp.Errors, ", ")
+	}
+	return http.StatusText(statusCode)
 }
 
 func validateVaultKVConfig(cfg VaultKVConfig) error {
@@ -77,6 +234,34 @@ func validateVaultKVConfig(cfg VaultKVConfig) error {
 		return errors.New("tokensource: vault secret field is required")
 	}
 	return nil
+}
+
+func buildHTTPClient(cfg VaultKVConfig) (*http.Client, error) {
+	client := cfg.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+
+	if cfg.CACertPath == "" {
+		return client, nil
+	}
+
+	caPool, err := loadCACertPool(cfg.CACertPath)
+	if err != nil {
+		return nil, err
+	}
+
+	transport := cloneTransportWithCA(client.Transport, caPool)
+	if transport == nil {
+		return client, nil
+	}
+
+	return &http.Client{
+		Transport:     transport,
+		CheckRedirect: client.CheckRedirect,
+		Jar:           client.Jar,
+		Timeout:       client.Timeout,
+	}, nil
 }
 
 func loadCACertPool(path string) (*x509.CertPool, error) {
@@ -115,179 +300,4 @@ func cloneTransportWithCA(rt http.RoundTripper, caPool *x509.CertPool) *http.Tra
 	}
 	transport.TLSClientConfig.RootCAs = caPool
 	return transport
-}
-
-func buildHTTPClient(cfg VaultKVConfig) (*http.Client, error) {
-	client := cfg.HTTPClient
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
-
-	if cfg.CACertPath == "" {
-		return client, nil
-	}
-
-	caPool, err := loadCACertPool(cfg.CACertPath)
-	if err != nil {
-		return nil, err
-	}
-
-	transport := cloneTransportWithCA(client.Transport, caPool)
-	if transport == nil {
-		return client, nil
-	}
-
-	return &http.Client{
-		Transport:     transport,
-		CheckRedirect: client.CheckRedirect,
-		Jar:           client.Jar,
-		Timeout:       client.Timeout,
-	}, nil
-}
-
-// NewVaultKV constructs a VaultKV token source.
-func NewVaultKV(cfg VaultKVConfig) (*VaultKV, error) {
-	if err := validateVaultKVConfig(cfg); err != nil {
-		return nil, err
-	}
-
-	if cfg.AuthMountPath == "" {
-		cfg.AuthMountPath = DefaultAuthMountPath
-	}
-
-	client, err := buildHTTPClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return &VaultKV{
-		cfg:        cfg,
-		httpClient: client,
-	}, nil
-}
-
-// Token exchanges the configured JWT for a Vault client token and retrieves the secret field value.
-func (v *VaultKV) Token(ctx context.Context) (string, error) {
-	clientToken, err := v.login(ctx)
-	if err != nil {
-		return "", err
-	}
-	return v.readSecret(ctx, clientToken)
-}
-
-func sanitizeVaultError(statusCode int, body []byte) string {
-	var errResp struct {
-		Errors []string `json:"errors"`
-	}
-	if err := json.Unmarshal(body, &errResp); err == nil && len(errResp.Errors) > 0 {
-		return strings.Join(errResp.Errors, ", ")
-	}
-	return http.StatusText(statusCode)
-}
-
-func (v *VaultKV) login(ctx context.Context) (string, error) {
-	vaultAddr := strings.TrimRight(v.cfg.VaultAddr, "/")
-	authMount := strings.Trim(v.cfg.AuthMountPath, "/")
-	loginURL := fmt.Sprintf("%s/v1/auth/%s/login", vaultAddr, authMount)
-
-	payload := map[string]string{
-		"role": v.cfg.Role,
-		"jwt":  v.cfg.JWT,
-	}
-	reqBody, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("tokensource: marshal login payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, loginURL, bytes.NewReader(reqBody))
-	if err != nil {
-		return "", fmt.Errorf("tokensource: create login request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := v.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("tokensource: vault login request failed: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("tokensource: read login response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("tokensource: vault login failed with status %d: %s", resp.StatusCode, sanitizeVaultError(resp.StatusCode, body))
-	}
-
-	var loginResp struct {
-		Auth struct {
-			ClientToken string `json:"client_token"`
-		} `json:"auth"`
-	}
-	if err := json.Unmarshal(body, &loginResp); err != nil {
-		return "", fmt.Errorf("tokensource: unmarshal login response: %w", err)
-	}
-	if loginResp.Auth.ClientToken == "" {
-		return "", errors.New("tokensource: vault login response missing client_token")
-	}
-
-	return loginResp.Auth.ClientToken, nil
-}
-
-func (v *VaultKV) readSecret(ctx context.Context, clientToken string) (string, error) {
-	vaultAddr := strings.TrimRight(v.cfg.VaultAddr, "/")
-	mountPath := strings.Trim(v.cfg.MountPath, "/")
-	secretPath := strings.Trim(v.cfg.SecretPath, "/")
-	secretURL := fmt.Sprintf("%s/v1/%s/data/%s", vaultAddr, mountPath, secretPath)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, secretURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("tokensource: create secret request: %w", err)
-	}
-	req.Header.Set("X-Vault-Token", clientToken)
-
-	resp, err := v.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("tokensource: vault secret request failed: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("tokensource: read secret response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("tokensource: vault secret read failed with status %d: %s", resp.StatusCode, sanitizeVaultError(resp.StatusCode, body))
-	}
-
-	var kvResp struct {
-		Data struct {
-			Data map[string]any `json:"data"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &kvResp); err != nil {
-		return "", fmt.Errorf("tokensource: unmarshal secret response: %w", err)
-	}
-
-	if kvResp.Data.Data == nil {
-		return "", errors.New("tokensource: vault secret payload contains no data")
-	}
-
-	val, ok := kvResp.Data.Data[v.cfg.SecretField]
-	if !ok {
-		return "", fmt.Errorf("tokensource: field %q not found in vault secret data", v.cfg.SecretField)
-	}
-
-	strVal, ok := val.(string)
-	if !ok || strVal == "" {
-		return "", fmt.Errorf("tokensource: field %q in vault secret data is not a non-empty string", v.cfg.SecretField)
-	}
-
-	return strVal, nil
 }

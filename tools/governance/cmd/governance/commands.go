@@ -1,6 +1,10 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"context"
+
+	"github.com/spf13/cobra"
+)
 
 const (
 	prefixReconcile = "Reconcile "
@@ -10,27 +14,8 @@ const (
 func (a *app) newCredentialsCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "credentials", Short: "Service credential lifecycle operations"}
 
-	rotateCmd := &cobra.Command{Use: "rotate", Short: "Rotate service admin passwords"}
-	for _, cred := range a.credentials {
-		key := cred.Key
-		rotateCmd.AddCommand(&cobra.Command{
-			Use:   key,
-			Short: prefixRotate + key,
-			RunE:  func(cmd *cobra.Command, args []string) error { return a.rotateCredential(cmd.Context(), key) },
-		})
-	}
-	cmd.AddCommand(rotateCmd)
-
-	reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Apply a stored credential to a drifted live service"}
-	for _, cred := range a.credentials {
-		key := cred.Key
-		reconcileCmd.AddCommand(&cobra.Command{
-			Use:   key,
-			Short: prefixReconcile + key,
-			RunE:  func(cmd *cobra.Command, args []string) error { return a.reconcileCredential(cmd.Context(), key) },
-		})
-	}
-	cmd.AddCommand(reconcileCmd)
+	cmd.AddCommand(a.newRotateCredentialsCmd("Rotate service admin passwords"))
+	cmd.AddCommand(a.newReconcileCredentialsCmd("Apply a stored credential to a drifted live service"))
 
 	issueCmd := &cobra.Command{Use: "issue", Short: "Issue service tokens into the Bastion Vault and GitLab"}
 	issueCmd.AddCommand(&cobra.Command{
@@ -155,15 +140,10 @@ func (a *app) newVaultCmd() *cobra.Command {
 		RunE:    func(cmd *cobra.Command, args []string) error { return a.generateRootToken(cmd.Context()) },
 	})
 
-	rotateCmd := &cobra.Command{Use: "rotate", Short: "Rotate credentials in Bastion Vault"}
+	cmd.AddCommand(a.newRotateCredentialsCmd("Rotate credentials in Bastion Vault"))
 	for _, cred := range a.credentials {
 		key := cred.Key
-		rotateCmd.AddCommand(&cobra.Command{
-			Use:   key,
-			Short: prefixRotate + key,
-			RunE:  func(cmd *cobra.Command, args []string) error { return a.rotateCredential(cmd.Context(), key) },
-		})
-		// Root-level alias under vault for backward compatibility.
+		// Hidden alias directly under vault for backward compatibility.
 		cmd.AddCommand(&cobra.Command{
 			Use:    key,
 			Hidden: true,
@@ -171,18 +151,29 @@ func (a *app) newVaultCmd() *cobra.Command {
 			RunE:   func(cmd *cobra.Command, args []string) error { return a.rotateCredential(cmd.Context(), key) },
 		})
 	}
-	cmd.AddCommand(rotateCmd)
 
-	reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Apply a Vault-stored credential to a drifted live service"}
+	cmd.AddCommand(a.newReconcileCredentialsCmd("Apply a Vault-stored credential to a drifted live service"))
+
+	return cmd
+}
+
+func (a *app) newRotateCredentialsCmd(short string) *cobra.Command {
+	return a.newCredentialActionCmd("rotate", short, prefixRotate, a.rotateCredential)
+}
+
+func (a *app) newReconcileCredentialsCmd(short string) *cobra.Command {
+	return a.newCredentialActionCmd("reconcile", short, prefixReconcile, a.reconcileCredential)
+}
+
+func (a *app) newCredentialActionCmd(use, short, prefix string, run func(context.Context, string) error) *cobra.Command {
+	cmd := &cobra.Command{Use: use, Short: short}
 	for _, cred := range a.credentials {
 		key := cred.Key
-		reconcileCmd.AddCommand(&cobra.Command{
+		cmd.AddCommand(&cobra.Command{
 			Use:   key,
-			Short: prefixReconcile + key,
-			RunE:  func(cmd *cobra.Command, args []string) error { return a.reconcileCredential(cmd.Context(), key) },
+			Short: prefix + key,
+			RunE:  func(cmd *cobra.Command, args []string) error { return run(cmd.Context(), key) },
 		})
 	}
-	cmd.AddCommand(reconcileCmd)
-
 	return cmd
 }

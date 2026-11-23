@@ -1,4 +1,4 @@
-package vaultops
+package vault
 
 import (
 	"context"
@@ -29,7 +29,7 @@ func TestClearInitRootToken(t *testing.T) {
 		}
 		op := &Operator{paths: p}
 		err := op.clearInitRootToken()
-		if err == nil || !strings.Contains(err.Error(), "vaultops: read") {
+		if err == nil || !strings.Contains(err.Error(), "vault: read") {
 			t.Fatalf("clearInitRootToken = %v, want a read error", err)
 		}
 	})
@@ -38,7 +38,7 @@ func TestClearInitRootToken(t *testing.T) {
 		writeInitFile(t, p, "not json")
 		op := &Operator{paths: p}
 		err := op.clearInitRootToken()
-		if err == nil || !strings.Contains(err.Error(), "vaultops: parse") {
+		if err == nil || !strings.Contains(err.Error(), "vault: parse") {
 			t.Fatalf("clearInitRootToken = %v, want a parse error", err)
 		}
 	})
@@ -51,7 +51,7 @@ func TestClearInitRootToken(t *testing.T) {
 		}
 		op := &Operator{paths: p}
 		err := op.clearInitRootToken()
-		if err == nil || !strings.Contains(err.Error(), "vaultops: write") {
+		if err == nil || !strings.Contains(err.Error(), "vault: write") {
 			t.Fatalf("clearInitRootToken = %v, want a write error", err)
 		}
 	})
@@ -301,7 +301,7 @@ func TestRevokeRootReportsAnInitFileFailure(t *testing.T) {
 
 	op := newTestOperator(t, p, target.URL)
 	err := op.RevokeRoot(context.Background(), vaultclient.Config{Address: successor.URL, Token: "proxy-supplied"}, "successor-policy")
-	if err == nil || !strings.Contains(err.Error(), "vaultops: read") {
+	if err == nil || !strings.Contains(err.Error(), "vault: read") {
 		t.Fatalf("RevokeRoot error = %v, want the init-file read failure", err)
 	}
 }

@@ -13,13 +13,12 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultops"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vault"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/secretrotate"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
 )
 
-// accessAdministrator and accessCredentialRotator name the operator identities of workstation-topology.yaml used by this CLI.
 const (
 	accessAdministrator     = topology.AccessRoleAdministrator
 	accessCredentialRotator = topology.AccessRoleCredentialRotator
@@ -33,14 +32,23 @@ const serviceReadyTimeout = 5 * time.Minute
 // errRetainedServiceState indicates a target service rejecting its factory default password before Vault initialization.
 var errRetainedServiceState = errors.New("a service retains a rotated password absent from a fresh Bastion Vault")
 
-// buildProxyConfig resolves the Vault Proxy configuration for the requested role.
-// Because the local proxy manages identity credentials, the CLI does not handle raw tokens.
+func newProxyConfig(ep topology.ProxyEndpoint) vaultclient.Config {
+	return vaultclient.Config{
+		Address:    ep.Address,
+		CACertPath: ep.CACert,
+		ClientCert: ep.ClientCert,
+		ClientKey:  ep.ClientKey,
+		Token:      ep.Token,
+	}
+}
+
+// buildProxyConfig resolves the local Vault Proxy config so the CLI never handles raw tokens.
 func (a *app) buildProxyConfig(role topology.AccessRole) (vaultclient.Config, error) {
 	ep, err := a.topology.ResolveProxyEndpoint(a.home, role)
 	if err != nil {
 		return vaultclient.Config{}, err
 	}
-	return vaultclient.Config{Address: ep.Address, CACertPath: ep.CACert, ClientCert: ep.ClientCert, ClientKey: ep.ClientKey, Token: ep.Token}, nil
+	return newProxyConfig(ep), nil
 }
 
 func (a *app) enableVaultKV(ctx context.Context) error {
@@ -57,7 +65,7 @@ func (a *app) ensureLocalCA(_ context.Context) error {
 	if _, err := os.Stat(a.newVaultPaths().TransportRootMLDSA87CACertFile()); err != nil {
 		return a.issueVaultTLS()
 	}
-	issued, err := vaultops.EnsureTerminatorClientCert(a.newVaultPaths().TLSDir())
+	issued, err := vault.EnsureTerminatorClientCert(a.newVaultPaths().TLSDir())
 	if err != nil {
 		return err
 	}
@@ -68,7 +76,7 @@ func (a *app) ensureLocalCA(_ context.Context) error {
 }
 
 func (a *app) issueVaultTLS() error {
-	if err := vaultops.GenerateTLS(a.newVaultPaths().TLSDir(), a.newBastionVaultListeners()); err != nil {
+	if err := vault.GenerateTLS(a.newVaultPaths().TLSDir(), a.newBastionVaultListeners()); err != nil {
 		return err
 	}
 	a.out.Print(ui.OK, "Vault TLS certificates generated.")
@@ -137,9 +145,7 @@ func (a *app) newRotationClient() (*vaultapi.Client, error) {
 	return vaultclient.NewClient(cfg)
 }
 
-// reconcileCredential applies the value already stored in Vault for key to the live service,
-// prompting for the current live credential needed to authenticate the call. Leaving the
-// prompt blank lets Reconcile guess instead of failing outright.
+// reconcileCredential pushes the Vault password to the live service. Leaving the password prompt blank lets Reconcile guess.
 func (a *app) reconcileCredential(ctx context.Context, key string) error {
 	cred, ok := credentials.Lookup(a.credentials, key)
 	if !ok {
@@ -165,10 +171,6 @@ func (a *app) revokeRootToken(ctx context.Context) error {
 		a.out.Print(ui.Info, msgCancelled)
 		return nil
 	}
-	cfg, err := a.buildProxyConfig(accessAdministrator)
-	if err != nil {
-		return err
-	}
 	ep, err := a.topology.ResolveProxyEndpoint(a.home, accessAdministrator)
 	if err != nil {
 		return err
@@ -177,14 +179,13 @@ func (a *app) revokeRootToken(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := op.RevokeRoot(ctx, cfg, "operator-"+ep.Identity); err != nil {
+	if err := op.RevokeRoot(ctx, newProxyConfig(ep), "operator-"+ep.Identity); err != nil {
 		return err
 	}
 	a.out.Print(ui.Info, "./governance vault generate-root restores a root token for break-glass.")
 	return nil
 }
 
-// rotateCredential runs the a.credentials entry identified by key against Bastion Vault.
 func (a *app) rotateCredential(ctx context.Context, key string) error {
 	cred, ok := credentials.Lookup(a.credentials, key)
 	if !ok {

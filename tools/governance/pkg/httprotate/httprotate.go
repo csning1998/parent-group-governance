@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/secretrotate"
 )
@@ -19,6 +20,7 @@ import (
 var ErrUnauthorized = errors.New("httprotate: request rejected as unauthorized")
 
 var noRedirectClient = &http.Client{
+	Timeout: 30 * time.Second,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	},

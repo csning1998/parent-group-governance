@@ -31,49 +31,84 @@ type app struct {
 	out          *ui.Printer
 	in           *bufio.Reader
 
-	resolveOrigin func(context.Context) (gitlabOrigin, error) // injectable resolver for GitLab endpoints derived from the origin remote
+	// Overridable in tests to avoid invoking git.
+	resolveOrigin func(context.Context) (gitlabOrigin, error)
 }
 
-// gitlabOrigin contains the GitLab web URL, the REST API URL, and the top-level group path of the origin remote.
 type gitlabOrigin struct {
 	WebURL        string
 	APIURL        string
 	TopLevelGroup string
 }
 
+func main() {
+	os.Exit(execute(os.Args[1:]))
+}
+
 func execute(args []string) int {
 	out := ui.New(os.Stdout, os.Stderr)
-
-	// Clear unsets ambient Vault variables because a missing CA file fails every client construction
-	// and VAULT_SKIP_VERIFY disables certificate verification.
-	err := vaultenv.Clear()
+	a, err := loadApp(out)
 	if err != nil {
 		out.Print(ui.Fatal, err.Error())
 		return 1
+	}
+
+	rootCmd := a.newRootCmd()
+	rootCmd.SetArgs(args)
+	if err := rootCmd.Execute(); err != nil {
+		out.Print(ui.Error, err.Error())
+		return 1
+	}
+	return 0
+}
+
+func loadApp(out *ui.Printer) (*app, error) {
+	// Unset ambient Vault variables because a missing CA file fails client construction
+	// and VAULT_SKIP_VERIFY disables certificate verification.
+	if err := vaultenv.Clear(); err != nil {
+		return nil, err
 	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		out.Print(ui.Fatal, err.Error())
-		return 1
+		return nil, err
 	}
 	root, err := resolveProjectRoot(cwd)
 	if err != nil {
-		out.Print(ui.Fatal, err.Error())
-		return 1
+		return nil, err
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		out.Print(ui.Fatal, err.Error())
-		return 1
+		return nil, err
 	}
 
-	a := &app{
-		root:       root,
-		home:       home,
-		ansibleDir: filepath.Join(root, "ansible"),
-		out:        out,
-		in:         bufio.NewReader(os.Stdin),
+	topologyPath := filepath.Join(root, topology.FileName)
+	topo, err := topology.Load(topologyPath)
+	if err != nil {
+		return nil, err
+	}
+	credsConfig, err := credentials.Load(topologyPath)
+	if err != nil {
+		return nil, err
+	}
+	creds, err := credsConfig.BuildCredentials()
+	if err != nil {
+		return nil, err
+	}
+	issued, err := issuedtokens.Load(topologyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &app{
+		root:         root,
+		home:         home,
+		ansibleDir:   filepath.Join(root, "ansible"),
+		topology:     topo,
+		credentials:  creds,
+		issuedTokens: issued,
+		out:          out,
+		in:           bufio.NewReader(os.Stdin),
 		resolveOrigin: func(ctx context.Context) (gitlabOrigin, error) {
 			remote, err := gitremote.Resolve(ctx, root)
 			if err != nil {
@@ -81,35 +116,10 @@ func execute(args []string) int {
 			}
 			return gitlabOrigin{WebURL: remote.WebURL(), APIURL: remote.APIURL(), TopLevelGroup: remote.TopLevelGroup()}, nil
 		},
-	}
+	}, nil
+}
 
-	topologyPath := filepath.Join(root, topology.FileName)
-	topo, err := topology.Load(topologyPath)
-	if err != nil {
-		out.Print(ui.Fatal, err.Error())
-		return 1
-	}
-	a.topology = topo
-
-	credsConfig, err := credentials.Load(topologyPath)
-	if err != nil {
-		out.Print(ui.Fatal, err.Error())
-		return 1
-	}
-	creds, err := credsConfig.BuildCredentials()
-	if err != nil {
-		out.Print(ui.Fatal, err.Error())
-		return 1
-	}
-	a.credentials = creds
-
-	issued, err := issuedtokens.Load(topologyPath)
-	if err != nil {
-		out.Print(ui.Fatal, err.Error())
-		return 1
-	}
-	a.issuedTokens = issued
-
+func (a *app) newRootCmd() *cobra.Command {
 	var rootCmd *cobra.Command
 	rootCmd = &cobra.Command{
 		Use:           "governance",
@@ -140,17 +150,7 @@ func execute(args []string) int {
 		a.newStateAuditCmd(),
 		a.newEnvCmd(),
 	)
-
-	rootCmd.SetArgs(args)
-	if err := rootCmd.Execute(); err != nil {
-		out.Print(ui.Error, err.Error())
-		return 1
-	}
-	return 0
-}
-
-func main() {
-	os.Exit(execute(os.Args[1:]))
+	return rootCmd
 }
 
 func resolveProjectRoot(start string) (string, error) {

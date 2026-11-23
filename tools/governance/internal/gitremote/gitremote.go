@@ -62,7 +62,7 @@ func (r Remote) APIURL() string {
 	return r.WebURL() + "/api/v4"
 }
 
-// TopLevelGroup returns the first segment of the project path as the path of the top-level group.
+// TopLevelGroup returns the first segment of the project path as the top level group path.
 func (r Remote) TopLevelGroup() string {
 	group, _, _ := strings.Cut(r.ProjectPath, "/")
 	return group

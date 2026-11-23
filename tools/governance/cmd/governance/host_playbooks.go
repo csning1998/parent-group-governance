@@ -9,54 +9,22 @@ import (
 
 	"github.com/apenella/go-ansible/v2/pkg/playbook"
 
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ansibleops"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ansible"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vaultops"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vault"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/issuedtokens"
 )
 
-// hostPlaybook is one workstation playbook with the extra vars injected by the CLI.
 type hostPlaybook struct {
 	file      string
 	extraVars map[string]any
 	doneMsg   string
 }
 
-// hostStep executes one workstation bootstrap action with the become password of the run.
 type hostStep func(ctx context.Context, becomePass string) error
 
-func (a *app) playbookStep(build func() (hostPlaybook, error)) hostStep {
-	return func(ctx context.Context, becomePass string) error {
-		pb, err := build()
-		if err != nil {
-			return err
-		}
-		return a.executePlaybook(ctx, pb, becomePass)
-	}
-}
-
-// runHostSteps prompts once for the privilege escalation password, cancelling on a blank answer,
-// and executes each step in order.
-func (a *app) runHostSteps(ctx context.Context, steps ...hostStep) error {
-	becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
-	if err != nil {
-		return fmt.Errorf("read ANSIBLE_BECOME_PASS: %w", err)
-	}
-	if becomePass == "" {
-		a.out.Print(ui.Info, msgCancelled)
-		return nil
-	}
-	for _, step := range steps {
-		if err := step(ctx, becomePass); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// runHostAll applies workstation prerequisites in bootstrap order: SELinux, local CA generation,
-// libvirt configuration, and Vault Proxy deployment. The operator enters privilege escalation credentials once.
+// runHostAll runs workstation prerequisites in bootstrap order under a single privilege escalation prompt.
 func (a *app) runHostAll(ctx context.Context) error {
 	return a.runHostSteps(
 		ctx,
@@ -88,11 +56,43 @@ func (a *app) runHostVaultAuditPlaybook(ctx context.Context) error {
 	return a.executePlaybook(ctx, a.buildVaultAuditPlaybook(), "")
 }
 
-// executePlaybook runs one workstation playbook with injected become password.
+func (a *app) runHostSteps(ctx context.Context, steps ...hostStep) error {
+	becomePass, err := a.out.PromptSecret(a.in, int(os.Stdin.Fd()), "ANSIBLE_BECOME_PASS: ")
+	if err != nil {
+		return fmt.Errorf("read ANSIBLE_BECOME_PASS: %w", err)
+	}
+	if becomePass == "" {
+		a.out.Print(ui.Info, msgCancelled)
+		return nil
+	}
+	for _, step := range steps {
+		if err := step(ctx, becomePass); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *app) playbookStep(build func() (hostPlaybook, error)) hostStep {
+	return func(ctx context.Context, becomePass string) error {
+		pb, err := build()
+		if err != nil {
+			return err
+		}
+		return a.executePlaybook(ctx, pb, becomePass)
+	}
+}
+
 func (a *app) executePlaybook(ctx context.Context, pb hostPlaybook, becomePass string) error {
 	opts := &playbook.AnsiblePlaybookOptions{Inventory: "inventory/localhost.yaml", ExtraVars: pb.extraVars}
-	extraEnv := map[string]string{"ANSIBLE_BECOME_PASS": becomePass}
-	if err := ansibleops.RunPlaybook(ctx, a.ansibleDir, a.ansibleDir, pb.file, opts, extraEnv); err != nil {
+	err := ansible.ExecutePlaybook(ctx, ansible.PlaybookRequest{
+		AnsibleDir:   a.ansibleDir,
+		RunDir:       a.ansibleDir,
+		PlaybookFile: pb.file,
+		Options:      opts,
+		ExtraEnv:     map[string]string{"ANSIBLE_BECOME_PASS": becomePass},
+	})
+	if err != nil {
 		return fmt.Errorf("ansible-playbook %s: %w", pb.file, err)
 	}
 	a.out.Print(ui.OK, pb.doneMsg)
@@ -122,7 +122,6 @@ func (a *app) buildLibvirtPlaybook() (hostPlaybook, error) {
 	}, nil
 }
 
-// buildVaultProxyPlaybook resolves the GitLab origin endpoints and injects the endpoints for rendering into vault-proxy-env.
 func (a *app) buildVaultProxyPlaybook(ctx context.Context) (hostPlaybook, error) {
 	facts, err := config.DetectHostFacts()
 	if err != nil {
@@ -144,7 +143,6 @@ func (a *app) buildVaultProxyPlaybook(ctx context.Context) (hostPlaybook, error)
 	}, nil
 }
 
-// buildHostTelemetryPlaybook reads the allocated scrape subnet from the Vault registry and prepares the host telemetry playbook.
 func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, error) {
 	kv, err := a.newAdministratorKV()
 	if err != nil {
@@ -159,8 +157,8 @@ func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, err
 	if err != nil {
 		return hostPlaybook{}, err
 	}
-	// Reissues the publish listener certificate to include the scrape IP in its SAN before HAProxy binds the metrics frontend.
-	if _, err := vaultops.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(scrapeIP)); err != nil {
+	// Reissue the publish listener certificate to include the scrape IP in its SAN before HAProxy binds the metrics frontend.
+	if _, err := vault.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(scrapeIP)); err != nil {
 		return hostPlaybook{}, err
 	}
 	facts, err := config.DetectHostFacts()
