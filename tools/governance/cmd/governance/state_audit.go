@@ -32,7 +32,7 @@ func (a *app) resolveStateAuditConfig(opts stateaudit.Options) (stateaudit.Confi
 	return stateaudit.BuildConfigFromEnv(dir, os.Getenv, opts.History)
 }
 
-// runStateAuditMenu scans every historical version, as the acceptance of a merge request does.
+// runStateAuditMenu scans every historical version to match merge request acceptance checks.
 func (a *app) runStateAuditMenu(ctx context.Context) error {
 	cfg, err := a.resolveStateAuditConfig(stateaudit.Options{History: true})
 	if err != nil {
