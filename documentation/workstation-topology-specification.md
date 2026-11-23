@@ -25,14 +25,14 @@ The topology file is organized into five distinct planes:
 
 The `vault_bastion` map configures the network listener endpoints bound by the local Bastion Vault instance.
 
-#### `vault_bastion.loopback_address`
+#### `vault_bastion.loopback_ip`
 
 - Type: `string` (IPv4 address literal)
 - Default: `"127.0.0.1"`
 - Constraint: The address MUST be an IPv4 loopback address bound exclusively to host-local loopback interfaces.
 - Semantics: Dedicated interface for local operator CLI interactions and local Vault Proxy egress traffic. Host firewall rules MUST NOT expose this address to external or virtual networks.
 
-#### `vault_bastion.publish_address`
+#### `vault_bastion.publish_ip`
 
 - Type: `string` (IPv4 address literal)
 - Default: `"172.16.0.1"`
@@ -72,8 +72,8 @@ The `vault_bastion` map configures the network listener endpoints bound by the l
 - Type: `object`
 - Semantics: The host segment on which the observability scrapers reach the metrics of the host, the third octet 249 of the network allocation (ADR-143). The network allocation facts reside in the Bastion Vault. The file therefore declares the registry location of the segment instead of the segment.
 - Child fields:
-    - `network_name` (`string`): Name of the routed libvirt network which carries the host address on the segment (`host-telemetry-scrape`).
-    - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, and `address_field` of the segment and the host address. `foundation-vault-bastion` publishes both at `registry/platform/network/allocation`.
+    - `network_name` (`string`): Name of the routed libvirt network which contains the host address on the segment (`host-telemetry-scrape`).
+    - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, and `ip_field` of the segment and the host address. `foundation-vault-bastion` publishes both at `registry/platform/network/allocation`.
     - `host_exporter_ports` (`list(number)`): Ports of node_exporter and the libvirt exporter on the host. The scrape ports are these ports and `vault_bastion.metrics_port`.
 
 ### Item B. Access Plane: `operator_vault_proxy`
@@ -114,7 +114,7 @@ The `operator_vault_proxy` map configures workstation local forwarding proxies. 
 #### `operator_vault_proxy.governance_owner_code`
 
 - Type: `string`
-- Semantics: Owner code of this repository (`parent-group-governance`). The identities `administrator` and `credential-rotator` carry the owner code. The administrator writes below `secret/<governance_owner_code>/`. The field is the single declaration of the governance owner code for Terraform, Ansible, and the CLI.
+- Semantics: Owner code of this repository (`parent-group-governance`). The identities `administrator` and `credential-rotator` map to the owner code. The administrator writes below `secret/<governance_owner_code>/`. The field is the single declaration of the governance owner code for Terraform, Ansible, and the CLI.
 
 #### `operator_vault_proxy.identities`
 
@@ -127,8 +127,8 @@ The `operator_vault_proxy` map configures workstation local forwarding proxies. 
     - `allowed_read_registry_paths` (`list(string)`): Registry domains below `platform/`, such as `platform/ai-provider` declared by `credential-distributor` and `consumer`.
     - `code_reviewer_variable_projects` (`list(string)`): Project paths below the top level group, such as `platform-engineering-lab/platform-foundation`. Each listed project receives the code reviewer bot variables from `./governance credentials issue code-reviewer-variables`. The CLI prefixes the top level group of the origin remote. Only `workstation-topology.yaml` grants a project the bot tokens. A project cannot register itself.
 - Naming: The identity key determines the access tier and the owner code. The file declares neither field.
-    - `administrator` and `credential-rotator` carry the tier of the same name and `governance_owner_code`.
-    - `credential-distributor-<owner code>` and `consumer-<owner code>` carry the tier of the prefix and the owner code after the prefix.
+    - `administrator` and `credential-rotator` map to the tier of the same name and `governance_owner_code`.
+    - `credential-distributor-<owner code>` and `consumer-<owner code>` map to the tier of the prefix and the owner code after the prefix.
     - Every other key is a tenant. The key equals the owner code of the tenant.
     - Every identity except `credential-rotator` reads the GitLab token of its owner at `<owner code>/terraform/state-backend`. `vault-proxy-env` exports the token as `TF_HTTP_PASSWORD`.
     - The Go package `internal/topology`, the locals of `access-operator-proxy.tf`, and the template `vault-proxy-env.sh.j2` implement the same rule.
@@ -200,17 +200,17 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 
 | Field                  | Consuming Component                | Source File Path                                                     | Usage Description                                 |
 | ---------------------- | ---------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
-| `loopback_address`     | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `cluster_addr` and loopback listener.   |
-| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `api_addr`.                             |
-| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/libvirt-to-host.xml.j2` | Renders firewalld zone rich rule for VM bridge.   |
+| `loopback_ip`          | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `cluster_addr` and loopback listener.   |
+| `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Populates `api_addr`.                             |
+| `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/libvirt-to-host.xml.j2` | Renders firewalld zone rich rule for VM bridge.   |
 | `api_port`             | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures TCP port on HTTPS listeners.           |
-| `api_port`             | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.vault_bastion_endpoint`.         |
+| `api_port`             | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/context.tf`               | Assembles `local.vault_bastion_url`.              |
 | `api_port`             | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Resolves `BastionVault.Endpoint` string.          |
 | `cluster_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures Raft cluster synchronization TCP port. |
 | `metrics_port`         | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures unauthenticated telemetry TCP port.    |
-| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/haproxy.cfg.j2`         | Binds the terminator frontends.                   |
-| `publish_address`      | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `TERMINATOR_PUBLISH_ADDRESS`.             |
-| `loopback_address`     | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `VAULT_ADDR` of `vault-server`.           |
+| `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/haproxy.cfg.j2`         | Binds the terminator frontends.                   |
+| `publish_ip`           | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `TERMINATOR_PUBLISH_IP`.                  |
+| `loopback_ip`          | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/tasks/E-vault-config.yaml`        | Renders `VAULT_ADDR` of `vault-server`.           |
 | `publish_backend_port` | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/vault.hcl.j2`           | Configures the PROXY protocol listener.           |
 | `publish_backend_port` | Ansible workstation_libvirt        | `ansible/roles/workstation_libvirt/templates/haproxy.cfg.j2`         | Targets the terminator API backend.               |
 

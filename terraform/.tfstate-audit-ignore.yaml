@@ -23,9 +23,9 @@ ignores:
         - data_json.service_network_cidr
         - data_json.stage_domains
         - data_json.host_telemetry_scrape_cidr
-        - data_json.host_telemetry_scrape_address
+        - data_json.host_telemetry_scrape_ip
         - data_json.host_log_rendezvous_cidr
-        - data_json.host_log_rendezvous_address
+        - data_json.host_log_rendezvous_ip
         - data_json.host_log_rendezvous_server_names
         - data_json.network_baseline
       reason: The registry republishes the network allocation facts, the host segments, and the network baseline.
@@ -36,7 +36,7 @@ ignores:
         - data_json.pki
         - data_json.transit_unseal
         - data_json.vault
-      reason: The registry holds endpoints, mount paths, policy names, and public certificates.
+      reason: The registry contains endpoints, mount paths, policy names, and public certificates.
 
   group-ai-provider-anthropic:
     - address: vault_kv_secret_v2.registry_platform_ai_provider_anthropic
@@ -80,4 +80,4 @@ ignores:
   administration-gitlab-project:
     - address: module.github_mirror.gitlab_project_push_mirror.this
       path: url
-      reason: The mirror URL uses the SSH scheme and carries no password.
+      reason: The mirror URL uses the SSH scheme and omits the password.

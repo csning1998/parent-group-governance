@@ -9,7 +9,7 @@ resource "vault_mount" "registry" {
   description = "Facts which parent-group-governance publishes to tenants. Tenants read, and only parent-group-governance writes."
 }
 
-# Each field holds one category in JSON, and a consumer decodes only the consumed field.
+# Each field stores one category in JSON, and a consumer decodes only the consumed field.
 resource "vault_kv_secret_v2" "registry_platform_network_allocation" {
   provider = vault.bastion
   mount    = vault_mount.registry.path
@@ -22,9 +22,9 @@ resource "vault_kv_secret_v2" "registry_platform_network_allocation" {
     pod_network_cidr                 = local.network_allocation.pod_network_cidr
     service_network_cidr             = local.network_allocation.service_network_cidr
     host_telemetry_scrape_cidr       = local.host_segment_cidrs.host_telemetry_scrape
-    host_telemetry_scrape_address    = local.host_telemetry_scrape_address
+    host_telemetry_scrape_ip         = local.host_telemetry_scrape_ip
     host_log_rendezvous_cidr         = local.host_segment_cidrs.host_log_rendezvous
-    host_log_rendezvous_address      = local.host_log_rendezvous_address
+    host_log_rendezvous_ip           = local.host_log_rendezvous_ip
     host_log_rendezvous_server_names = jsonencode(local.host_log_rendezvous_server_names)
     network_baseline                 = jsonencode(local.network_baseline)
   })
@@ -38,9 +38,9 @@ resource "vault_kv_secret_v2" "registry_tenant_bastion" {
   name     = "${each.key}/bastion"
   data_json = jsonencode({
     vault = jsonencode({
-      endpoint             = local.vault_bastion_endpoint
+      endpoint             = local.vault_bastion_url
       listener_ca_cert_pem = local.vault_bastion_listener_ca_bundle_pem
-      approle_mount_path   = vault_auth_backend.approle.path
+      approle_auth_mount   = vault_auth_backend.approle.path
     })
     pki = jsonencode({
       trust_anchors = {

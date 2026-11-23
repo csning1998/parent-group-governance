@@ -103,7 +103,7 @@
 
 - name: "D7. Wait for the listener of each Proxy"
   ansible.builtin.wait_for:
-    host: "{{ vault_bastion.loopback_address }}"
+    host: "{{ vault_bastion.loopback_ip }}"
     port: "{{ operator_vault_proxy.identities[item].listen_port }}"
     timeout: 30
   loop: "{{ operator_vault_proxy.identities.keys() | list }}"

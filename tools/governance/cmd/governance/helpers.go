@@ -20,8 +20,8 @@ func (a *app) newBastionVaultConfig() vaultclient.Config {
 
 func (a *app) newBastionVaultListeners() vaultops.Listeners {
 	return vaultops.Listeners{
-		Loopback: net.ParseIP(a.topology.BastionVault.LoopbackAddress),
-		Publish:  net.ParseIP(a.topology.BastionVault.PublishAddress),
+		Loopback: net.ParseIP(a.topology.BastionVault.LoopbackIP),
+		Publish:  net.ParseIP(a.topology.BastionVault.PublishIP),
 	}
 }
 

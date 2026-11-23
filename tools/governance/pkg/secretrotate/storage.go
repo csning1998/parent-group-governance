@@ -25,8 +25,8 @@ func acquireLock(ctx context.Context, client *vaultapi.Client, mount, path, fiel
 	var lastErr error
 	for range acquireLockMaxAttempts {
 		doc, _ := readDocument(ctx, client, mount, path)
-		if lock, held := readActiveLock(doc, field); held {
-			return "", fmt.Errorf("secretrotate: rotation aborted, %s holds the lock on %s/%s#%s until %s",
+		if lock, active := readActiveLock(doc, field); active {
+			return "", fmt.Errorf("secretrotate: rotation aborted, %s owns the lock on %s/%s#%s until %s",
 				lock.Holder, mount, path, field, lock.ExpiresAt.Format(time.RFC3339))
 		}
 		holder := fmt.Sprintf("rotate-%d", time.Now().UnixNano())
@@ -76,11 +76,11 @@ func checkNotLocked(ctx context.Context, client *vaultapi.Client, mount, path, f
 	if !ok {
 		return nil
 	}
-	lock, held := readActiveLock(doc, field)
-	if !held {
+	lock, active := readActiveLock(doc, field)
+	if !active {
 		return nil
 	}
-	return fmt.Errorf("secretrotate: rotation aborted, %s holds the lock on %s/%s#%s until %s",
+	return fmt.Errorf("secretrotate: rotation aborted, %s owns the lock on %s/%s#%s until %s",
 		lock.Holder, mount, path, field, lock.ExpiresAt.Format(time.RFC3339))
 }
 
@@ -110,7 +110,7 @@ func parseLock(raw string) (rotationLock, bool) {
 	return lock, true
 }
 
-// computeRotationLockTTL sizes the lock against a deadline carried by ctx when one is present.
+// computeRotationLockTTL sizes the lock against a deadline attached to ctx when one is present.
 func computeRotationLockTTL(ctx context.Context) time.Duration {
 	deadline, ok := ctx.Deadline()
 	if !ok {
@@ -230,7 +230,7 @@ func hasDocument(ctx context.Context, client *vaultapi.Client, mount, path strin
 	return err == nil && secret != nil
 }
 
-// hasVersionHistory reports whether path once held data. Callers MUST also confirm hasDocument is
+// hasVersionHistory reports whether path once contained data. Callers MUST also confirm hasDocument is
 // false before treating this as a destroyed field.
 func hasVersionHistory(ctx context.Context, client *vaultapi.Client, mount, path string) bool {
 	secret, err := client.Logical().ReadWithContext(ctx, mount+"/metadata/"+path)

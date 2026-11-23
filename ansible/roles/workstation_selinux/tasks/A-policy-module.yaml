@@ -19,7 +19,7 @@
   rescue:
     - name: "Block A1: Policy build tooling failed"
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
+        msg: "{{ ansible_failed_result.msg | default('refer to the task output above') }}"
 
 - name: "Block A2: Deploy, compile, and install each policy module"
   block:
@@ -66,4 +66,4 @@
   rescue:
     - name: "Block A2: Deploy, compile, and install policy module failed"
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
+        msg: "{{ ansible_failed_result.msg | default('refer to the task output above') }}"

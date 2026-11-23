@@ -57,10 +57,10 @@
     owner: "{{ workstation_libvirt_operator_user }}"
     group: "{{ workstation_libvirt_operator_user }}"
     mode: "0644"
-  when: (ansible_local | default({})).host_telemetry.scrape_address is defined
+  when: (ansible_local | default({})).host_telemetry.scrape_ip is defined
 
 # Writes listener addresses to environment files instead of hardcoding IPs in compose.yml. Both terminator containers
-# read terminator.env. The role appends TERMINATOR_SCRAPE_ADDRESS when the scrape IP fact exists.
+# read terminator.env. The role appends TERMINATOR_SCRAPE_IP when the scrape IP fact exists.
 - name: "E5. Render the container environment files from the declared listeners"
   ansible.builtin.copy:
     content: "{{ item.content }}\n"
@@ -70,18 +70,18 @@
     mode: "0644"
   loop:
     - dest: "{{ workstation_libvirt_vault.config_path | dirname }}/vault.env"
-      content: "VAULT_ADDR=https://{{ vault_bastion.loopback_address }}:{{ vault_bastion.api_port }}"
+      content: "VAULT_ADDR=https://{{ vault_bastion.loopback_ip }}:{{ vault_bastion.api_port }}"
     - dest: "{{ workstation_libvirt_terminator.config_dir }}/terminator.env"
       content: "{{ _workstation_libvirt_terminator_env | join('\n') }}"
   loop_control:
     label: "{{ item.dest | basename }}"
   vars:
-    _workstation_libvirt_scrape_address: "{{ (ansible_local | default({})).host_telemetry.scrape_address | default('') }}"
+    _workstation_libvirt_scrape_ip: "{{ (ansible_local | default({})).host_telemetry.scrape_ip | default('') }}"
     _workstation_libvirt_terminator_env: >-
       {{
-        ['TERMINATOR_PUBLISH_ADDRESS=' ~ vault_bastion.publish_address] +
+        ['TERMINATOR_PUBLISH_IP=' ~ vault_bastion.publish_ip] +
         (
-          ['TERMINATOR_SCRAPE_ADDRESS=' ~ _workstation_libvirt_scrape_address]
-          if _workstation_libvirt_scrape_address else []
+          ['TERMINATOR_SCRAPE_IP=' ~ _workstation_libvirt_scrape_ip]
+          if _workstation_libvirt_scrape_ip else []
         )
       }}

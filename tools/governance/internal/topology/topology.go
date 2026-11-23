@@ -20,9 +20,9 @@ const FileName = "workstation-topology.yaml"
 type AccessRole string
 
 const (
-	// AccessRoleAdministrator identifies the operator proxy carrying administrator privileges.
+	// AccessRoleAdministrator identifies the operator proxy with administrator privileges.
 	AccessRoleAdministrator AccessRole = "administrator"
-	// AccessRoleCredentialRotator identifies the operator proxy carrying credential rotation privileges.
+	// AccessRoleCredentialRotator identifies the operator proxy with credential rotation privileges.
 	AccessRoleCredentialRotator AccessRole = "credential-rotator"
 )
 
@@ -34,16 +34,16 @@ const (
 
 // BastionVault is the listener topology of the Bastion Vault server.
 type BastionVault struct {
-	LoopbackAddress string `yaml:"loopback_address"` // host loopback address (127.0.0.1) for local processes
-	PublishAddress  string `yaml:"publish_address"`  // hypervisor bridge address (172.16.0.1) for guest VM / runner access
-	APIPort         int    `yaml:"api_port"`         // primary HTTPS API port bound by Vault daemon (8200)
-	ClusterPort     int    `yaml:"cluster_port"`     // Raft cluster request forwarding and HA interconnect port (8201)
-	MetricsPort     int    `yaml:"metrics_port"`     // unauthenticated Prometheus metrics telemetry scraping port (8202)
+	LoopbackIP  string `yaml:"loopback_ip"`  // host loopback address (127.0.0.1) for local processes
+	PublishIP   string `yaml:"publish_ip"`   // hypervisor bridge address (172.16.0.1) for guest VM / runner access
+	APIPort     int    `yaml:"api_port"`     // primary HTTPS API port bound by Vault daemon (8200)
+	ClusterPort int    `yaml:"cluster_port"` // Raft cluster request forwarding and HA interconnect port (8201)
+	MetricsPort int    `yaml:"metrics_port"` // unauthenticated Prometheus metrics telemetry scraping port (8202)
 }
 
 // APIEndpoint returns the loopback API listener URL (e.g. https://127.0.0.1:8200) used by CLI operations.
 func (b BastionVault) APIEndpoint() string {
-	return "https://" + net.JoinHostPort(b.LoopbackAddress, strconv.Itoa(b.APIPort))
+	return "https://" + net.JoinHostPort(b.LoopbackIP, strconv.Itoa(b.APIPort))
 }
 
 // ProxyIdentity defines one operator proxy instance listening on loopback and mapping to a Vault cert role.
@@ -53,7 +53,7 @@ type ProxyIdentity struct {
 	CodeReviewerVariableProjects []string `yaml:"code_reviewer_variable_projects"` // project paths relative to the top-level group which receive the code reviewer CI/CD variables
 }
 
-// IdentityRole holds the access tier, owner code, and KV v2 state token path derived from an identity name.
+// IdentityRole contains the access tier, owner code, and KV v2 state token path derived from an identity name.
 type IdentityRole struct {
 	AccessTier       string
 	OwnerCode        string
@@ -92,11 +92,11 @@ func (v VaultTopology) ListCodeReviewerVariableProjects(topLevelGroup string) []
 
 // StateBackend defines the shared KV v2 mount and field schema across state backend paths.
 type StateBackend struct {
-	VaultKVMount string `yaml:"vault_kv_mount"` // KV v2 mount holding state backend tokens
-	VaultKVField string `yaml:"vault_kv_field"` // secret key holding the GitLab state backend token
+	VaultKVMount string `yaml:"vault_kv_mount"` // KV v2 mount storing state backend tokens
+	VaultKVField string `yaml:"vault_kv_field"` // secret key storing the GitLab state backend token
 }
 
-// OperatorVaultProxy holds client connection parameters and identity mappings for operator Vault proxies.
+// OperatorVaultProxy contains client connection parameters and identity mappings for operator Vault proxies.
 type OperatorVaultProxy struct {
 	GovernanceOwnerCode string `yaml:"governance_owner_code"` // repository owner code assigned to the administrator and credential-rotator identities
 
@@ -130,7 +130,7 @@ func (v VaultTopology) ResolveStateBackendToken(ownerCode string) (KVField, erro
 	return KVField{Mount: backend.VaultKVMount, Path: paths[0], Field: backend.VaultKVField}, nil
 }
 
-// ProxyEndpoint holds the client connection parameters required to communicate with a local operator Vault Proxy.
+// ProxyEndpoint contains the client connection parameters required to communicate with a local operator Vault Proxy.
 type ProxyEndpoint struct {
 	Identity   string // operator proxy identity name (e.g. governance, rotation, foundation)
 	Address    string // loopback HTTPS URL of the local proxy listener (e.g. https://127.0.0.1:8210)
@@ -142,13 +142,13 @@ type ProxyEndpoint struct {
 
 // HostTelemetryRegistry specifies the Vault KV v2 coordinates at which foundation-vault-bastion publishes the scrape subnet.
 type HostTelemetryRegistry struct {
-	Mount        string `yaml:"vault_kv_mount"`
-	Path         string `yaml:"vault_kv_path"`
-	CIDRField    string `yaml:"cidr_field"`
-	AddressField string `yaml:"address_field"`
+	Mount     string `yaml:"vault_kv_mount"`
+	Path      string `yaml:"vault_kv_path"`
+	CIDRField string `yaml:"cidr_field"`
+	IPField   string `yaml:"ip_field"`
 }
 
-// HostTelemetryScrape holds the Vault registry reference for the host telemetry scrape network.
+// HostTelemetryScrape contains the Vault registry reference for the host telemetry scrape network.
 type HostTelemetryScrape struct {
 	Registry HostTelemetryRegistry `yaml:"registry"`
 }
@@ -176,7 +176,7 @@ func (v VaultTopology) ResolveProxyEndpoint(home string, role AccessRole) (Proxy
 	base := filepath.Join(home, v.OperatorVaultProxy.UserConfigDir)
 	return ProxyEndpoint{
 		Identity:   name,
-		Address:    "https://" + net.JoinHostPort(v.BastionVault.LoopbackAddress, strconv.Itoa(v.OperatorVaultProxy.Identities[name].ListenPort)),
+		Address:    "https://" + net.JoinHostPort(v.BastionVault.LoopbackIP, strconv.Itoa(v.OperatorVaultProxy.Identities[name].ListenPort)),
 		CACert:     filepath.Join(base, "ca.pem"),
 		ClientCert: filepath.Join(base, name, "client.pem"),
 		ClientKey:  filepath.Join(base, name, "client-key.pem"),
@@ -196,8 +196,8 @@ func Load(path string) (VaultTopology, error) {
 		return VaultTopology{}, fmt.Errorf("topology: parse %s: %w", path, err)
 	}
 	b := v.BastionVault
-	if net.ParseIP(b.LoopbackAddress) == nil || net.ParseIP(b.PublishAddress) == nil {
-		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion MUST declare loopback_address and publish_address as IP addresses", path)
+	if net.ParseIP(b.LoopbackIP) == nil || net.ParseIP(b.PublishIP) == nil {
+		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion MUST declare loopback_ip and publish_ip as IP addresses", path)
 	}
 	if b.APIPort < 1 || b.APIPort > 65535 {
 		return VaultTopology{}, fmt.Errorf("topology: %s: vault_bastion.api_port %d is outside 1 to 65535", path, b.APIPort)

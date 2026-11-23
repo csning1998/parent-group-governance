@@ -30,8 +30,7 @@ type GroupVariableWriter interface {
 	UpsertGroupVariable(ctx context.Context, groupID string, v gitlabapi.Variable) error
 }
 
-// SonarQubeAnalysisTokenRotation provisions a replacement analysis token into Vault and GitLab
-// prior to revoking earlier tokens, maintaining uninterrupted CI access.
+// SonarQubeAnalysisTokenRotation writes a new analysis token to Vault and GitLab before revoking prior tokens to keep CI uninterrupted.
 type SonarQubeAnalysisTokenRotation struct {
 	Config               SonarQubeAnalysisTokenConfig
 	GroupID              string
@@ -53,12 +52,12 @@ func (r SonarQubeAnalysisTokenRotation) Run(ctx context.Context) ([]string, erro
 	}
 	variable := gitlabapi.Variable{Key: r.Config.GitLabGroupVariableKey, Value: token, Masked: true, Hidden: true, Raw: true}
 	if err := r.GitLabGroupVariables.UpsertGroupVariable(ctx, r.GroupID, variable); err != nil {
-		return nil, fmt.Errorf("issuedtokens: the Bastion Vault holds %s while the group variable %s keeps the earlier token, rerun to converge: %w", name, variable.Key, err)
+		return nil, fmt.Errorf("issuedtokens: the Bastion Vault stores %s while the group variable %s retains the earlier token, rerun to converge: %w", name, variable.Key, err)
 	}
 	return r.revokeEarlierTokens(ctx, name)
 }
 
-// revokeEarlierTokens matches the bare prefix and tokens named after the prefix and a hyphen because group-sonarqube named the initial token after the prefix alone.
+// revokeEarlierTokens matches both the bare prefix and hyphenated timestamps because group-sonarqube named the initial token with only the bare prefix.
 func (r SonarQubeAnalysisTokenRotation) revokeEarlierTokens(ctx context.Context, current string) ([]string, error) {
 	tokens, err := r.SonarQube.List(ctx)
 	if err != nil {

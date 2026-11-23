@@ -15,7 +15,7 @@
   rescue:
     - name: "Block B1: Register anchored fcontext failed"
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
+        msg: "{{ ansible_failed_result.msg | default('refer to the task output above') }}"
 
 - name: "Block B2: Restore drifted labels"
   block:
@@ -52,7 +52,7 @@
   rescue:
     - name: "Block B2: Restore drifted labels failed"
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
+        msg: "{{ ansible_failed_result.msg | default('refer to the task output above') }}"
 
 - name: "Block B3: Restore Podman API socket labels"
   block:
@@ -89,7 +89,7 @@
   rescue:
     - name: "Block B3: Restore Podman API socket labels failed"
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
+        msg: "{{ ansible_failed_result.msg | default('refer to the task output above') }}"
 
 # A generated allow module would widen xdm_t onto unlabeled_t.
 - name: "Block B4: Restore system policy labels"
@@ -127,4 +127,4 @@
   rescue:
     - name: "Block B4: Restore system policy labels failed"
       ansible.builtin.fail:
-        msg: "{{ ansible_failed_result.msg | default('see task output above') }}"
+        msg: "{{ ansible_failed_result.msg | default('refer to the task output above') }}"

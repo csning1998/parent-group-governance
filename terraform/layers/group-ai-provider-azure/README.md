@@ -79,7 +79,7 @@ Layer deployment requires administrative privileges across both the Azure subscr
 - The operator account requires explicit role assignment permissions on the Key Vault scope.
 - The subscription `Owner` role inherently includes permission to manage role assignments.
 - The subscription `Contributor` role does not grant role assignment authority.
-- An operator holding only `Contributor` status must obtain an additional role, such as `User Access Administrator` or `Role Based Access Control Administrator`.
+- An operator with only `Contributor` status must obtain an additional role, such as `User Access Administrator` or `Role Based Access Control Administrator`.
 - The layer does not create Microsoft Entra ID applications. The operator therefore does not require a Microsoft Entra ID administrative role.
 - The operator shell environment requires valid GitLab HTTP backend credentials stored in `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD`.
 
@@ -213,4 +213,4 @@ Lifecycle guardrails protect root cognitive infrastructure against accidental de
 - The resources `azurerm_key_vault.openai` and `azurerm_cognitive_account_customer_managed_key.openai` declare `lifecycle { prevent_destroy = true }` protection blocks.
 - This encryption guardrail prevents cryptographic data loss by preserving the active encryption key material.
 - Decommissioning the Key Vault requires an intentional administrative sequence.
-- Purge protection cannot be disabled once enabled, hence a deleted Key Vault stays soft deleted for the 90 days of `soft_delete_retention_days` before Azure deletes the Key Vault permanently.
+- Purge protection cannot be disabled once enabled, hence a deleted Key Vault remains soft deleted for the 90 days of `soft_delete_retention_days` before Azure deletes the Key Vault permanently.

@@ -123,7 +123,7 @@ func TestSonarQubeAnalysisTokenRotationRun(t *testing.T) {
 				t.Fatalf("got error %v, want an error %t", err, tc.wantErr)
 			}
 			if got := vault.written[analysisTokenConfig.Vault]; got != tc.wantVault {
-				t.Fatalf("the Bastion Vault holds %q, want %q", got, tc.wantVault)
+				t.Fatalf("the Bastion Vault stores %q, want %q", got, tc.wantVault)
 			}
 			if gitlab.variable != tc.wantVariable {
 				t.Fatalf("the group variable is %+v, want %+v", gitlab.variable, tc.wantVariable)

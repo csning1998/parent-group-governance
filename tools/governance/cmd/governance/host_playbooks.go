@@ -155,12 +155,12 @@ func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, err
 	if err != nil {
 		return hostPlaybook{}, err
 	}
-	address, err := kv.ReadField(ctx, issuedtokens.VaultField{Mount: registry.Mount, Path: registry.Path, Field: registry.AddressField})
+	scrapeIP, err := kv.ReadField(ctx, issuedtokens.VaultField{Mount: registry.Mount, Path: registry.Path, Field: registry.IPField})
 	if err != nil {
 		return hostPlaybook{}, err
 	}
 	// Reissues the publish listener certificate to include the scrape IP in its SAN before HAProxy binds the metrics frontend.
-	if _, err := vaultops.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(address)); err != nil {
+	if _, err := vaultops.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(scrapeIP)); err != nil {
 		return hostPlaybook{}, err
 	}
 	facts, err := config.DetectHostFacts()
@@ -170,10 +170,10 @@ func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, err
 	return hostPlaybook{
 		file: "playbooks/workstation_host_telemetry.yaml",
 		extraVars: map[string]any{
-			"workstation_host_telemetry_scrape_cidr":    cidr,
-			"workstation_host_telemetry_scrape_address": address,
-			"workstation_libvirt_operator_user":         facts.CurrentUname,
-			"workstation_libvirt_vault_config_path":     filepath.Join(a.root, "vault", "vault.hcl"),
+			"workstation_host_telemetry_scrape_cidr": cidr,
+			"workstation_host_telemetry_scrape_ip":   scrapeIP,
+			"workstation_libvirt_operator_user":      facts.CurrentUname,
+			"workstation_libvirt_vault_config_path":  filepath.Join(a.root, "vault", "vault.hcl"),
 		},
 		doneMsg: "Host telemetry scrape network applied.",
 	}, nil

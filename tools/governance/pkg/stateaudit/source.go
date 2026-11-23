@@ -15,11 +15,11 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// ErrStateMissing reports a layer whose backend holds no state.
-var ErrStateMissing = errors.New("stateaudit: the backend holds no state for the layer")
+// ErrStateMissing reports a layer whose backend lacks a state.
+var ErrStateMissing = errors.New("stateaudit: the backend lacks a state for the layer")
 
-// ErrVersionMissing reports a state version which the backend no longer holds.
-var ErrVersionMissing = errors.New("stateaudit: the backend holds no such state version")
+// ErrVersionMissing reports a pruned or absent historical state version.
+var ErrVersionMissing = errors.New("stateaudit: the backend lacks the requested state version")
 
 // Layer is one Terraform layer and the address of its HTTP backend.
 type Layer struct {
@@ -36,7 +36,7 @@ type StateSource interface {
 // ErrStateBaseMissing indicates an HTTP backend block without a literal address while the fallback state base URL is empty.
 var ErrStateBaseMissing = errors.New("stateaudit: the backend \"http\" omits the address and GITLAB_TERRAFORM_STATE_BASE is empty")
 
-// DiscoverLayers enumerates HTTP backend layers under layersDir, deriving omitted state URLs from stateBase and the layer directory name.
+// DiscoverLayers enumerates HTTP backend layers under layersDir and derives omitted state URLs from stateBase.
 func DiscoverLayers(layersDir, stateBase string) ([]Layer, error) {
 	dirs, err := filepath.Glob(filepath.Join(layersDir, "*"))
 	if err != nil {
@@ -68,7 +68,7 @@ func DiscoverLayers(layersDir, stateBase string) ([]Layer, error) {
 	return layers, nil
 }
 
-// readBackendAddress inspects HCL files in dir, reporting whether an HTTP backend block exists alongside its literal address attribute.
+// readBackendAddress parses HCL files in dir and returns the literal HTTP backend address when present.
 func readBackendAddress(parser *hclparse.Parser, dir string) (string, bool, error) {
 	files, err := filepath.Glob(filepath.Join(dir, "*.tf"))
 	if err != nil {
@@ -164,7 +164,8 @@ func (s HTTPSource) get(ctx context.Context, url string) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, fmt.Errorf("stateaudit: GET %s: %w", url, err)
 	}
-	defer func() { _ = resp.Body.Close() /* WHY: Read-only response body close error is unactionable. */ }()
+	// Close failure is unactionable after reading the response body.
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("stateaudit: read %s: %w", url, err)

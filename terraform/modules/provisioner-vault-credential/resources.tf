@@ -12,7 +12,7 @@ terraform {
 
 locals {
   # Only the key set needs to be nonsensitive, to satisfy for_each. The length/special values
-  # stay sensitive and are read back from the original object inside the resource block.
+  # remain sensitive and are read back from the original object inside the resource block.
   generate_keys = toset(nonsensitive(keys(var.vault_credential_context.generate)))
 }
 

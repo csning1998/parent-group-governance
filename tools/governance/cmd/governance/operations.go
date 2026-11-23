@@ -137,7 +137,7 @@ func (a *app) newRotationClient() (*vaultapi.Client, error) {
 	return vaultclient.NewClient(cfg)
 }
 
-// reconcileCredential pushes the value Vault already holds for key out to the live service,
+// reconcileCredential applies the value already stored in Vault for key to the live service,
 // prompting for the current live credential needed to authenticate the call. Leaving the
 // prompt blank lets Reconcile guess instead of failing outright.
 func (a *app) reconcileCredential(ctx context.Context, key string) error {
@@ -156,7 +156,7 @@ func (a *app) reconcileCredential(ctx context.Context, key string) error {
 	if err := secretrotate.Reconcile(ctx, client, cred.Spec, previous); err != nil {
 		return err
 	}
-	a.out.Print(ui.OK, key+": the live service holds the Vault value.")
+	a.out.Print(ui.OK, key+": the live service uses the Vault value.")
 	return nil
 }
 

@@ -29,7 +29,7 @@ func (v vaultKV) ReadField(ctx context.Context, f issuedtokens.VaultField) (stri
 	}
 	value, ok := secret.Data[f.Field].(string)
 	if !ok || value == "" {
-		return "", fmt.Errorf("%s/%s holds no field %s", f.Mount, f.Path, f.Field)
+		return "", fmt.Errorf("%s/%s lacks the field %s", f.Mount, f.Path, f.Field)
 	}
 	return value, nil
 }

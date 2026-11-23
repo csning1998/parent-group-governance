@@ -99,7 +99,7 @@ func TestRevoke(t *testing.T) {
 
 		err := c.Revoke(context.Background(), "gitlab-ci-analysis")
 		if err == nil || !strings.Contains(err.Error(), "401") {
-			t.Fatalf("got %v, want an error carrying status 401", err)
+			t.Fatalf("got %v, want an error containing status 401", err)
 		}
 	})
 }

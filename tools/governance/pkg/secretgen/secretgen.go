@@ -1,5 +1,5 @@
-// Package secretgen generates random secrets satisfying a caller-specified mix of character
-// classes. Refer to docs/secretrotate-design.md for the design.
+// Package secretgen generates random secrets satisfying caller specified character classes.
+// Refer to tools/governance/README.md Section 6 Item G for the algorithm design.
 package secretgen
 
 import (
@@ -8,7 +8,7 @@ import (
 	"math/big"
 )
 
-// CharClass is a named set of characters from which a generated secret may draw.
+// CharClass defines a named character set used during secret generation.
 type CharClass struct {
 	Name    string
 	Charset string

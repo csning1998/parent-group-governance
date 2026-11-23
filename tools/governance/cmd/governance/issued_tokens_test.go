@@ -156,7 +156,7 @@ func issuedTopology(t *testing.T, vaultURL string, projects []string) topology.V
 		t.Fatal(err)
 	}
 	return topology.VaultTopology{
-		BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200},
+		BastionVault: topology.BastionVault{LoopbackIP: "127.0.0.1", PublishIP: "192.0.2.10", APIPort: 8200},
 		OperatorVaultProxy: topology.OperatorVaultProxy{
 			GovernanceOwnerCode: "parent-group-governance",
 			UserConfigDir:       issuedProxyDir,
@@ -241,7 +241,7 @@ func TestIssueSonarQubeAnalysisToken(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := vault.secrets["secret/parent-group-governance/sonarqube/ci-analysis-bot"]["sonarqube_ci_token"]; got != "squ_issued" {
-			t.Fatalf("the Bastion Vault holds %v, want squ_issued", got)
+			t.Fatalf("the Bastion Vault stores %v, want squ_issued", got)
 		}
 		assertRequestsInclude(t, services.recorded(), "PUT /groups/42/variables/SONAR_TOKEN", "POST /api/user_tokens/revoke")
 	})
@@ -320,7 +320,7 @@ func TestVaultKVReadField(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = kv.ReadField(context.Background(), issuedtokens.VaultField{Mount: "registry", Path: "platform/gitlab-group/top-level", Field: "full_path"})
-	assertOperationError(t, err, "holds no field full_path")
+	assertOperationError(t, err, "lacks the field full_path")
 }
 
 func assertRequestsInclude(t *testing.T, got []string, want ...string) {

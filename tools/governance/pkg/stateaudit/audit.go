@@ -21,10 +21,10 @@ const IgnoreFileName = ".tfstate-audit-ignore.yaml"
 // ErrCredentialsMissing reports empty TF_HTTP_USERNAME or TF_HTTP_PASSWORD.
 var ErrCredentialsMissing = errors.New("stateaudit: TF_HTTP_USERNAME and TF_HTTP_PASSWORD are empty, export the state backend credentials first")
 
-// ErrRevealRefused reports --reveal outside an interactive terminal, where a value would reach a log, a pipe, or a file.
+// ErrRevealRefused reports --reveal outside an interactive terminal to prevent secret output to logs, pipes, or files.
 var ErrRevealRefused = errors.New("stateaudit: --reveal prints values to an interactive terminal alone, outside CI")
 
-// Config holds the inputs of one audit.
+// Config contains the inputs of one audit.
 type Config struct {
 	Layers   []Layer
 	Source   StateSource
@@ -34,7 +34,7 @@ type Config struct {
 	Reveal   bool
 }
 
-// Options carries the flags which select the states of an audit.
+// Options configures target selection for a state audit.
 type Options struct {
 	History bool
 	// TerraformDir is the terraform directory of the audited repository. An empty TerraformDir selects the caller default.
@@ -93,7 +93,7 @@ func NewCommand(resolve func(opts Options) (Config, error)) *cobra.Command {
 	var reveal bool
 	cmd := &cobra.Command{
 		Use:   "state-audit",
-		Short: "Report every location of a Terraform state which holds a confidential value",
+		Short: "Report every location of a Terraform state which contains a confidential value",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if reveal {
@@ -109,7 +109,7 @@ func NewCommand(resolve func(opts Options) (Config, error)) *cobra.Command {
 			return AuditAndReport(cmd.Context(), cfg, cmd.OutOrStdout())
 		},
 	}
-	cmd.Flags().BoolVar(&opts.History, "history", false, "also scan every historical state version held by the backend")
+	cmd.Flags().BoolVar(&opts.History, "history", false, "also scan every historical state version stored by the backend")
 	cmd.Flags().StringVar(&opts.TerraformDir, "terraform-dir", "", "audit the layers and the ignore file below this terraform directory of another repository")
 	cmd.Flags().BoolVar(&reveal, "reveal", false, "print each value below its location, on an interactive terminal outside CI alone")
 	return cmd
@@ -168,7 +168,7 @@ func auditLayerState(ctx context.Context, cfg Config, layer Layer) ([]Finding, [
 	return findings, scanned, nil
 }
 
-// checkRevealOutput accepts an interactive terminal outside CI, where the values stay off logs, pipes, and files.
+// checkRevealOutput allows --reveal only on a non CI interactive terminal.
 func checkRevealOutput(w io.Writer, getenv func(string) string) error {
 	if getenv("CI") != "" {
 		return ErrRevealRefused

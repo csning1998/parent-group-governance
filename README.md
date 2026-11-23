@@ -22,7 +22,7 @@ A downstream platform repository consumes the Bastion Vault instance and the Git
 | Path                        | Contents                                                                                              |
 | --------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `ansible/`                  | The `workstation_*` roles, the local inventory, and the host playbooks                                |
-| `terraform/layers/`         | Independently applied Terraform layers, each holding its own remote state                             |
+| `terraform/layers/`         | Independently applied Terraform layers, each with its own remote state                                |
 | `terraform/modules/`        | Shared modules consumed by the layers                                                                 |
 | `tools/governance/`         | Go source of the `governance` CLI, with its own design document                                       |
 | `vault/`                    | `vault.hcl` rendered by `workstation_libvirt`, the raft storage, the TLS material, and the unseal key |
@@ -31,7 +31,7 @@ A downstream platform repository consumes the Bastion Vault instance and the Git
 | `.githooks/`                | Secret scanning and commit message hooks executed through short lived containers                      |
 | `.gitlab/`                  | CODEOWNERS, the merge request template, the linter configuration, and the tagging schema              |
 
-Paths holding runtime state are excluded from version control. The excluded set comprises `vault/data/`, `vault/keys/`, `vault/tls/`, `sonarqube/`, `gitlab-runner-configs/`, `.env`, and the compiled `governance` binary.
+Paths containing runtime state are excluded from version control. The excluded set comprises `vault/data/`, `vault/keys/`, `vault/tls/`, `sonarqube/`, `gitlab-runner-configs/`, `.env`, and the compiled `governance` binary.
 
 ### Item C. Bootstrap Order
 
@@ -85,7 +85,7 @@ Anthropic authentication requires two credentials in Bastion Vault at `parent-gr
 - `anthropic_admin_api_key`: The Admin API key, written once by the operator.
 - `anthropic_oauth_access_token`: A short-lived OAuth token, refreshed immediately before each apply.
 
-The operator account MUST hold the admin, owner, or primary owner role in the Anthropic organization. Prior to applying `group-ai-provider-anthropic` or `administration-gitlab-project`, the operator MUST authenticate via the Anthropic CLI and write the fresh OAuth token with `vault kv patch` through the `administrator` identity. Provider client credential mappings are documented in `terraform/layers/group-ai-provider-anthropic/README.md` Section 1 Item B.
+The operator account MUST be assigned the admin, owner, or primary owner role in the Anthropic organization. Prior to applying `group-ai-provider-anthropic` or `administration-gitlab-project`, the operator MUST authenticate via the Anthropic CLI and write the fresh OAuth token with `vault kv patch` through the `administrator` identity. Provider client credential mappings are documented in `terraform/layers/group-ai-provider-anthropic/README.md` Section 1 Item B.
 
 ```bash
 ant auth login --profile <profile> --scope "org:admin"
@@ -120,9 +120,9 @@ Every service declared in `compose.yml` runs under rootless Podman on a host wit
 
 ### Item A. Standing Conventions
 
-Four conventions MUST hold for every service declared in `compose.yml`.
+Four conventions MUST apply to every service declared in `compose.yml`.
 
-1. A volume declaration MUST NOT carry a relabel flag. Neither `:z` nor `:Z` MUST appear on any volume line. Item G states the failure mode produced by a relabel flag.
+1. A volume declaration MUST NOT contain a relabel flag. Neither `:z` nor `:Z` MUST appear on any volume line. Item G states the failure mode produced by a relabel flag.
 2. The setting `security_opt: label=disable` MUST NOT appear on a service which runs continuously. Disabling label separation removes confinement rather than resolving the underlying label mismatch.
 3. Every mount source path MUST be registered through `semanage fcontext`. The registration establishes `container_file_t` as the policy default instead of a manually applied label.
 4. A service which accesses the rootless Podman socket MUST declare `label=type:container_engine_t`. The policy module described in Item C supplies the permissions required by the named type.
@@ -148,13 +148,13 @@ A correct label reads as `container_file_t:s0` without a category suffix. Every 
 
 ### Item C. The Policy Module
 
-The default policy does not grant any `connectto` permission on the container runtime socket. The module source resides at `ansible/roles/workstation_selinux/files/workstation_nnp_container_runtime.te` and carries three grant groups.
+The default policy does not grant any `connectto` permission on the container runtime socket. The module source resides at `ansible/roles/workstation_selinux/files/workstation_nnp_container_runtime.te` and contains three grant groups.
 
 - A parent process with `NoNewPrivs=1` requires `process2 nnp_transition` on each domain transition. The module grants the transition from `unconfined_t` to `container_runtime_t`, and the transition from `container_runtime_t` to `iptables_t`.
 - The rootless network backend `pasta_t` inherits the parent PTY when Podman starts from a graphical terminal. The module grants PTY read and write to `pasta_t`, plus an append permission on `config_home_t`. The netavark helper running as `iptables_t` inherits the same PTY and receives the same PTY grant.
 - The GitLab runner creates `podman.sock` beneath a `user_tmp_t` parent directory. The module grants socket and directory writes to `container_engine_t` on `user_tmp_t`.
 
-The module operates at the SELinux type level and stays independent of the MCS category handling described in Item B. Installing or removing the module does not affect category drift.
+The module operates at the SELinux type level and is independent of the MCS category handling described in Item B. Installing or removing the module does not affect category drift.
 
 ### Item D. Registered File Contexts
 
@@ -195,7 +195,7 @@ The service `iac-runner` inside `on-premise-gitlab-deployment` is exempt from th
     done
     ```
 
-2. The following command reports the distinct label set carried by every file beneath the registered mount sources. The reported set MUST contain the single entry `container_file_t:s0` without a category suffix.
+2. The following command reports the distinct label set assigned to every file beneath the registered mount sources. The reported set MUST contain the single entry `container_file_t:s0` without a category suffix.
 
     ```bash
     ls -RZ .gitleaks.toml vault sonarqube gitlab-runner-configs | grep -o 'container_file_t:s0[^ ]*' | sort -u
@@ -215,7 +215,7 @@ The service `iac-runner` inside `on-premise-gitlab-deployment` is exempt from th
     matchpathcon .gitleaks.toml vault/data sonarqube/data gitlab-runner-configs
     ```
 
-5. The file `/etc/fstab` MUST carry `etc_t:s0`. The command `ls -Z /etc/fstab` reports the label.
+5. The file `/etc/fstab` MUST be labeled `etc_t:s0`. The command `ls -Z /etc/fstab` reports the label.
 
     ```bash
     ls -Z /etc/fstab
@@ -231,7 +231,7 @@ The service `iac-runner` inside `on-premise-gitlab-deployment` is exempt from th
 
 2. A denial raised by `pasta_t` against `config_home_t` or `data_home_t` is unrelated to the services declared here. Such a denial originates from a file descriptor inherited by the rootless network backend from the process launching Podman.
 
-3. A denial whose `tcontext` carries a non-empty MCS category on a registered mount source indicates category drift. Item B restores the baseline, and Item G identifies the class of tooling causing the drift.
+3. A denial whose `tcontext` contains a non-empty MCS category on a registered mount source indicates category drift. Item B restores the baseline, and Item G identifies the class of tooling causing the drift.
 
 4. A denial whose `tcontext` names `container_runtime_t` with class `unix_stream_socket` and permission `connectto` indicates an absent policy module, or a service declaration missing the `container_engine_t` type.
 
@@ -276,7 +276,7 @@ The registration in Item B binds `container_file_t` to a literal path pattern ra
 | `commitlint`                 | The reviewer image of the CI component      | Default                                  | Short lived container invoked by `.githooks/commit-msg`               |
 | `gitleaks`                   | `zricethezav/gitleaks:v8.30.1`              | Default                                  | Short lived container invoked by `.githooks/pre-commit`               |
 
-The bridge network `sonarqube-ci-net` carries a literal name, because the `[runners.docker]` section of the runner configuration references the same name as its `network_mode`. A CI job container therefore reaches SonarQube by service name without any published host port.
+The bridge network `sonarqube-ci-net` uses a literal name, because the `[runners.docker]` section of the runner configuration references the same name as its `network_mode`. A CI job container therefore reaches SonarQube by service name without any published host port.
 
 ### Item B. The Vault Listeners and the TLS Terminator
 
@@ -286,20 +286,20 @@ The role `workstation_libvirt` renders `vault/vault.hcl`, `vault/vault.env`, `va
 2. The listener on `publish_backend_port` accepts PROXY protocol v2 with `proxy_protocol_behavior = "use_always"`. Vault trusts the PROXY header of every connection of the listener, hence the listener MUST bind loopback alone.
 3. Every local process reaches loopback and can send a forged PROXY header. The listener on `publish_backend_port` therefore sets `tls_require_and_verify_client_cert`. The `tls_client_ca_file` of the listener names the self signed `terminator-client.pem` alone. A connection without the terminator client certificate fails the TLS handshake before Vault reads a request.
 4. The listener on `metrics_port` declares `unauthenticated_metrics_access`.
-5. Vault opens a cluster listener one port above every API listener, hence `metrics_port` plus one stays unassigned, and `publish_backend_port` is 8204.
+5. Vault opens a cluster listener one port above every API listener, hence `metrics_port` plus one remains unassigned, and `publish_backend_port` is 8204.
 
 The terminator runs HAProxy 3.2 with OpenSSL 3.5 from the Ubuntu 26.04 packages. The Vault TCP listener exposes no TLS group parameter, hence the terminator enforces the key exchange.
 
-1. The frontend on `publish_address` and `api_port` accepts TLS 1.3 with the groups `MLKEM1024:SecP384r1MLKEM1024` alone. The frontend presents the EC P-384 publish certificate because a guest verifier lacks ML-DSA support. A client which offers `X25519` or `X25519MLKEM768` alone receives alert 40.
-2. The frontend forwards in TCP mode to `publish_backend_port` with `send-proxy-v2`, verifies the ML-DSA-87 certificate of Vault, presents `terminator-client.pem`, and keeps the guest source address visible to Vault. The source CIDR binding of the SPIRE Parent AppRole therefore stays effective.
-3. The frontend on `publish_address` and `metrics_port` admits `GET /v1/sys/metrics` alone and denies every other method and path.
+1. The frontend on `publish_ip` and `api_port` accepts TLS 1.3 with the groups `MLKEM1024:SecP384r1MLKEM1024` alone. The frontend presents the EC P-384 publish certificate because a guest verifier lacks ML-DSA support. A client which offers `X25519` or `X25519MLKEM768` alone receives alert 40.
+2. The frontend forwards in TCP mode to `publish_backend_port` with `send-proxy-v2`, verifies the ML-DSA-87 certificate of Vault, presents `terminator-client.pem`, and keeps the guest source address visible to Vault. The source CIDR binding of the SPIRE Parent AppRole therefore remains effective.
+3. The frontend on `publish_ip` and `metrics_port` admits `GET /v1/sys/metrics` alone and denies every other method and path.
 4. The terminator mounts `publish.pem`, `publish-key.pem`, `ca-ml-dsa-87.pem`, `terminator-client.pem`, and `terminator-client-key.pem` of `vault/tls` read only. The CA private keys therefore remain outside the container.
 5. The terminator shares the host with `vault-server` because the PROXY protocol listener binds loopback. A Bastion Vault on a virtual machine or on a developer machine runs the same image and the same template beside Vault.
 6. The terminator retires when the Vault TCP listener accepts a TLS group restriction. Go supports `MLKEM1024` from 1.27, where the group MUST appear in `CurvePreferences`.
 
 Both containers read the rendered files at start, hence a changed listener takes effect after the next restart of both services. A reissue of `vault/tls` also takes effect after the restart of both services.
 
-HAProxy exits when a bind fails. The host network namespace can present the publish address later than the start of the container. The entrypoint of `vault-terminator` therefore polls the host namespace for `TERMINATOR_PUBLISH_ADDRESS` at 0.2 second intervals up to 150 attempts before executing HAProxy. `init: true` runs an init process as PID 1. HAProxy as PID 1 ignores SIGTERM. Every stop then waits for the full timeout.
+HAProxy exits when a bind fails. The host network namespace can present the publish address later than the start of the container. The entrypoint of `vault-terminator` therefore polls the host namespace for `TERMINATOR_PUBLISH_IP` at 0.2 second intervals up to 150 attempts before executing HAProxy. `init: true` runs an init process as PID 1. HAProxy as PID 1 ignores SIGTERM. Every stop then waits for the full timeout.
 
 ### Item C. Host Prerequisites of the Vault Containers
 
@@ -307,7 +307,7 @@ A host prerequisite is a host setting which `vault-server` or `vault-terminator`
 
 1. The libvirt network `vault-bastion-publish` provides the address `172.16.0.1` on the bridge of the network.
 2. The unit `virtnetworkd.service` is enabled, and a drop-in starts the unit after firewalld reports the running state.
-3. The firewalld policy `libvirt-to-host` admits DHCP, DNS, ICMP, and TCP port 8200 from the publish segment `172.16.0.0/24` to `172.16.0.1` for routed guests. A guest reaches the Bastion Vault through a NIC on the publish segment alone, as ADR-143 requires. The policy admits no scrape port, see Item E.
+3. The firewalld policy `libvirt-to-host` admits DHCP, DNS, ICMP, and TCP port 8200 from the publish segment `172.16.0.0/24` to `172.16.0.1` for routed guests. A guest reaches the Bastion Vault through a NIC on the publish segment alone, as ADR-143 requires. The policy admits no scrape port. Refer to Item E.
 4. The firewalld zone `libvirt` admits DHCP, DNS, and ICMP for NAT guests.
 5. The memlock limits of the operator user are unlimited, because Vault locks memory under rootless Podman.
 
@@ -315,7 +315,7 @@ The unit `virtnetworkd.service` MUST be enabled. A host which enables only `virt
 
 The unit MUST start after firewalld reports the running state. libvirt adds each bridge to a zone when the network starts. libvirt repeats the step on a firewalld reload but not on the first start of firewalld. A bridge created earlier remains outside every zone. The default zone rejects the DHCP requests of the guests on the bridge.
 
-The policy `libvirt-to-host` has priority -1 and target REJECT. The policy decides routed guest traffic to the host before any rule of the zone `libvirt-routed`. The rule for port 8200 therefore resides in the policy. The policy and the zone `libvirt` omit `ssh` and `tftp` admitted by the shipped files because a guest of this host neither logs in to the host nor fetches files from the host. The role overrides both shipped files under `/etc/firewalld`. A later libvirt package therefore does not change the overrides.
+The policy `libvirt-to-host` has priority -1 and target REJECT. The policy decides routed guest traffic to the host before any rule of the zone `libvirt-routed`. The rule for port 8200 therefore resides in the policy. The policy and the zone `libvirt` omit `ssh` and `tftp` admitted by the packaged files because a guest of this host neither logs in to the host nor fetches files from the host. The role overrides both packaged files under `/etc/firewalld`. A later libvirt package therefore does not change the overrides.
 
 The zone `trusted` MUST NOT bind an interface or a source. A binding in the zone `trusted` accepts every port of the host. The binding bypasses the policy and the zone `libvirt`. The role asserts the absence of a binding in the permanent zone `trusted`.
 
@@ -328,7 +328,7 @@ ansible-galaxy collection install -r ansible/requirements.yaml
 ./governance host apply-libvirt
 ```
 
-The CLI injects `workstation_libvirt_operator_user` from the operator account because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The publish segment is the /24 network of `vault_bastion.publish_address` of `workstation-topology.yaml`. The role asserts the netmask `255.255.255.0` of the network. The role asserts the injected value before any task runs.
+The CLI injects `workstation_libvirt_operator_user` from the operator account because `become: true` gathers facts as root. The CLI also injects `workstation_libvirt_vault_config_path`, the path of `vault/vault.hcl` in the repository. The publish segment is the /24 network of `vault_bastion.publish_ip` of `workstation-topology.yaml`. The role asserts the netmask `255.255.255.0` of the network. The role asserts the injected value before any task runs.
 
 ### Item D. SonarQube Bootstrap
 
@@ -358,7 +358,7 @@ The rebuild empties the two directories without removing the directories. The bi
 
 ### Item E. Host Telemetry Scrape Segment
 
-Observability scrapers reach the metrics of the host on the host telemetry scrape segment, the third octet 249 of the network allocation (ADR-143). `foundation-vault-bastion` derives the segment and the host address from the network allocation facts. The layer publishes both at `registry/platform/network/allocation`, fields `host_telemetry_scrape_cidr` and `host_telemetry_scrape_address`. The libvirt playbook runs before the Bastion Vault exists. A separate command therefore applies the segment after the apply of `foundation-vault-bastion`.
+Observability scrapers reach the metrics of the host on the host telemetry scrape segment, the third octet 249 of the network allocation (ADR-143). `foundation-vault-bastion` derives the segment and the host address from the network allocation facts. The layer publishes both at `registry/platform/network/allocation`, fields `host_telemetry_scrape_cidr` and `host_telemetry_scrape_ip`. The libvirt playbook runs before the Bastion Vault exists. A separate command therefore applies the segment after the apply of `foundation-vault-bastion`.
 
 ```bash
 ./governance host apply-host-telemetry
@@ -369,7 +369,7 @@ The CLI reads both fields through the administrator Vault Proxy. The CLI reissue
 1. The routed libvirt network `host-telemetry-scrape` provides the host address on the bridge of the network.
 2. The firewalld policy `host-telemetry-to-host` has priority -2 and target CONTINUE. The policy admits the scrape ports from the segment to the host address alone. The scrape ports are `vault_bastion.metrics_port` and `host_telemetry_scrape.host_exporter_ports` of `workstation-topology.yaml`. The policy precedes `libvirt-to-host`, whose target REJECT closes every other port.
 3. The local fact `/etc/ansible/facts.d/host_telemetry.fact` records the host address.
-4. `E-vault-config.yaml` in `workstation_libvirt` renders `vault/terminator/haproxy-telemetry.cfg` and sets `TERMINATOR_SCRAPE_ADDRESS` in `vault/terminator/terminator.env` when the local fact exists. The configuration therefore persists across subsequent `apply-libvirt` runs. The generated configuration binds the `host_telemetry_metrics` frontend to the host scrape IP with the publish certificate. The frontend exposes `GET /v1/sys/metrics` exclusively.
+4. `E-vault-config.yaml` in `workstation_libvirt` renders `vault/terminator/haproxy-telemetry.cfg` and sets `TERMINATOR_SCRAPE_IP` in `vault/terminator/terminator.env` when the local fact exists. The configuration therefore persists across subsequent `apply-libvirt` runs. The generated configuration binds the `host_telemetry_metrics` frontend to the host scrape IP with the publish certificate. The frontend exposes `GET /v1/sys/metrics` exclusively.
 
 The `vault-telemetry-terminator` service loads `haproxy-telemetry.cfg` in a separate HAProxy process. If the scrape bridge is absent, only metrics scraping stops. `vault-terminator` continues serving the publish Vault API. The command concludes with `podman compose restart vault-terminator` to load the reissued certificate and `podman compose --profile host-telemetry up -d vault-telemetry-terminator` to start the metrics frontend. The `host-telemetry` profile prevents a plain `podman compose up` from starting the service before `haproxy-telemetry.cfg` exists because Podman creates an empty directory when a bind mount source is missing. Because `./governance vault generate-tls` issues a publish certificate without the scrape IP, `./governance host apply-host-telemetry` must be rerun after regenerating `vault/tls`.
 
@@ -389,24 +389,24 @@ The CLI exposes the same operations through two interfaces. Invocation without a
 
 ### Item B. Operation Inventory
 
-| Menu Entry                                                                 | Subcommand                               | Effect                                                                     |
-| -------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------- |
-| `[Host] Apply All Workstation Prerequisites`                               | `host apply-all`                         | Runs the SELinux, libvirt, local CA, and Vault Proxy steps with one prompt |
-| `[Host] Verify Host IaC Tools`                                             | `host verify`                            | Reports the presence of Terraform, Vault, and Ansible on `PATH`            |
-| `[Host] Apply Workstation SELinux Policy and File Contexts`                | `host apply-selinux`                     | Runs the playbook described in Section 3 Item B                            |
-| `[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites` | `host apply-libvirt`                     | Runs the playbook described in Section 4 Item C                            |
-| `[Host] Apply Workstation Vault Proxies`                                   | `host apply-vault-proxy`                 | Runs the playbook described in Section 6 Item F                            |
-| `[Host] Apply Workstation Vault Audit Check`                               | `host apply-vault-audit`                 | Installs the audit log check without the become password                   |
-| `[Host] Apply Host Telemetry Scrape Network`                               | `host apply-host-telemetry`              | Runs the playbook described in Section 4 Item E                            |
-| `[Vault] Set up TLS for Bastion Vault`                                     | `vault generate-tls`                     | Clears `vault/tls` and issues two CAs and two listener certificates        |
-| `[Vault] Initialize Bastion Vault`                                         | `vault init`                             | Verifies the factory default of each service, then initializes and unseals |
-| `[Vault] Enable KV-v2 Engine`                                              | `vault enable-kv`                        | Mounts the KV version 2 engine at the path `secret`                        |
-| `[Vault] Unseal Bastion Vault`                                             | `vault unseal`                           | Submits the recorded unseal key                                            |
-| `[Vault] Revoke Root Token After Bootstrap`                                | `vault revoke-root`                      | Revokes the root token once the administrator Vault Proxy logs in          |
-| `[Vault] Generate Root Token for Break-Glass`                              | `vault generate-root`                    | Produces a root token from the stored unseal keys into `~/.vault-token`    |
-| `[Credentials] Rotate Service Admin Passwords`                             | `credentials rotate <credential-key>`    | Generates a password, deploys the password, and commits the value to Vault |
-| `[Credentials] Reconcile Service Admin Passwords with the Live Service`    | `credentials reconcile <credential-key>` | Deploys the value stored in Vault to a drifted live service                |
-| `[Terraform] Audit State Secrets`                                          | `terraform audit-state [--history]`      | Lists state locations holding a secret, see tools/governance Section 11    |
+| Menu Entry                                                                 | Subcommand                               | Effect                                                                          |
+| -------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------- |
+| `[Host] Apply All Workstation Prerequisites`                               | `host apply-all`                         | Runs the SELinux, libvirt, local CA, and Vault Proxy steps with one prompt      |
+| `[Host] Verify Host IaC Tools`                                             | `host verify`                            | Reports the presence of Terraform, Vault, and Ansible on `PATH`                 |
+| `[Host] Apply Workstation SELinux Policy and File Contexts`                | `host apply-selinux`                     | Runs the playbook described in Section 3 Item B                                 |
+| `[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites` | `host apply-libvirt`                     | Runs the playbook described in Section 4 Item C                                 |
+| `[Host] Apply Workstation Vault Proxies`                                   | `host apply-vault-proxy`                 | Runs the playbook described in Section 6 Item F                                 |
+| `[Host] Apply Workstation Vault Audit Check`                               | `host apply-vault-audit`                 | Installs the audit log check without the become password                        |
+| `[Host] Apply Host Telemetry Scrape Network`                               | `host apply-host-telemetry`              | Runs the playbook described in Section 4 Item E                                 |
+| `[Vault] Set up TLS for Bastion Vault`                                     | `vault generate-tls`                     | Clears `vault/tls` and issues two CAs and two listener certificates             |
+| `[Vault] Initialize Bastion Vault`                                         | `vault init`                             | Verifies the factory default of each service, then initializes and unseals      |
+| `[Vault] Enable KV-v2 Engine`                                              | `vault enable-kv`                        | Mounts the KV version 2 engine at the path `secret`                             |
+| `[Vault] Unseal Bastion Vault`                                             | `vault unseal`                           | Submits the recorded unseal key                                                 |
+| `[Vault] Revoke Root Token After Bootstrap`                                | `vault revoke-root`                      | Revokes the root token once the administrator Vault Proxy logs in               |
+| `[Vault] Generate Root Token for Break-Glass`                              | `vault generate-root`                    | Produces a root token from the stored unseal keys into `~/.vault-token`         |
+| `[Credentials] Rotate Service Admin Passwords`                             | `credentials rotate <credential-key>`    | Generates a password, deploys the password, and commits the value to Vault      |
+| `[Credentials] Reconcile Service Admin Passwords with the Live Service`    | `credentials reconcile <credential-key>` | Deploys the value stored in Vault to a drifted live service                     |
+| `[Terraform] Audit State Secrets`                                          | `terraform audit-state [--history]`      | Lists state locations containing a secret. Refer to tools/governance Section 11 |
 
 Each key listed under `service_admin_passwords` of `workstation-topology.yaml` becomes one subcommand under `credentials rotate`, and one more under `credentials reconcile`. The menu presents the same keys as a multiple selection prompt, annotated with whether Vault already stores a value for the given key. The interactive banner reports the Bastion Vault state as stopped, uninitialized, sealed, or unsealed before any prompt appears. The CLI reads the Bastion Vault endpoint and the listener addresses of the TLS material from `vault_bastion` of the same file.
 
@@ -414,12 +414,12 @@ Each key listed under `service_admin_passwords` of `workstation-topology.yaml` b
 
 Every subcommand other than the bare root command bootstraps `.env` before running. The bootstrap populates host identity and the SonarQube database password. The file is rewritten through a temporary file with an atomic rename. Six keys are managed. The file contains neither the Bastion Vault address declared by `workstation-topology.yaml` nor a Vault token.
 
-| Key                     | Source                                                                     |
-| ----------------------- | -------------------------------------------------------------------------- |
-| `PROJECT_ROOT`          | The directory holding the `.git` entry nearest above the working directory |
-| `HOST_UID`, `HOST_GID`  | The operator account identifiers consumed by `compose.yml`                 |
-| `UNAME`, `UHOME`        | The operator user name and home directory                                  |
-| `SONARQUBE_DB_PASSWORD` | Generated once from `crypto/rand` at first bootstrap                       |
+| Key                     | Source                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `PROJECT_ROOT`          | The directory containing the `.git` entry nearest above the working directory |
+| `HOST_UID`, `HOST_GID`  | The operator account identifiers consumed by `compose.yml`                    |
+| `UNAME`, `UHOME`        | The operator user name and home directory                                     |
+| `SONARQUBE_DB_PASSWORD` | Generated once from `crypto/rand` at first bootstrap                          |
 
 The `.env` file serves as the single host record of `SONARQUBE_DB_PASSWORD`. `sonarqube/postgres-data` preserves the password of the first database initialization. If `.env` lacks this entry while `sonarqube/postgres-data` exists, the bootstrap process aborts to prevent generating a mismatched credential rejected by the database. Recovery requires restoring the password into `.env` from backup, or recreating `sonarqube/postgres-data` and `sonarqube/data`.
 
@@ -545,7 +545,7 @@ The historical state versions of every layer still contain values removed by a l
 
 ### Item F. Governance Layers of the Group
 
-The governance layer of every repository in the group, such as `administration-gitlab-project`, MUST run through the `credential-distributor` Vault Proxy of its owner. The `.envrc` of the layer loads the Proxy environment through `vault-proxy-env credential-distributor-<owner code>`. The other layers of a repository outside the Bastion tenants MUST run through `consumer-<owner code>`. The tenant registry of the Bastion Vault lists platforms alone. A governance layer therefore does not hold a tenant identity.
+The governance layer of every repository in the group, such as `administration-gitlab-project`, MUST run through the `credential-distributor` Vault Proxy of its owner. The `.envrc` of the layer loads the Proxy environment through `vault-proxy-env credential-distributor-<owner code>`. The other layers of a repository outside the Bastion tenants MUST run through `consumer-<owner code>`. The tenant registry of the Bastion Vault lists platforms alone. A governance layer therefore lacks a tenant identity.
 
 1. The role `workstation_vault_proxy` runs one Vault Proxy per identity of `operator_vault_proxy.identities` as a systemd user unit. Each Proxy listens on `127.0.0.1` at the port of the identity. The Proxy requires a client certificate signed by the ML-DSA-87 CA of `vault/tls`. The Proxy overwrites the token of every request with the token of its own login.
 2. Each Proxy logs in through the cert auth mount `operator-cert` with a client certificate of CN `operator-<identity>`. The cert role of the identity admits the CN `operator-<identity>` alone. The private key of the client certificate is the long lived credential. The key file has mode `0600` below `~/.config/vault-proxy/<identity>`.

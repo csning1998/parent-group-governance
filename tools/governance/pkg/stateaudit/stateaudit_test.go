@@ -215,7 +215,7 @@ func TestWriteReportNamesLocationsAlone(t *testing.T) {
 	}
 	for _, secret := range []string{fakePAT, fakeRunner, "operator-chosen-password"} {
 		if strings.Contains(text, secret) {
-			t.Errorf("report holds a value:\n%s", text)
+			t.Errorf("report contains a value:\n%s", text)
 		}
 	}
 }

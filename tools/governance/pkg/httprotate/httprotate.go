@@ -1,5 +1,5 @@
-// Package httprotate implements one generic secretrotate.DeployFunc for a REST change-password
-// endpoint. Refer to docs/secretrotate-design.md for the design.
+// Package httprotate implements a generic secretrotate.DeployFunc for HTTP form password endpoints.
+// Refer to tools/governance/README.md Section 6 Item E for the protocol contract.
 package httprotate
 
 import (
@@ -24,14 +24,14 @@ var noRedirectClient = &http.Client{
 	},
 }
 
-// FormSpec describes one REST change-password endpoint and one credential validation endpoint entirely as data.
+// FormSpec defines HTTP form endpoints for password rotation and credential validation.
 type FormSpec struct {
 	URL           string
 	VerifyURL     string
 	AdminUsername string
 }
 
-// Deploy implements secretrotate.DeployFunc against the endpoint FormSpec describes.
+// Deploy implements secretrotate.DeployFunc against s.URL.
 func (s FormSpec) Deploy(ctx context.Context, previous, next string) error {
 	form := url.Values{}
 	form.Set("login", s.AdminUsername)
@@ -49,24 +49,23 @@ func (s FormSpec) Deploy(ctx context.Context, previous, next string) error {
 	if err != nil {
 		return fmt.Errorf("httprotate: call %s: %w", s.URL, err)
 	}
-	// Discarding response body close error on completed request.
+	// Close failure is secondary after reading the response.
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		// Discarding read error as status code already indicates unauthorized failure.
+		// Body read failure is ignored because HTTP 401 already identifies unauthorized rejection.
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("%w: %w: %s", ErrUnauthorized, secretrotate.ErrAuthRejected, strings.TrimSpace(string(body)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Discarding read error as status code already captures HTTP error.
+		// Body read failure is ignored because the HTTP status code already captures the error.
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("httprotate: %s returned %d: %s", s.URL, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return nil
 }
 
-// Verify implements secretrotate.VerifyFunc through a GET on VerifyURL authenticated with secret.
-// The endpoint MUST answer 200 with a JSON boolean "valid", and every other answer proves nothing.
+// Verify checks secret via HTTP GET against s.VerifyURL. Any response other than HTTP 200 with a JSON boolean "valid" returns an error.
 func (s FormSpec) Verify(ctx context.Context, secret string) (bool, error) {
 	if s.VerifyURL == "" {
 		return false, errors.New("httprotate: no verify URL configured")
@@ -81,10 +80,10 @@ func (s FormSpec) Verify(ctx context.Context, secret string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("httprotate: call %s: %w", s.VerifyURL, err)
 	}
-	// Discarding response body close error on completed request.
+	// Close failure is secondary after reading the response.
 	defer func() { _ = resp.Body.Close() }()
 
-	// Discarding read error as status code validation follows immediately.
+	// Body read failure is ignored because status code and JSON validation follow immediately.
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("httprotate: %s returned %d: %s", s.VerifyURL, resp.StatusCode, strings.TrimSpace(string(body)))

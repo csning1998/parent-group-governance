@@ -91,7 +91,7 @@ func pickOneOrMany(one string, many []string, oneKey, manyKey string) ([]string,
 		return []string{one}, nil
 	}
 	if slices.Contains(many, "") {
-		return nil, fmt.Errorf("%s MUST NOT hold an empty item", manyKey)
+		return nil, fmt.Errorf("%s MUST NOT contain an empty item", manyKey)
 	}
 	return many, nil
 }

@@ -11,7 +11,7 @@
       workstation_vault_audit_home must be the operator home directory, and workstation_vault_audit_repository must be
       the absolute path of the repository checkout. The CLI injects both extra vars.
 
-# The parent vault/ directory carries container_file_t, and the audit directory inherits the label.
+# The parent vault/ directory is labeled container_file_t, and the audit directory inherits the label.
 - name: "Section A. Create the directories"
   ansible.builtin.file:
     path: "{{ item }}"

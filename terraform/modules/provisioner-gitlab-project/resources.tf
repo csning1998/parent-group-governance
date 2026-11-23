@@ -33,7 +33,7 @@ resource "gitlab_branch_protection" "main" {
 
 locals {
   # for_each cannot accept a sensitive value; nonsensitive() strips the mark from the
-  # keys only, the actual value stays sensitive via the provider's own schema.
+  # keys only, the actual value remains sensitive via the provider schema.
   extra_variable_keys = nonsensitive(toset(keys(var.extra_variables)))
 }
 

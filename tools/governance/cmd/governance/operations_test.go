@@ -24,7 +24,7 @@ func newOperationsApp(t *testing.T, answer string, withLocalCA bool, identities 
 		root: t.TempDir(),
 		home: t.TempDir(),
 		topology: topology.VaultTopology{
-			BastionVault: topology.BastionVault{LoopbackAddress: "127.0.0.1", PublishAddress: "192.0.2.10", APIPort: 8200},
+			BastionVault: topology.BastionVault{LoopbackIP: "127.0.0.1", PublishIP: "192.0.2.10", APIPort: 8200},
 			OperatorVaultProxy: topology.OperatorVaultProxy{
 				UserConfigDir:    ".config/vault-proxy",
 				PlaceholderToken: "proxy-supplied",

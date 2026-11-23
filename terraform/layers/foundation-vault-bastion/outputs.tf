@@ -3,7 +3,7 @@
 output "vault_bastion" {
   description = "Connection facts of the Bastion Vault instance."
   value = {
-    endpoint             = local.vault_bastion_endpoint
+    endpoint             = local.vault_bastion_url
     listener_ca_cert_pem = local.vault_bastion_listener_ca_bundle_pem
   }
 }
@@ -30,7 +30,7 @@ output "vault_bastion_pki" {
 output "vault_bastion_auth" {
   description = "Mount paths of the auth backends of the Bastion Vault."
   value = {
-    approle_mount_path                         = vault_auth_backend.approle.path
+    approle_auth_mount                         = vault_auth_backend.approle.path
     gitlab_saas_ci_job_jwt_provider_mount_path = vault_jwt_auth_backend.gitlab_saas.path
   }
 }

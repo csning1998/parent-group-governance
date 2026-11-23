@@ -12,7 +12,7 @@ import (
 // ErrUnsupportedRemote indicates an origin URL lacking a host authority or a group path prefix.
 var ErrUnsupportedRemote = errors.New("gitremote: the origin URL names no GitLab host and project path below a group")
 
-// Remote holds the GitLab hostname and project path parsed from a Git remote URL.
+// Remote contains the GitLab hostname and project path parsed from a Git remote URL.
 type Remote struct {
 	Host        string
 	ProjectPath string

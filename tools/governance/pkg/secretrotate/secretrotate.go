@@ -70,19 +70,19 @@ type rotationState struct {
 	PendingNext string `json:"pending_next"`
 }
 
-// vaultField holds the current secret value and its presence flag read under the rotation lock.
+// vaultField contains the current secret value and its presence flag read under the rotation lock.
 type vaultField struct {
 	value  string
 	exists bool
 }
 
-// Exists reports whether Vault already holds a value for spec.
+// Exists reports whether Vault already stores a value for spec.
 func Exists(ctx context.Context, client *vaultapi.Client, spec Spec) bool {
 	_, ok := readField(ctx, client, spec.Mount, spec.Path, spec.Field)
 	return ok
 }
 
-// Reconcile pushes the value Vault already holds for spec out to a drifted live service, never
+// Reconcile applies the value already stored in Vault for spec to a drifted live service, never
 // generating a value and never writing to Vault. An operator value replaces every other candidate.
 func Reconcile(ctx context.Context, client *vaultapi.Client, spec Spec, operatorSupplied string) error {
 	if err := requireVerify(spec); err != nil {
@@ -128,7 +128,7 @@ func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(st
 	}
 	_, existedBeforeLock := readField(ctx, client, spec.Mount, spec.Path, spec.Field)
 	if !existedBeforeLock && isPathDestroyedOutOfBand(ctx, client, spec.Mount, spec.Path) {
-		return "", fmt.Errorf("secretrotate: %s/%s held data before and now reads back empty, refusing to mint a value the live service was never given", spec.Mount, spec.Path)
+		return "", fmt.Errorf("secretrotate: %s/%s contained data before and now reads back empty, refusing to mint a value the live service was never given", spec.Mount, spec.Path)
 	}
 
 	holder, err := acquireLock(ctx, client, spec.Mount, spec.Path, spec.Field)

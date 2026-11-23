@@ -176,7 +176,7 @@ func assertSignResult(t *testing.T, cert *x509.Certificate, err error, wantPathL
 	case wantError == "" && err != nil:
 		t.Fatalf("the issuer rejected a subordinate CA: %v", err)
 	case wantError == "" && (cert.MaxPathLen != wantPathLength || cert.MaxPathLenZero != (wantPathLength == 0)):
-		t.Fatalf("the subordinate CA carries path length %d, want %d", cert.MaxPathLen, wantPathLength)
+		t.Fatalf("the subordinate CA has path length %d, want %d", cert.MaxPathLen, wantPathLength)
 	}
 }
 

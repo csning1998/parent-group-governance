@@ -21,7 +21,7 @@ var hostTools = []requiredTool{
 	{"ansible", "Red Hat Ansible"},
 }
 
-// HostFacts holds the operator identity used by Compose ${HOST_UID}:${HOST_GID}.
+// HostFacts contains the operator identity used by Compose ${HOST_UID}:${HOST_GID}.
 type HostFacts struct {
 	CurrentUID   int
 	CurrentGID   int
@@ -86,7 +86,7 @@ func refuseSonarDBPasswordRegeneration(e *Env, root, envPath string) error {
 	_, err := os.Stat(dataDir)
 	switch {
 	case err == nil:
-		return fmt.Errorf("config: %s holds an initialized database while %s lacks %s; restore the password into %s", dataDir, envPath, KeySonarQubeDBPassword, envPath)
+		return fmt.Errorf("config: %s contains an initialized database while %s lacks %s; restore the password into %s", dataDir, envPath, KeySonarQubeDBPassword, envPath)
 	case errors.Is(err, fs.ErrNotExist):
 		return nil
 	default:

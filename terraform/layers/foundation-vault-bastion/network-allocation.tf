@@ -52,10 +52,10 @@ locals {
   }
 
   # The host keeps the host number of its publish address on every host segment.
-  host_number = tonumber(split(".", local.workstation.vault_bastion.publish_address)[3])
+  host_number = tonumber(split(".", local.workstation.vault_bastion.publish_ip)[3])
 
-  host_telemetry_scrape_address    = local.host_segment_cidrs.host_telemetry_scrape != "" ? cidrhost(local.host_segment_cidrs.host_telemetry_scrape, local.host_number) : ""
-  host_log_rendezvous_address      = local.host_segment_cidrs.host_log_rendezvous != "" ? cidrhost(local.host_segment_cidrs.host_log_rendezvous, var.host_log_rendezvous_offset) : ""
+  host_telemetry_scrape_ip         = local.host_segment_cidrs.host_telemetry_scrape != "" ? cidrhost(local.host_segment_cidrs.host_telemetry_scrape, local.host_number) : ""
+  host_log_rendezvous_ip           = local.host_segment_cidrs.host_log_rendezvous != "" ? cidrhost(local.host_segment_cidrs.host_log_rendezvous, var.host_log_rendezvous_offset) : ""
   host_log_rendezvous_server_names = [for base in local.stage_domains : "host-log-rendezvous.${base}"]
 }
 
@@ -73,7 +73,7 @@ locals {
 
   # The publish listener of workstation-topology.yaml lies inside the Bastion publish network of the network allocation facts.
   topology_publish_inside_network = can(cidrnetmask(local.network_allocation.bastion_publish_cidr)) ? (
-    cidrhost("${local.workstation.vault_bastion.publish_address}/${split("/", local.network_allocation.bastion_publish_cidr)[1]}", 0) == cidrhost(local.network_allocation.bastion_publish_cidr, 0)
+    cidrhost("${local.workstation.vault_bastion.publish_ip}/${split("/", local.network_allocation.bastion_publish_cidr)[1]}", 0) == cidrhost(local.network_allocation.bastion_publish_cidr, 0)
   ) : false
 
   network_allocation_valid = alltrue([
@@ -131,23 +131,23 @@ resource "terraform_data" "network_allocation_validation" {
   lifecycle {
     precondition {
       condition     = local.network_allocation_valid
-      error_message = "secret/parent-group-governance/network/allocation MUST hold a DNS domain_suffix, a JSON list of DNS label stages, IPv4 network_cidr of /16, and bastion_publish_cidr of segment 0 inside network_cidr."
+      error_message = "secret/parent-group-governance/network/allocation MUST contain a DNS domain_suffix, a JSON list of DNS label stages, IPv4 network_cidr of /16, and bastion_publish_cidr of segment 0 inside network_cidr."
     }
     precondition {
       condition     = local.network_baseline_valid
-      error_message = "secret/parent-group-governance/network/allocation MUST hold network_baseline as a JSON object of host_vip_offset, global_mac_prefix, global_mtu, global_mss, node_exporter_port, cidr_subnet_bits, cidr_nat_offset, and cidr_index_max, with every host segment index above cidr_index_max."
+      error_message = "secret/parent-group-governance/network/allocation MUST contain network_baseline as a JSON object of host_vip_offset, global_mac_prefix, global_mtu, global_mss, node_exporter_port, cidr_subnet_bits, cidr_nat_offset, and cidr_index_max, with every host segment index above cidr_index_max."
     }
     precondition {
       condition     = local.kubernetes_pools_valid
-      error_message = "secret/parent-group-governance/network/allocation MUST hold IPv4 pod_network_cidr and service_network_cidr which overlap neither each other nor network_cidr, each with a prefix length plus cidr_subnet_bits of at most 32."
+      error_message = "secret/parent-group-governance/network/allocation MUST contain IPv4 pod_network_cidr and service_network_cidr which overlap neither each other nor network_cidr, each with a prefix length plus cidr_subnet_bits of at most 32."
     }
     precondition {
       condition     = local.topology_publish_inside_network
-      error_message = "vault_bastion.publish_address of workstation-topology.yaml MUST lie inside bastion_publish_cidr of secret/parent-group-governance/network/allocation."
+      error_message = "vault_bastion.publish_ip of workstation-topology.yaml MUST lie inside bastion_publish_cidr of secret/parent-group-governance/network/allocation."
     }
     precondition {
       condition     = var.host_log_rendezvous_offset != local.host_number
-      error_message = "host_log_rendezvous_offset MUST differ from the host number of vault_bastion.publish_address in workstation-topology.yaml."
+      error_message = "host_log_rendezvous_offset MUST differ from the host number of vault_bastion.publish_ip in workstation-topology.yaml."
     }
   }
 }

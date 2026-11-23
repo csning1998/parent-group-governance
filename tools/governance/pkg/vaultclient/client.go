@@ -22,7 +22,7 @@ const tokenFileName = ".vault-token"
 type Config struct {
 	Address    string
 	CACertPath string
-	// ClientCert and ClientKey name the client certificate which an mTLS listener, such as a Vault Proxy, requires.
+	// ClientCert and ClientKey supply the client certificate required by mTLS listeners such as Vault Proxy.
 	ClientCert string
 	ClientKey  string
 	Token      string
@@ -134,7 +134,7 @@ type SealStatus struct {
 	Sealed      bool
 }
 
-// InspectStatus queries the Vault instance defined by cfg, reporting reachability, initialization, and seal status.
+// InspectStatus queries cfg and returns the reachability, initialization, and seal status of Vault.
 func InspectStatus(ctx context.Context, cfg Config) SealStatus {
 	client, err := NewClient(cfg)
 	if err != nil {
@@ -151,7 +151,7 @@ func InspectStatus(ctx context.Context, cfg Config) SealStatus {
 	}
 }
 
-// ProbeSealState checks whether the target client can query seal status, reporting running and sealed flags.
+// ProbeSealState queries seal status through client and returns running and sealed flags.
 func ProbeSealState(ctx context.Context, client *vaultapi.Client) (running, sealed bool, err error) {
 	if client == nil {
 		return false, false, fmt.Errorf("vaultclient: nil client provided")
@@ -249,8 +249,7 @@ func finalizeTokenTemp(f *os.File, path, token string) error {
 	return nil
 }
 
-// probeSealStatus clones the target client, disables retries, applies probeTimeout,
-// and queries the Vault seal status endpoint defensively.
+// probeSealStatus clones client with zero retries and probeTimeout to bound interactive status checks.
 func probeSealStatus(ctx context.Context, client *vaultapi.Client) (*vaultapi.SealStatusResponse, error) {
 	if client == nil {
 		return nil, fmt.Errorf("vaultclient: nil client provided")

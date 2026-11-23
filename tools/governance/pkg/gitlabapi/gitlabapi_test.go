@@ -79,14 +79,14 @@ func TestUpsertGroupVariable(t *testing.T) {
 func checkUpdateForm(t *testing.T, form url.Values) {
 	t.Helper()
 	if form.Get("value") != "secret-value" || form.Get("raw") != "true" || form.Get("protected") != "false" || form.Has("masked_and_hidden") {
-		t.Fatalf("the PUT carries form %v", form)
+		t.Fatalf("the PUT sends form %v", form)
 	}
 }
 
 func checkCreateForm(t *testing.T, form url.Values) {
 	t.Helper()
 	if form.Get("key") != "SONAR_TOKEN" || form.Get("masked_and_hidden") != "true" || form.Has("masked") {
-		t.Fatalf("the POST carries form %v, want key and masked_and_hidden without masked", form)
+		t.Fatalf("the POST sends form %v, want key and masked_and_hidden without masked", form)
 	}
 }
 
@@ -96,9 +96,9 @@ func assertUpsertError(t *testing.T, err error, want, secret string) {
 	case want == "" && err != nil:
 		t.Fatal(err)
 	case want != "" && (err == nil || !strings.Contains(err.Error(), want)):
-		t.Fatalf("got %v, want an error carrying %q", err, want)
+		t.Fatalf("got %v, want an error containing %q", err, want)
 	case err != nil && strings.Contains(err.Error(), secret):
-		t.Fatal("the error carries the variable value")
+		t.Fatal("the error contains the variable value")
 	}
 }
 
@@ -107,7 +107,7 @@ func assertRecordedRequests(t *testing.T, requests []recordedRequest, want []str
 	got := make([]string, len(requests))
 	for i, r := range requests {
 		if r.token != "pat" {
-			t.Fatalf("request %d carries token %q", i, r.token)
+			t.Fatalf("request %d sends token %q", i, r.token)
 		}
 		got[i] = r.method + " " + r.path
 	}

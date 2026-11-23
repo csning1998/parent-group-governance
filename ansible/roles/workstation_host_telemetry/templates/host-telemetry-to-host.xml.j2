@@ -8,7 +8,7 @@
 {% for port in workstation_host_telemetry_scrape_ports %}
   <rule family="ipv4">
     <source address="{{ workstation_host_telemetry_scrape_cidr }}"/>
-    <destination address="{{ workstation_host_telemetry_scrape_address }}"/>
+    <destination address="{{ workstation_host_telemetry_scrape_ip }}"/>
     <port protocol="tcp" port="{{ port }}"/>
     <accept/>
   </rule>

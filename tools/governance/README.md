@@ -430,7 +430,7 @@ if err != nil {
 a.topology = topo
 ```
 
-`topology.Load` 回傳 `topology.VaultTopology`，要求 `vault_bastion` 同時宣告 `loopback_address`、`publish_address` 兩個 IP 與一個合法的 `port`，缺任何一項就讓工具在啟動時中止。`APIEndpoint()` 組出 `https://<loopback_address>:<port>`，命令層的 `newBastionVaultListeners` 再把兩個 IP 組成 `vaultops.Listeners`，分別交給 loopback 與 publish 的 listener 憑證。同一份檔案也是 Ansible 渲染 `vault.hcl` 與防火牆規則、Terraform 建立 cert role 的來源，所以位址只在一處宣告。
+`topology.Load` 回傳 `topology.VaultTopology`，要求 `vault_bastion` 同時宣告 `loopback_ip`、`publish_ip` 兩個 IP 與一個合法的 `port`，缺任何一項就讓工具在啟動時中止。`APIEndpoint()` 組出 `https://<loopback_ip>:<port>`，命令層的 `newBastionVaultListeners` 再把兩個 IP 組成 `vaultops.Listeners`，分別交給 loopback 與 publish 的 listener 憑證。同一份檔案也是 Ansible 渲染 `vault.hcl` 與防火牆規則、Terraform 建立 cert role 的來源，所以位址只在一處宣告。
 
 這個設計取代了舊的三段式退回鏈：`credentials.yaml` 的 `vault.address`、`.env` 的 `BASTION_VAULT_ADDR`、`vaultops` 寫死的預設值。三處各自持有同一個位址字面值，修改時必須同步，漏改的那一處只會在執行到那條路徑時才失敗。現在只有命令層讀取 `topology.BastionVault`，再以 `vaultclient.Config` 與 `vaultops.Listeners` 注入 `vaultops`，沒有任何預設值可以退回。
 
@@ -703,8 +703,8 @@ func (a *app) newBastionVaultConfig() vaultclient.Config {
 
 func (a *app) newBastionVaultListeners() vaultops.Listeners {
     return vaultops.Listeners{
-        Loopback: net.ParseIP(a.topology.BastionVault.LoopbackAddress),
-        Publish:  net.ParseIP(a.topology.BastionVault.PublishAddress),
+        Loopback: net.ParseIP(a.topology.BastionVault.LoopbackIP),
+        Publish:  net.ParseIP(a.topology.BastionVault.PublishIP),
     }
 }
 ```
@@ -765,7 +765,7 @@ publish := &x509.Certificate{
 
 `issueListenerCert` 為兩張憑證補上 `KeyUsage: DigitalSignature` 與 `ExtKeyUsage: ServerAuth`。ML-DSA 與 ECDSA 都只做簽章，不做金鑰加密。
 
-每張憑證只列出自己 listener 的名稱：容器內部與主機上的 CLI、Terraform、Vault Proxy 走 `localhost` 或 `loopback_address`，虛擬機走 `publish_address`。現行的 TLS 驗證只看主體替代名稱而不再參考 `CommonName`，因此 loopback 憑證無法冒充 publish listener，反之亦然。兩個 IP 都來自 `workstation-topology.yaml`，與 `vault.hcl` 的 listener 同源，所以不需要另外維護。
+每張憑證只列出自己 listener 的名稱：容器內部與主機上的 CLI、Terraform、Vault Proxy 走 `localhost` 或 `loopback_ip`，虛擬機走 `publish_ip`。現行的 TLS 驗證只看主體替代名稱而不再參考 `CommonName`，因此 loopback 憑證無法冒充 publish listener，反之亦然。兩個 IP 都來自 `workstation-topology.yaml`，與 `vault.hcl` 的 listener 同源，所以不需要另外維護。
 
 終結點的客戶端憑證由 `issueTerminatorClientCert` 自簽，`ExtKeyUsage` 只有 `ClientAuth`，沒有主體替代名稱。Vault 讀取 PROXY 標頭的時間點在 TLS 握手之前，主機上任何程序都能連到 loopback 並送出偽造的來源位址。PROXY protocol listener 因此以 `tls_require_and_verify_client_cert` 要求客戶端憑證，`tls_client_ca_file` 只指向這張自簽憑證，本機 CA 簽發的其他憑證都無法通過。金鑰採 EC P-384，Vault 驗證這張憑證時不依賴 ML-DSA 的支援。
 
@@ -1142,7 +1142,7 @@ func Rotate(ctx context.Context, client *vaultapi.Client, spec Spec, log func(st
     }
     _, existedBeforeLock := readField(ctx, client, spec.Mount, spec.Path, spec.Field)
     if !existedBeforeLock && isPathDestroyedOutOfBand(ctx, client, spec.Mount, spec.Path) {
-        return "", fmt.Errorf("secretrotate: %s/%s held data before and now reads back empty, refusing to mint a value the live service was never given", spec.Mount, spec.Path)
+        return "", fmt.Errorf("secretrotate: %s/%s contained data before and now reads back empty, refusing to mint a value the live service was never given", spec.Mount, spec.Path)
     }
 
     holder, err := acquireLock(ctx, client, spec.Mount, spec.Path, spec.Field)
@@ -1274,8 +1274,8 @@ func acquireLock(ctx context.Context, client *vaultapi.Client, mount, path, fiel
     var lastErr error
     for range acquireLockMaxAttempts {
         doc, _ := readDocument(ctx, client, mount, path)
-        if lock, held := readActiveLock(doc, field); held {
-            return "", fmt.Errorf("secretrotate: rotation aborted, %s holds the lock on %s/%s#%s until %s",
+        if lock, active := readActiveLock(doc, field); active {
+            return "", fmt.Errorf("secretrotate: rotation aborted, %s owns the lock on %s/%s#%s until %s",
                 lock.Holder, mount, path, field, lock.ExpiresAt.Format(time.RFC3339))
         }
         holder := fmt.Sprintf("rotate-%d", time.Now().UnixNano())
@@ -1865,7 +1865,7 @@ for _, cred := range a.credentials {
 }
 cmd.AddCommand(rotateCmd)
 
-reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Push a stored credential out to a drifted live service"}
+reconcileCmd := &cobra.Command{Use: "reconcile", Short: "Apply a stored credential to a drifted live service"}
 for _, cred := range a.credentials {
     key := cred.Key
     reconcileCmd.AddCommand(&cobra.Command{

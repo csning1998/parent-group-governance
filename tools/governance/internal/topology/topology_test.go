@@ -19,8 +19,8 @@ func writeTopology(t *testing.T, content string) string {
 
 func TestLoadDerivesEndpoint(t *testing.T) {
 	path := writeTopology(t, `vault_bastion:
-  loopback_address: "127.0.0.1"
-  publish_address: "172.16.0.1"
+  loopback_ip: "127.0.0.1"
+  publish_ip: "172.16.0.1"
   api_port: 8200
 operator_vault_proxy:
   cert_auth_mount: "operator-cert"
@@ -36,10 +36,10 @@ operator_vault_proxy:
 
 func TestLoadRejectsIncompleteBastionVault(t *testing.T) {
 	cases := map[string]string{
-		"no publish address": "vault_bastion:\n  loopback_address: \"127.0.0.1\"\n  api_port: 8200\n",
-		"hostname":           "vault_bastion:\n  loopback_address: \"localhost\"\n  publish_address: \"172.16.0.1\"\n  api_port: 8200\n",
-		"no api port":        "vault_bastion:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n",
-		"port out of range":  "vault_bastion:\n  loopback_address: \"127.0.0.1\"\n  publish_address: \"172.16.0.1\"\n  api_port: 70000\n",
+		"no publish address": "vault_bastion:\n  loopback_ip: \"127.0.0.1\"\n  api_port: 8200\n",
+		"hostname":           "vault_bastion:\n  loopback_ip: \"localhost\"\n  publish_ip: \"172.16.0.1\"\n  api_port: 8200\n",
+		"no api port":        "vault_bastion:\n  loopback_ip: \"127.0.0.1\"\n  publish_ip: \"172.16.0.1\"\n",
+		"port out of range":  "vault_bastion:\n  loopback_ip: \"127.0.0.1\"\n  publish_ip: \"172.16.0.1\"\n  api_port: 70000\n",
 	}
 	for name, content := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -67,8 +67,8 @@ func TestLoadRejectsMalformedYAML(t *testing.T) {
 
 func TestResolveProxyEndpointLocatesTheIdentityOfAnAccess(t *testing.T) {
 	path := writeTopology(t, `vault_bastion:
-  loopback_address: "127.0.0.1"
-  publish_address: "172.16.0.1"
+  loopback_ip: "127.0.0.1"
+  publish_ip: "172.16.0.1"
   api_port: 8200
 operator_vault_proxy:
   user_config_dir: ".config/vault-proxy"
@@ -115,8 +115,8 @@ func TestResolveProxyEndpointRequiresTheIdentityOfTheAccess(t *testing.T) {
 
 // stateBackendTopology defines fixture topology containing distributor and consumer identities of two owners.
 const stateBackendTopology = `vault_bastion:
-  loopback_address: "127.0.0.1"
-  publish_address: "172.16.0.1"
+  loopback_ip: "127.0.0.1"
+  publish_ip: "172.16.0.1"
   api_port: 8200
 operator_vault_proxy:
   governance_owner_code: "example-governance"
@@ -132,8 +132,8 @@ operator_vault_proxy:
 // TestListCodeReviewerVariableProjects asserts byte-order sorting and deduplication across configured project paths.
 func TestListCodeReviewerVariableProjects(t *testing.T) {
 	topo, err := Load(writeTopology(t, `vault_bastion:
-  loopback_address: "127.0.0.1"
-  publish_address: "172.16.0.1"
+  loopback_ip: "127.0.0.1"
+  publish_ip: "172.16.0.1"
   api_port: 8200
 operator_vault_proxy:
   identities:

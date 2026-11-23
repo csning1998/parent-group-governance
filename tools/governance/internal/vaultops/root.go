@@ -17,11 +17,11 @@ import (
 
 var (
 	// ErrNoRootToken reports a token helper file without a live token of the root policy.
-	ErrNoRootToken = errors.New("vaultops: the token helper file does not hold a live root token")
+	ErrNoRootToken = errors.New("vaultops: the token helper file does not contain a live root token")
 	// ErrSuccessorNotReady reports a successor operator identity without an active login with its policy.
-	ErrSuccessorNotReady = errors.New("vaultops: the successor identity does not hold a login with its policy")
+	ErrSuccessorNotReady = errors.New("vaultops: the successor identity lacks a login with its policy")
 	// ErrRootTokenPresent reports a token helper file with an existing token before generate-root runs.
-	ErrRootTokenPresent = errors.New("vaultops: the token helper file already holds a token, revoke the token first")
+	ErrRootTokenPresent = errors.New("vaultops: the token helper file already contains a token, revoke the token first")
 	// ErrGenerateRootInProgress reports an unfinished generate-root attempt.
 	ErrGenerateRootInProgress = errors.New("vaultops: a generate-root attempt is in progress, cancel it with vault operator generate-root -cancel")
 )
@@ -136,7 +136,7 @@ func decodeRootToken(encoded, otp string) (string, error) {
 		return "", fmt.Errorf("vaultops: decode the encoded root token: %w", err)
 	}
 	if len(raw) != len(otp) {
-		return "", fmt.Errorf("vaultops: the encoded root token holds %d bytes, while the one-time password holds %d", len(raw), len(otp))
+		return "", fmt.Errorf("vaultops: the encoded root token has %d bytes, while the one-time password has %d", len(raw), len(otp))
 	}
 	token := make([]byte, len(raw))
 	for i := range raw {

@@ -31,9 +31,9 @@ type GitLabGroupRunnerConfig struct {
 	ConfigPath  string   `yaml:"config_path"` // config.toml path relative to the project root
 }
 
-// ReviewerBotToken maps one bot token in the Bastion Vault to the project variables carrying the token.
+// ReviewerBotToken maps one bot token in the Bastion Vault to the project variables containing the token.
 type ReviewerBotToken struct {
-	Vault        VaultField `yaml:"vault"`         // Bastion Vault field holding the bot token
+	Vault        VaultField `yaml:"vault"`         // Bastion Vault field storing the bot token
 	VariableKeys []string   `yaml:"variable_keys"` // project CI/CD variable keys receiving the bot token
 }
 
@@ -44,7 +44,7 @@ type CodeReviewerVariablesConfig struct {
 
 // Config is the service_issued_tokens section of workstation-topology.yaml.
 type Config struct {
-	GitLabGroupRegistry    VaultField                   `yaml:"gitlab_group_registry"`    // registry field holding the top-level group ID
+	GitLabGroupRegistry    VaultField                   `yaml:"gitlab_group_registry"`    // registry field storing the top-level group ID
 	SonarQubeAnalysisToken SonarQubeAnalysisTokenConfig `yaml:"sonarqube_analysis_token"` // SonarQube analysis token of the group CI jobs
 	GitLabGroupRunner      GitLabGroupRunnerConfig      `yaml:"gitlab_group_runner"`      // group runner of the local Podman executor
 	CodeReviewerVariables  CodeReviewerVariablesConfig  `yaml:"code_reviewer_variables"`  // bot tokens of the code reviewer CI components

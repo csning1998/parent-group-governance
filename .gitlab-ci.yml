@@ -13,7 +13,7 @@ include:
         - "gemini-3.8-flash"
         - "azure-gpt-5.4-mini"
       enable_sonarqube: true
-      # The group runner carries the tag and reaches SonarQube on the host network sonarqube-ci-net.
+      # The group runner is registered with the tag and reaches SonarQube on the host network sonarqube-ci-net.
       sonar_scanner_tags: ["sonarqube-network"]
       sonar_go_coverage_path: "tools/governance/coverage.out"
   - component: $CI_SERVER_FQDN/$CI_PROJECT_ROOT_NAMESPACE/gitlab-ci-with-code-reviewer/iac-terraform@1.8.4
