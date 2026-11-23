@@ -9,9 +9,9 @@ include:
         - "claude-opus-5.5"
         - "claude-fable-5.2"
         - "gemini-4-neon"
+        - "gemini-4-hydrogen"
         - "gemini-4-carbon"
         - "gemini-4-argon"
-        - "gemini-3.8-flash"
         - "azure-gpt-5.4-mini"
       enable_sonarqube: true
       # The group runner is registered with the tag and reaches SonarQube on the host network sonarqube-ci-net.
