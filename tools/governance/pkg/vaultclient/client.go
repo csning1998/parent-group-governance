@@ -3,6 +3,7 @@ package vaultclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	vaultapi "github.com/hashicorp/vault/api"
@@ -56,7 +57,7 @@ func ResolveTargetContext(ctx context.Context, target string, bastionCfg, prodCf
 
 	caCert = prodCfg.CACertPath
 	if bastionCfg.Token == "" {
-		return prodCfg.Address, "", caCert, fmt.Errorf("vaultclient: bastion token required to resolve prod context")
+		return prodCfg.Address, "", caCert, errors.New("vaultclient: bastion token required to resolve prod context")
 	}
 
 	client, err := NewClient(bastionCfg)
