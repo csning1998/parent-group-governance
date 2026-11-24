@@ -223,13 +223,13 @@ All commands in this section follow a single linear dependency sequence assuming
         terraform/layers/group-ai-provider-azure \
         terraform/layers/administration-gitlab-project \
         terraform/layers/group-topology; do
-        (cd "$layer" && terraform init && terraform apply)
+        (cd "$layer" && direnv allow . && direnv exec . /bin/sh -c 'terraform init && terraform apply')
     done
 
     ./governance credentials issue gitlab-group-runner
     podman compose restart gitlab-runner
     ./governance credentials issue sonarqube-analysis-token
-    (cd terraform/layers/group-gitlab-configuration && terraform init && terraform apply)
+    (cd terraform/layers/group-gitlab-configuration && direnv allow . && direnv exec . /bin/sh -c 'terraform init && terraform apply')
     ./governance credentials issue code-reviewer-variables
     ```
 
