@@ -13,7 +13,7 @@
         _workstation_vault_proxy_found_dirs.files
         | map(attribute='path')
         | map('basename')
-        | reject('in', operator_vault_proxy.identities.keys() | list)
+        | reject('in', workstation_vault_proxy_operator_vault_proxy.identities.keys() | list)
         | list
       }}
 
@@ -45,7 +45,7 @@
     mode: "0600"
   vars:
     _workstation_vault_proxy_identity_name: "{{ item }}"
-  loop: "{{ operator_vault_proxy.identities.keys() | list }}"
+  loop: "{{ workstation_vault_proxy_operator_vault_proxy.identities.keys() | list }}"
   register: _workstation_vault_proxy_configs
 
 - name: "D2. Create the systemd user unit directory"
@@ -68,7 +68,8 @@
 # Lingering keeps the user manager running without a login session, hence the Proxies serve after a reboot.
 - name: "D4. Enable lingering for the operator"
   ansible.builtin.command:
-    argv: [loginctl, enable-linger, "{{ workstation_vault_proxy_operator_user }}"]
+    argv:
+      [loginctl, enable-linger, "{{ workstation_vault_proxy_operator_user }}"]
     creates: "/var/lib/systemd/linger/{{ workstation_vault_proxy_operator_user }}"
 
 - name: "D5. Enable and start the Proxy of each identity"
@@ -82,7 +83,7 @@
     enabled: true
     state: started
     daemon_reload: "{{ _workstation_vault_proxy_unit.changed }}"
-  loop: "{{ operator_vault_proxy.identities.keys() | list }}"
+  loop: "{{ workstation_vault_proxy_operator_vault_proxy.identities.keys() | list }}"
 
 # A new certificate, CA, or configuration takes effect after a restart of the affected Proxy.
 - name: "D6. Restart each Proxy whose certificates or configuration changed"
@@ -94,7 +95,7 @@
     name: "vault-proxy@{{ item }}.service"
     scope: user
     state: restarted
-  loop: "{{ operator_vault_proxy.identities.keys() | list }}"
+  loop: "{{ workstation_vault_proxy_operator_vault_proxy.identities.keys() | list }}"
   when: >-
     _workstation_vault_proxy_ca_copy.changed
     or _workstation_vault_proxy_unit.changed
@@ -103,7 +104,7 @@
 
 - name: "D7. Wait for the listener of each Proxy"
   ansible.builtin.wait_for:
-    host: "{{ vault_bastion.loopback_ip }}"
-    port: "{{ operator_vault_proxy.identities[item].listen_port }}"
+    host: "{{ workstation_vault_proxy_vault_bastion.loopback_ip }}"
+    port: "{{ workstation_vault_proxy_operator_vault_proxy.identities[item].listen_port }}"
     timeout: 30
-  loop: "{{ operator_vault_proxy.identities.keys() | list }}"
+  loop: "{{ workstation_vault_proxy_operator_vault_proxy.identities.keys() | list }}"

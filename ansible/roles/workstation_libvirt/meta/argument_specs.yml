@@ -1,0 +1,48 @@
+---
+argument_specs:
+  main:
+    short_description: Configure workstation libvirt and Bastion Vault prerequisites.
+    description: >-
+      Configures virtnetworkd ordering, the publish libvirt network, firewalld isolation policies,
+      operator memlock limits, and Bastion Vault and HAProxy terminator configuration files.
+    options:
+      # Required
+      workstation_libvirt_operator_user:
+        type: str
+        required: true
+        description: Non-root workstation operator account name injected by the CLI.
+      workstation_libvirt_vault_config_path:
+        type: str
+        required: true
+        description: Absolute host path of vault/vault.hcl inside the repository checkout.
+      workstation_libvirt_vault_bastion:
+        type: dict
+        required: true
+        description: Bastion Vault listener bindings mapped from group_vars/all/vault_bastion.yaml.
+      workstation_libvirt_host_telemetry_scrape:
+        type: dict
+        required: true
+        description: Telemetry scrape topology mapped from group_vars/all/host_telemetry_scrape.yaml.
+
+      # Optional
+      workstation_libvirt_publish_network:
+        type: dict
+        required: false
+        description: Libvirt publish network attributes derived from the publish IP.
+      workstation_libvirt_vault:
+        type: dict
+        required: false
+        description: Vault configuration location settings derived from workstation_libvirt_vault_config_path.
+      workstation_libvirt_terminator:
+        type: dict
+        required: false
+        description: Host and container paths for HAProxy TLS terminator configurations and certificates.
+      workstation_libvirt_scrape_ports:
+        type: list
+        elements: int
+        required: false
+        description: Host telemetry TCP ports excluded from the libvirt-to-host firewalld policy.
+      workstation_libvirt_firewalld_ready_timeout:
+        type: int
+        required: false
+        description: Maximum startup wait in seconds for virtnetworkd until firewalld enters the running state.

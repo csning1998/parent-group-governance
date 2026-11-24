@@ -48,7 +48,11 @@ func (a *app) runHostVaultProxyPlaybook(ctx context.Context) error {
 }
 
 func (a *app) runHostTelemetryPlaybook(ctx context.Context) error {
-	return a.runHostSteps(ctx, a.playbookStep(func() (hostPlaybook, error) { return a.buildHostTelemetryPlaybook(ctx) }))
+	return a.runHostSteps(
+		ctx,
+		a.playbookStep(func() (hostPlaybook, error) { return a.buildHostTelemetryPlaybook(ctx) }),
+		a.playbookStep(a.buildLibvirtPlaybook),
+	)
 }
 
 // runHostVaultAuditPlaybook omits privilege escalation because the audit systemd units are managed under the operator user session.
@@ -161,17 +165,11 @@ func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, err
 	if _, err := vault.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(scrapeIP)); err != nil {
 		return hostPlaybook{}, err
 	}
-	facts, err := config.DetectHostFacts()
-	if err != nil {
-		return hostPlaybook{}, err
-	}
 	return hostPlaybook{
 		file: "playbooks/workstation_host_telemetry.yaml",
 		extraVars: map[string]any{
 			"workstation_host_telemetry_scrape_cidr": cidr,
 			"workstation_host_telemetry_scrape_ip":   scrapeIP,
-			"workstation_libvirt_operator_user":      facts.CurrentUname,
-			"workstation_libvirt_vault_config_path":  filepath.Join(a.root, "vault", "vault.hcl"),
 		},
 		doneMsg: "Host telemetry scrape network applied.",
 	}, nil

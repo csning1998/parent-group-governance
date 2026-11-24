@@ -35,6 +35,7 @@
         label: "{{ item.item }}"
       when: item.stat.exists | default(false)
       register: workstation_selinux_restorecon_dry
+      check_mode: false
       changed_when: false
       failed_when: false
 
@@ -74,6 +75,7 @@
       loop_control:
         label: "{{ item.path }}"
       register: workstation_selinux_podman_sock_dry
+      check_mode: false
       changed_when: false
       failed_when: false
 
@@ -110,6 +112,7 @@
         label: "{{ item.item }}"
       when: item.stat.exists | default(false)
       register: workstation_selinux_system_restorecon_dry
+      check_mode: false
       changed_when: false
       failed_when: false
 

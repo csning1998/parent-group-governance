@@ -9,16 +9,17 @@
       workstation_libvirt_operator_user must be the operator account name.
       become: true gathers facts as root. The CLI injects this extra var.
 
-- name: "Section 0. Require the workstation topology"
+- name: "Section 0. Require the Bastion Vault and telemetry scrape topology"
   ansible.builtin.assert:
     that:
-      - vault_bastion is mapping
-      - vault_bastion.publish_ip is string
-      - vault_bastion.api_port is integer
+      - workstation_libvirt_vault_bastion is mapping
+      - workstation_libvirt_vault_bastion.publish_ip is string
+      - workstation_libvirt_vault_bastion.api_port is integer
+      - workstation_libvirt_host_telemetry_scrape is mapping
       - workstation_libvirt_publish_network.netmask == "255.255.255.0"
     fail_msg: >-
-      vault_bastion is undefined, or the publish network netmask differs from 255.255.255.0. The playbook MUST load
-      workstation-topology.yaml of the repository root, and source_cidr derives the /24 publish segment alone.
+      workstation_libvirt_{vault_bastion,host_telemetry_scrape} is invalid, or the publish network netmask differs
+      from 255.255.255.0. Both role inputs map from group_vars/all/, and source_cidr derives the /24 publish segment alone.
 
 # workstation-backup owns every boot trust object. The TPM binding of the disk encryption is meaningless
 # without Secure Boot, hence the trust root refuses the host instead of writing the firmware state.

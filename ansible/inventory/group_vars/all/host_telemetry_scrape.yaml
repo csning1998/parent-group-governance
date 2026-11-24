@@ -1,0 +1,5 @@
+---
+host_telemetry_scrape: "{{ workstation_topology.host_telemetry_scrape }}"
+
+workstation_host_telemetry_host_telemetry_scrape: "{{ host_telemetry_scrape }}"
+workstation_libvirt_host_telemetry_scrape: "{{ host_telemetry_scrape }}"

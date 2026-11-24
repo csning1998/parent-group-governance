@@ -1,5 +1,11 @@
 ---
 all:
+  vars:
+    workstation_topology: >-
+      {{
+        lookup('ansible.builtin.file', inventory_dir ~ '/../../workstation-topology.yaml')
+        | from_yaml
+      }}
   hosts:
     workstation:
       ansible_connection: local

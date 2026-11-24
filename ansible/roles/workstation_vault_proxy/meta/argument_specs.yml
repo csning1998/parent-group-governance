@@ -1,0 +1,43 @@
+---
+argument_specs:
+  main:
+    short_description: Deploy one Vault Proxy per workstation operator identity.
+    description: >-
+      Provisions operator Proxy directories, client and listener TLS certificates signed by the local CA,
+      Proxy HCL files, lingering systemd user units, direnv shell integration, and vault-proxy-env.
+    options:
+      # Required
+      workstation_vault_proxy_operator_user:
+        type: str
+        required: true
+        description: Non-root workstation operator account name injected by the CLI.
+      workstation_vault_proxy_ca_dir:
+        type: str
+        required: true
+        description: Absolute path to vault/tls containing the ML-DSA-87 local CA certificate and key.
+      workstation_vault_proxy_gitlab_url:
+        type: str
+        required: true
+        description: GitLab instance base URL derived from origin and exported by vault-proxy-env.
+      workstation_vault_proxy_gitlab_top_level_group_path:
+        type: str
+        required: true
+        description: GitLab top-level group path derived from origin and exported by vault-proxy-env.
+      workstation_vault_proxy_vault_bastion:
+        type: dict
+        required: true
+        description: Bastion Vault listener bindings mapped from group_vars/all/vault_bastion.yaml.
+      workstation_vault_proxy_operator_vault_proxy:
+        type: dict
+        required: true
+        description: Operator Proxy identity and backend settings mapped from group_vars/all/operator_vault_proxy.yaml.
+
+      # Optional
+      workstation_vault_proxy_cert:
+        type: dict
+        required: false
+        description: Certificate validity and renewal threshold in days for issued client and listener certificates.
+      workstation_vault_proxy_login_retry_seconds:
+        type: int
+        required: false
+        description: Maximum backoff in seconds for Proxy cert login retries and vault-proxy-env wait loops.

@@ -203,7 +203,7 @@ func writeProxyCertificates(t *testing.T, home string, srv *httptest.Server) {
 	}
 	writePEM(t, filepath.Join(base, "ca.pem"), "CERTIFICATE", srv.Certificate().Raw)
 
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}

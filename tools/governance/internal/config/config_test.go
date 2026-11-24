@@ -55,7 +55,7 @@ func TestBootstrapEnvGeneratesSonarDBPasswordWhenMissingFromExistingFile(t *test
 	}
 }
 
-// TestBootstrapEnvRefusesSonarDBPasswordRegeneration asserts refusal when .env lacks the password and the data directory exists.
+// TestBootstrapEnvRefusesSonarDBPasswordRegeneration asserts refusal when .env lacks the password and postgres-data is initialized.
 func TestBootstrapEnvRefusesSonarDBPasswordRegeneration(t *testing.T) {
 	cases := map[string]string{
 		"existing env file": KeyProjectRoot + "=\"/tmp\"\n",
@@ -74,6 +74,55 @@ func TestBootstrapEnvRefusesSonarDBPasswordRegeneration(t *testing.T) {
 	}
 }
 
+// TestBootstrapEnvGeneratesSonarDBPasswordWhenPostgresDataDirIsEmpty permits password generation when the bind-mount directory is empty.
+func TestBootstrapEnvGeneratesSonarDBPasswordWhenPostgresDataDirIsEmpty(t *testing.T) {
+	cases := map[string]string{
+		"existing env file": KeyProjectRoot + "=\"/tmp\"\n",
+		"missing env file":  "",
+	}
+	for name, content := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			if content != "" {
+				if err := os.WriteFile(filepath.Join(root, ".env"), []byte(content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.MkdirAll(filepath.Join(root, "sonarqube", "postgres-data"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			e, err := BootstrapEnv(root, ui.New(io.Discard, io.Discard))
+			if err != nil {
+				t.Fatalf("BootstrapEnv = %v, want password generation for empty postgres-data directory", err)
+			}
+			if got := e.Get(KeySonarQubeDBPassword); got == "" {
+				t.Error("SONARQUBE_DB_PASSWORD = empty, want a generated password")
+			}
+		})
+	}
+}
+
+// TestBootstrapEnvRefusesWhenPostgresDataDirIsUnreadable treats an unreadable data directory as initialized.
+func TestBootstrapEnvRefusesWhenPostgresDataDirIsUnreadable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("skipping permission-bit test when running as root")
+	}
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "sonarqube", "postgres-data")
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dataDir, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dataDir, 0o700) })
+
+	if _, err := BootstrapEnv(root, ui.New(io.Discard, io.Discard)); err == nil {
+		t.Fatalf("BootstrapEnv = nil, want refusal when %s is unreadable", dataDir)
+	}
+}
+
 func createSonarDataWithoutPassword(t *testing.T, content string) (root, envPath string) {
 	t.Helper()
 	root = t.TempDir()
@@ -83,7 +132,11 @@ func createSonarDataWithoutPassword(t *testing.T, content string) (root, envPath
 			t.Fatal(err)
 		}
 	}
-	if err := os.MkdirAll(filepath.Join(root, "sonarqube", "postgres-data"), 0o755); err != nil {
+	dataDir := filepath.Join(root, "sonarqube", "postgres-data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "PG_VERSION"), []byte("18\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return root, envPath

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vault"
@@ -46,17 +45,11 @@ func TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress(t *testi
 	if err != nil {
 		t.Fatalf("GenerateTLS: %v", err)
 	}
-	facts, err := config.DetectHostFacts()
-	if err != nil {
-		t.Fatalf("DetectHostFacts: %v", err)
-	}
 
 	pb, err := a.buildHostTelemetryPlaybook(context.Background())
 	want := map[string]any{
 		"workstation_host_telemetry_scrape_cidr": "192.0.2.0/24",
 		"workstation_host_telemetry_scrape_ip":   "192.0.2.1",
-		"workstation_libvirt_operator_user":      facts.CurrentUname,
-		"workstation_libvirt_vault_config_path":  filepath.Join(a.root, "vault", "vault.hcl"),
 	}
 	if err != nil || pb.file != "playbooks/workstation_host_telemetry.yaml" || !maps.Equal(pb.extraVars, want) {
 		t.Errorf("buildHostTelemetryPlaybook = %+v, %v, want the telemetry playbook with %v", pb, err, want)
@@ -64,6 +57,32 @@ func TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress(t *testi
 	cert := readPublishCert(t, tlsDir)
 	if !slices.ContainsFunc(cert.IPAddresses, net.ParseIP("192.0.2.1").Equal) {
 		t.Errorf("publish SAN = %v, want the host telemetry scrape address", cert.IPAddresses)
+	}
+}
+
+// TestRunHostTelemetryPlaybookRunsTelemetryThenLibvirt verifies that applying host telemetry chains workstation_libvirt under the same privilege escalation prompt.
+func TestRunHostTelemetryPlaybookRunsTelemetryThenLibvirt(t *testing.T) {
+	f := newHostFixture(t, "example-become", "")
+	telemetryApp, fakeVault := newHostTelemetryApp(t)
+	f.a.topology = telemetryApp.topology
+	f.a.credentials = telemetryApp.credentials
+	f.a.issuedTokens = telemetryApp.issuedTokens
+	f.a.home = telemetryApp.home
+	fakeVault.secrets["registry/platform/network/allocation"] = map[string]any{
+		"host_telemetry_scrape_cidr": "192.0.2.0/24",
+		"host_telemetry_scrape_ip":   "192.0.2.1",
+	}
+	err := vault.GenerateTLS(f.a.newVaultPaths().TLSDir(), vault.Listeners{Loopback: net.ParseIP("127.0.0.1"), Publish: net.ParseIP("192.0.2.10")})
+	if err != nil {
+		t.Fatalf("GenerateTLS: %v", err)
+	}
+
+	if err := f.a.runHostTelemetryPlaybook(context.Background()); err != nil {
+		t.Fatalf("runHostTelemetryPlaybook: %v", err)
+	}
+	want := []string{"playbooks/workstation_host_telemetry.yaml", "playbooks/workstation_libvirt.yaml"}
+	if got := f.playbooks(t); !slices.Equal(got, want) {
+		t.Errorf("playbooks = %q, want %q", got, want)
 	}
 }
 

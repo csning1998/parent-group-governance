@@ -1,5 +1,5 @@
 ---
-# Public contract. Callers MUST inject workstation_selinux_home and workstation_selinux_repository because
+# Public contract. Callers MUST inject workstation_selinux_{home,repository} because
 # privilege escalation (become: true) resolves ansible_facts.user_dir to /root. Hardcoded paths are forbidden.
 workstation_selinux_home: ""
 workstation_selinux_repository: ""

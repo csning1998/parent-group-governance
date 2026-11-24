@@ -1,21 +1,18 @@
 ---
-# Public contract. Callers MUST inject workstation_libvirt_operator_user from
-# the operator account. become: true gathers facts as root, and ansible_facts
-# cannot supply the operator name. A hardcoded account name is forbidden.
-workstation_libvirt_operator_user: ""
+# Required role inputs (meta/argument_specs.yml):
+# workstation_libvirt_{operator_user,vault_config_path,vault_bastion,host_telemetry_scrape}.
 
 # The Bastion Vault guest reachability segment lies outside service_catalog because cidr_index must exceed
 # cidr_nat_offset (124) and octet 0 of 172.16.0.0/24 lies outside the expressible range of the catalog.
-# The bridge address is vault_bastion.publish_ip of workstation-topology.yaml.
+# The bridge address is workstation_libvirt_vault_bastion.publish_ip from group_vars/all/vault_bastion.yaml.
 workstation_libvirt_publish_network:
   name: "vault-bastion-publish"
   netmask: "255.255.255.0"
   # Restricts port 8200 ingress to the /24 publish subnet per ADR 143, requiring guest VMs to attach a publish NIC.
   # Section 0 of tasks/main.yaml asserts a 255.255.255.0 netmask because source_cidr derives a /24 prefix.
-  source_cidr: "{{ (vault_bastion.publish_ip.split('.')[:3] | join('.')) ~ '.0/24' }}"
+  source_cidr: "{{ (workstation_libvirt_vault_bastion.publish_ip.split('.')[:3] | join('.')) ~ '.0/24' }}"
 
-# Renders vault.hcl from the vault_bastion listener settings in workstation-topology.yaml at the path injected via
-# workstation_libvirt_vault_config_path.
+# Renders vault.hcl from workstation_libvirt_vault_bastion at the path injected via workstation_libvirt_vault_config_path.
 workstation_libvirt_vault:
   config_path: "{{ workstation_libvirt_vault_config_path | default('') }}"
 
@@ -35,7 +32,10 @@ workstation_libvirt_terminator:
 # Scraper access is isolated to the host-telemetry-to-host policy in workstation_host_telemetry.
 # Task C10 uses this port list to assert the absence of telemetry ports from libvirt-to-host.
 workstation_libvirt_scrape_ports: >-
-  {{ [vault_bastion.metrics_port] + (host_telemetry_scrape.host_exporter_ports | default([])) }}
+  {{
+    [workstation_libvirt_vault_bastion.metrics_port]
+    + (workstation_libvirt_host_telemetry_scrape.host_exporter_ports | default([]))
+  }}
 
 # Maximum startup wait in seconds for virtnetworkd until firewalld enters the running state.
 workstation_libvirt_firewalld_ready_timeout: 120
