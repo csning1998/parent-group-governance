@@ -9,7 +9,7 @@
     fail_msg: >-
       Invalid workstation_host_telemetry inputs.
       The CLI injects workstation_host_telemetry_{scrape_cidr, scrape_ip}.
-      group_vars/all/ maps workstation_host_telemetry_{vault_bastion, telemetry_scrape}.
+      group_vars/all/ maps workstation_host_telemetry_{vault_bastion, host_telemetry_scrape}.
 
 # Binds the scrape gateway IP to a dedicated routed bridge, allowing scraper guests to reach host listeners without NAT.
 - name: "A1. Define the host telemetry scrape network"
