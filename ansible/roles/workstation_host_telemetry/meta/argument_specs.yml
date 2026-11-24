@@ -1,0 +1,32 @@
+---
+argument_specs:
+  main:
+    short_description: Configure the host telemetry scrape libvirt network and firewalld policy.
+    description: >-
+      Creates the routed libvirt bridge for the host telemetry scrape segment, admits scraper traffic
+      through firewalld, and persists the scrape gateway IP as a host local fact.
+    options:
+      # Required
+      workstation_host_telemetry_scrape_cidr:
+        type: str
+        required: true
+        description: Host telemetry scrape IPv4 CIDR read from the Vault registry by the CLI.
+      workstation_host_telemetry_scrape_ip:
+        type: str
+        required: true
+        description: Host telemetry scrape gateway IPv4 address read from the Vault registry by the CLI.
+      workstation_host_telemetry_vault_bastion:
+        type: dict
+        required: true
+        description: Bastion Vault listener bindings mapped from group_vars/all/vault_bastion.yaml.
+      workstation_host_telemetry_host_telemetry_scrape:
+        type: dict
+        required: true
+        description: Telemetry scrape topology mapped from group_vars/all/host_telemetry_scrape.yaml.
+
+      # Optional
+      workstation_host_telemetry_scrape_ports:
+        type: list
+        elements: int
+        required: false
+        description: TCP ports exposed on the host telemetry scrape gateway IP.
