@@ -1,13 +1,6 @@
 ---
-# Public contract. The CLI injects every value below. The playbook reads vault_bastion and operator_vault_proxy
-# from workstation-topology.yaml.
-workstation_vault_proxy_operator_user: ""
-# The absolute path of the repository directory vault/tls containing the ML-DSA-87 CA certificate and key.
-workstation_vault_proxy_ca_dir: ""
-# The CLI derives the GitLab base URL and the top level group path from the origin remote. The role renders both
-# into vault-proxy-env.
-workstation_vault_proxy_gitlab_url: ""
-workstation_vault_proxy_gitlab_top_level_group_path: ""
+# Required role inputs (meta/argument_specs.yml):
+# workstation_vault_proxy_{operator_user,ca_dir,gitlab_url,gitlab_top_level_group_path,vault_bastion,operator_vault_proxy}.
 
 # Days of validity of each issued certificate, and the remaining days below which the role issues a new one.
 workstation_vault_proxy_cert:
