@@ -1,0 +1,4 @@
+---
+operator_vault_proxy: "{{ workstation_topology.operator_vault_proxy }}"
+
+workstation_vault_proxy_operator_vault_proxy: "{{ operator_vault_proxy }}"

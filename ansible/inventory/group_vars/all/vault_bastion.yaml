@@ -1,0 +1,6 @@
+---
+vault_bastion: "{{ workstation_topology.vault_bastion }}"
+
+workstation_host_telemetry_vault_bastion: "{{ vault_bastion }}"
+workstation_libvirt_vault_bastion: "{{ vault_bastion }}"
+workstation_vault_proxy_vault_bastion: "{{ vault_bastion }}"
