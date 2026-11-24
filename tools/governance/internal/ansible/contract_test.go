@@ -188,25 +188,44 @@ func assertRoleFilePrefixedTopology(t *testing.T, path string, forbidden map[str
 		}
 		return
 	}
+	lines := strings.Split(text, "\n")
+	uncommented := make([]string, len(lines))
 	inAssertionBlock, blockIndent := false, 0
-	for lineIdx, line := range strings.Split(text, "\n") {
+	for lineIdx, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
+		uncommented[lineIdx] = line
 		indent := len(line) - len(strings.TrimLeft(line, " "))
-		if inAssertionBlock && indent <= blockIndent && !strings.HasPrefix(trimmed, "-") {
+		isSeqItem := strings.HasPrefix(trimmed, "- ") || trimmed == "-"
+		if inAssertionBlock && (indent < blockIndent || (indent == blockIndent && !isSeqItem)) {
 			inAssertionBlock = false
 		}
-		if strings.Contains(trimmed, "that:") || strings.Contains(trimmed, "when:") || strings.Contains(trimmed, "loop:") {
+		if isConditionalBlockLine(trimmed) {
 			inAssertionBlock, blockIndent = true, indent
 			assertNoForbiddenBareTokens(t, path, lineIdx+1, line, forbidden)
 			continue
 		}
-		if inAssertionBlock || strings.Contains(line, "{{") || strings.Contains(line, "{%") {
+		if inAssertionBlock {
 			assertNoForbiddenBareTokens(t, path, lineIdx+1, line, forbidden)
 		}
 	}
+	joined := strings.Join(uncommented, "\n")
+	for _, match := range jinjaExprPattern.FindAllStringIndex(joined, -1) {
+		lineNo := 1 + strings.Count(joined[:match[0]], "\n")
+		assertNoForbiddenBareTokens(t, path, lineNo, joined[match[0]:match[1]], forbidden)
+	}
+}
+
+func isConditionalBlockLine(trimmed string) bool {
+	keyCandidate := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+	for _, key := range []string{"that:", "when:", "changed_when:", "failed_when:", "until:", "loop:"} {
+		if strings.HasPrefix(keyCandidate, key) {
+			return true
+		}
+	}
+	return false
 }
 
 func assertNoForbiddenBareTokens(t *testing.T, path string, lineNo int, snippet string, forbidden map[string]bool) {
@@ -233,15 +252,12 @@ func assertRoleTasksCheckMode(t *testing.T, rel string, tasks []roleTask) {
 		if task.Command == nil && task.Shell == nil && task.ShortCmd == nil && task.ShortShell == nil {
 			continue
 		}
-		changedWhen, ok := task.ChangedWhen.(bool)
-		if !ok {
-			continue
-		}
-		if !changedWhen && task.Register != "" && (task.CheckMode == nil || *task.CheckMode) {
+		isReadOnly := task.ChangedWhen == false
+		if isReadOnly && task.Register != "" && (task.CheckMode == nil || *task.CheckMode) {
 			t.Errorf("%s task %q is a read-only probe (changed_when: false, register: %s) and must set check_mode: false", rel, task.Name, task.Register)
 		}
-		if changedWhen && task.CheckMode != nil && !*task.CheckMode {
-			t.Errorf("%s task %q mutates host state (changed_when: true) and must not set check_mode: false", rel, task.Name)
+		if !isReadOnly && task.CheckMode != nil && !*task.CheckMode {
+			t.Errorf("%s task %q is not a fixed read-only probe (changed_when: %v) and must not set check_mode: false", rel, task.Name, task.ChangedWhen)
 		}
 	}
 }
