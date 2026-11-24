@@ -1,6 +1,5 @@
 ---
-# The policy sets priority -1 and target REJECT, hence the policy decides routed guest traffic
-# to the host before any rule of the zone libvirt-routed, and the Bastion Vault port lives here.
+# Priority -1 with target REJECT preempts libvirt-routed rules, requiring Bastion Vault ingress in libvirt-to-host.
 - name: "C1. Declare the policy for routed guest traffic to the host"
   ansible.builtin.template:
     src: libvirt-to-host.xml.j2
@@ -8,8 +7,9 @@
     owner: root
     group: root
     mode: "0644"
+  register: _workstation_libvirt_policy_file
 
-# Overrides the package default libvirt zone to drop unused ssh and tftp access from NAT guests.
+# Declaring /etc/firewalld/zones/libvirt.xml overrides the package default libvirt zone to drop ssh and tftp access.
 - name: "C2. Declare the zone for NAT guest traffic to the host"
   ansible.builtin.template:
     src: libvirt-zone.xml.j2
@@ -18,8 +18,7 @@
     group: root
     mode: "0644"
 
-# A reload discards a runtime-only zone binding absent from the permanent configuration,
-# reconciling runtime state independently of whether C1 and C2 report changed.
+# Unconditional execution discards transient runtime firewalld bindings even when C1 and C2 report unchanged.
 - name: "C3. Reload firewalld to reconcile runtime state with the permanent configuration"
   ansible.builtin.command:
     cmd: firewall-cmd --reload
@@ -29,58 +28,60 @@
   ansible.builtin.command:
     cmd: firewall-cmd --permanent --zone=trusted --list-all
   register: _workstation_libvirt_trusted_zone
+  check_mode: false
   changed_when: false
 
-# A source or interface in the zone trusted accepts every port of the host and bypasses C1 and C2.
+# Any interface or source bound to the trusted zone bypasses C1 and C2 by admitting traffic to every host port.
 - name: "C5. Assert the zone trusted lacks any binding"
   ansible.builtin.assert:
     that:
       - _workstation_libvirt_trusted_zone.stdout is not search('^\s*(interfaces|sources):[ ]+\S', multiline=true)
     fail_msg: >-
-      The permanent zone trusted binds an interface or a source.
-      The zone trusted admits the traffic of the binding to every port of the host.
+      Permanent firewalld zone "trusted" contains an interface or source binding, exposing every host port.
       Remove the binding with firewall-cmd --permanent --zone=trusted --remove-source or --remove-interface.
 
 - name: "C6. Read the runtime bindings of the zone trusted"
   ansible.builtin.command:
     cmd: firewall-cmd --zone=trusted --list-all
   register: _workstation_libvirt_trusted_zone_runtime
+  check_mode: false
   changed_when: false
 
-# C5 covers the permanent configuration file alone. C7 covers a runtime-only binding added
-# by a prior manual firewall-cmd call outside the permanent configuration.
+# Runtime trusted bindings require a direct check because C5 inspects permanent configuration and check mode skips C3.
 - name: "C7. Assert the runtime zone trusted lacks any binding"
   ansible.builtin.assert:
     that:
       - _workstation_libvirt_trusted_zone_runtime.stdout is not search('^\s*(interfaces|sources):[ ]+\S', multiline=true)
     fail_msg: >-
-      The runtime zone trusted binds an interface or a source.
-      The zone trusted admits the traffic of the binding to every port of the host.
+      Runtime firewalld zone "trusted" contains an interface or source binding, exposing every host port.
       Remove the binding with firewall-cmd --zone=trusted --remove-source or --remove-interface.
 
 - name: "C8. Read the runtime policy for routed guest traffic to the host"
   ansible.builtin.command:
     cmd: firewall-cmd --info-policy=libvirt-to-host
   register: _workstation_libvirt_policy_info
+  check_mode: false
   changed_when: false
+  when: not (ansible_check_mode and _workstation_libvirt_policy_file.changed)
 
-# The policy admits exactly dhcp, dhcpv6, and dns, plus the rich rule which opens the Bastion Vault port.
+# Check mode skips this assertion when C1 reports pending changes because C3 does not execute in check mode.
 - name: "C9. Assert the runtime policy matches the declared service and port set"
   ansible.builtin.assert:
     that:
       - _workstation_libvirt_policy_info.stdout is search('^\s*services:\s*dhcp dhcpv6 dns\s*$', multiline=true)
       - _workstation_libvirt_policy_info.stdout is search('port="' ~ workstation_libvirt_vault_bastion.api_port ~ '"')
     fail_msg: >-
-      The runtime policy libvirt-to-host does not match the declared service set (dhcp, dhcpv6, dns) and the
-      Bastion Vault rich rule. Compare against the rendered libvirt-to-host.xml.j2 and rerun C1 and C3.
+      Runtime policy libvirt-to-host differs from libvirt-to-host.xml.j2, which requires dhcp, dhcpv6, dns, and TCP
+      port {{ workstation_libvirt_vault_bastion.api_port }}. Rerun C1 and C3.
+  when: not (ansible_check_mode and _workstation_libvirt_policy_file.changed)
 
-# Telemetry ingress belongs exclusively to host-telemetry-to-host. The libvirt-to-host policy does not expose scrape ports.
+# Telemetry scrape ports belong exclusively to the host-telemetry-to-host policy.
 - name: "C10. Assert the policy for routed guest traffic admits no scrape port"
   ansible.builtin.assert:
     that:
       - _workstation_libvirt_policy_info.stdout is not search('port="' ~ item ~ '"')
     fail_msg: >-
-      The runtime policy libvirt-to-host admits the scrape port {{ item }}. The policy host-telemetry-to-host
-      restricts the scrape port to the host telemetry scrape segment.
-      Compare against the rendered libvirt-to-host.xml.j2 and rerun C1 and C3.
+      Runtime policy libvirt-to-host exposes scrape port {{ item }}, which belongs exclusively to
+      host-telemetry-to-host. Compare with libvirt-to-host.xml.j2 and rerun C1 and C3.
   loop: "{{ workstation_libvirt_scrape_ports }}"
+  when: not (ansible_check_mode and _workstation_libvirt_policy_file.changed)

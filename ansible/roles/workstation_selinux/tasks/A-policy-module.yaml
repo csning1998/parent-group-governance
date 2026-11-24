@@ -36,13 +36,12 @@
     - name: "A2b. Query installed SELinux policy modules"
       ansible.builtin.command:
         cmd: semodule -l
+      check_mode: false
       changed_when: false
       register: workstation_selinux_modules
 
-    # Compilation covers a first install and a source revision. semodule --install
-    # does not have a check-mode equivalent.
+    # Compilation covers a first install and a source revision, skipping execution in check mode.
     - name: "A2c. Compile and install each policy module"
-      check_mode: false
       ansible.builtin.shell:
         cmd: |
           set -o errexit

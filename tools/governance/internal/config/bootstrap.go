@@ -86,14 +86,16 @@ func refuseSonarDBPasswordRegeneration(e *Env, root, envPath string) error {
 		return nil
 	}
 	dataDir := filepath.Join(root, "sonarqube", "postgres-data")
-	_, err := os.Stat(dataDir)
+	entries, err := os.ReadDir(dataDir)
 	switch {
+	case err == nil && len(entries) == 0:
+		return nil
 	case err == nil:
 		return fmt.Errorf("config: %s contains an initialized database while %s lacks %s; restore the password into %s", dataDir, envPath, KeySonarQubeDBPassword, envPath)
 	case errors.Is(err, fs.ErrNotExist):
 		return nil
 	default:
-		return fmt.Errorf("config: stat %s: %w", dataDir, err)
+		return fmt.Errorf("config: read %s: %w", dataDir, err)
 	}
 }
 

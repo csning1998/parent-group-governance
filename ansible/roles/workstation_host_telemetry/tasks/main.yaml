@@ -40,6 +40,7 @@
     owner: root
     group: root
     mode: "0644"
+  register: _workstation_host_telemetry_policy_file
 
 - name: "B2. Reload firewalld to reconcile runtime state with the permanent configuration"
   ansible.builtin.command:
@@ -50,7 +51,9 @@
   ansible.builtin.command:
     cmd: firewall-cmd --info-policy=host-telemetry-to-host
   register: _workstation_host_telemetry_policy_info
+  check_mode: false
   changed_when: false
+  when: not (ansible_check_mode and _workstation_host_telemetry_policy_file.changed)
 
 - name: "B4. Assert each scrape port admits the segment once"
   ansible.builtin.assert:
@@ -60,6 +63,7 @@
       The runtime policy host-telemetry-to-host admits port {{ item }} other than once. Compare against the rendered
       host-telemetry-to-host.xml.j2 and rerun B1 and B2.
   loop: "{{ workstation_host_telemetry_scrape_ports }}"
+  when: not (ansible_check_mode and _workstation_host_telemetry_policy_file.changed)
 
 # Persisting the scrape IP in /etc/ansible/facts.d ensures subsequent workstation_libvirt runs retain the
 # telemetry terminator configuration.
