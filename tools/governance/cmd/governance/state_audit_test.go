@@ -15,10 +15,10 @@ const labelStateAudit = "[Terraform] Audit State Secrets"
 
 func TestBuildMenuOptionsOffersStateAudit(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard)}
-	options := a.buildMenuOptions()
+	options := a.buildTerraformMenuOptions()
 	index := slices.IndexFunc(options, func(o menuOption) bool { return o.label == labelStateAudit })
 	if index < 0 || options[index].run == nil || index == len(options)-1 {
-		t.Errorf("menu offers %q at %d, want an action before Quit", labelStateAudit, index)
+		t.Errorf("menu offers %q at %d, want an action before Back", labelStateAudit, index)
 	}
 }
 
