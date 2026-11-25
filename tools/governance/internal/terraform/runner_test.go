@@ -305,7 +305,12 @@ fi
 if [ "${subcommand}" = "exec" ]; then
   printf 'exec\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(pwd)" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${VAULT_PROXY_IDENTITY-__UNSET__}" >> "${FAKE_DIRENV_LOG}"
   if [ -n "${FAKE_DIRENV_PGID_FILE:-}" ]; then
-    ps -o pgid= -p "$$" | tr -d ' ' > "${FAKE_DIRENV_PGID_FILE}"
+    (
+      read -r stat_line < "/proc/$$/stat"
+      stat_rest="${stat_line##*) }"
+      set -- ${stat_rest}
+      printf '%s\n' "$3" > "${FAKE_DIRENV_PGID_FILE}"
+    )
   fi
   if [ -n "${FAKE_DIRENV_EXEC_STDERR:-}" ]; then
     printf '%s\n' "${FAKE_DIRENV_EXEC_STDERR}" >&2
