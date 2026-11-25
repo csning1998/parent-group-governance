@@ -96,7 +96,85 @@ Prepare the six external GitLab, Anthropic, and GitHub tokens documented in `doc
 
 ## Section 2. Greenfield Bootstrap
 
-All commands in this section follow a single linear dependency sequence assuming Section 1 prerequisites are satisfied.
+All commands in this section follow a single linear dependency sequence assuming Section 1 prerequisites are satisfied. Alternatively, run `./governance status [--deep]` and `./governance converge [--to <stage|node>]` to observe and drive the Stage 0 to Stage 5 convergence DAG automatically.
+
+```mermaid
+flowchart TD
+    subgraph S0["Stage 0: Host Prerequisites"]
+        H0["host.tools (terraform, vault, ansible, direnv, podman)"]
+        H1["host.env_file (.env & empty dir guard)"]
+        H2["host.selinux (workstation_selinux)"]
+        H3["host.tls_ca (vault/tls CAs & terminator cert)"]
+        H4["host.libvirt (libvirt, firewalld, vault.hcl, haproxy.cfg)"]
+        H5["host.vault_proxy (systemd user units & mTLS certs)"]
+        H0 --> H1 --> H2 --> H3 --> H4 --> H5
+    end
+
+    subgraph S1["Stage 1: Core Containers & Vault Init"]
+        C1["container.core (vault-server, vault-terminator, sonarqube, gitlab-runner)"]
+        V1["vault.initialized (Shamir init + factory-default guard)"]
+        V2["vault.unsealed (unseal.key quorum)"]
+        V3["vault.kv_secret (KV v2 secret/)"]
+        H5 --> C1 --> V1 --> V2 --> V3
+    end
+
+    subgraph S2["Stage 2: Bootstrap Facts & Manual Gate"]
+        B1["vault.network_allocation (Validate JSON + KV secret)"]
+        B2["vault.manual_tokens (Observe-only: 6 external tokens)"]
+        V3 --> B1
+        V3 --> B2
+    end
+
+    subgraph S3["Stage 3: Trust Root Terraform"]
+        T0["terraform.foundation_vault_bastion (direnv exec, child root if operator-cert absent)"]
+        B1 --> T0
+        B2 --> T0
+    end
+
+    subgraph S4["Stage 4: Bastion Host Observability & Admin Password"]
+        O1["host.vault_audit (audit check + units)"]
+        O2["host.telemetry (publish SAN + telemetry/libvirt)"]
+        CR0["credentials.sonarqube_admin_password (CAS rotate)"]
+        T0 --> O1
+        T0 --> O2
+        T0 --> CR0
+    end
+
+    subgraph S5["Stage 5: Downstream Terraform Layers & Credentials"]
+        T1["terraform.group_foundation"]
+        T2["terraform.group_ai_provider_anthropic (needs fresh OAuth)"]
+        T3["terraform.group_ai_provider_google_cloud"]
+        T4["terraform.group_ai_provider_azure"]
+        T5["terraform.administration_gitlab_project"]
+        T6["terraform.group_topology"]
+        CR1["credentials.gitlab_group_runner"]
+        CR2["credentials.sonarqube_analysis_token"]
+        T7["terraform.group_gitlab_configuration"]
+        CR3["credentials.code_reviewer_variables"]
+        V4["vault.root_hygiene (admin active & ~/.vault-token revoked)"]
+
+        T0 --> T1
+        T0 --> T2
+        T0 --> T3
+        T0 --> T4
+        T1 --> T5
+        T2 --> T5
+        T3 --> T5
+        T4 --> T5
+        T1 --> T6
+        CR0 --> T5
+        CR0 --> CR2
+        T5 --> CR1
+        T6 --> CR2
+        T6 --> T7
+        CR2 --> T7
+        T5 --> CR3
+        O2 --> CR1
+        T7 --> V4
+        CR1 --> V4
+        CR3 --> V4
+    end
+```
 
 ### Step A. Host Convergence and Bastion Vault Initialization
 
@@ -161,20 +239,21 @@ All commands in this section follow a single linear dependency sequence assuming
 
 ### Step B. Foundation Apply, Host Telemetry, and Downstream Convergence
 
-1. Bootstrap `foundation-vault-bastion` with `VAULT_PROXY_IDENTITY=root`. Unset `VAULT_PROXY_IDENTITY` after the apply completes:
+1. Bootstrap `foundation-vault-bastion` in a dedicated subshell setting `VAULT_PROXY_IDENTITY=root` so the identity override never leaks into the parent shell:
 
     ```bash
-    export VAULT_PROXY_IDENTITY=root
     cd "$(git rev-parse --show-toplevel)"
     direnv allow terraform
-    cd terraform/layers/foundation-vault-bastion
-    direnv allow .
-    terraform init
-    terraform apply
-    unset VAULT_PROXY_IDENTITY
+    (
+        cd terraform/layers/foundation-vault-bastion
+        direnv allow .
+        export VAULT_PROXY_IDENTITY=root
+        terraform init
+        terraform apply
+    )
     ```
 
-    Exporting `VAULT_PROXY_IDENTITY=root` overrides the default `administrator` identity in `terraform/.envrc` until `foundation-vault-bastion` creates the `operator-cert` mount and per identity cert roles. After the apply finishes, background Vault Proxies authenticate automatically within `workstation_vault_proxy_login_retry_seconds`. All subsequent applies execute as `administrator`.
+    Setting `VAULT_PROXY_IDENTITY=root` inside the subshell overrides the default `administrator` identity in `terraform/.envrc` until `foundation-vault-bastion` creates the `operator-cert` mount and per identity cert roles. After the apply finishes, background Vault Proxies authenticate automatically within `workstation_vault_proxy_login_retry_seconds`. All subsequent applies execute as `administrator`.
 
 2. Converge the Vault audit check and the host telemetry scrape network. Reload the TLS terminators afterward:
 
@@ -314,27 +393,29 @@ Because `semanage fcontext` binds literal filesystem paths, relocating the repos
 
 Invoking `./governance` without arguments opens an interactive menu; invoking a subcommand executes the same Go operation function directly for scripted workflows.
 
-| Subcommand                                   | Effect                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------- |
-| `host apply-all`                             | Applies SELinux, local CA when absent, libvirt, and Vault Proxies in one prompt  |
-| `host verify`                                | Verifies `terraform`, `vault`, and `ansible` on `PATH`                           |
-| `host apply-selinux`                         | Applies `playbooks/workstation_selinux.yaml`                                     |
-| `host apply-libvirt`                         | Applies `playbooks/workstation_libvirt.yaml`                                     |
-| `host apply-vault-proxy`                     | Applies `playbooks/workstation_vault_proxy.yaml`                                 |
-| `host apply-vault-audit`                     | Applies `playbooks/workstation_vault_audit.yaml` without privilege escalation    |
-| `host apply-host-telemetry`                  | Covers publish SAN if needed, then chains telemetry and libvirt playbooks        |
-| `vault generate-tls`                         | Clears `vault/tls/` and generates local CAs, listener certs, and terminator cert |
-| `vault init`                                 | Verifies factory default passwords, initializes Vault, and unseals Vault         |
-| `vault enable-kv`                            | Mounts the KV version 2 engine at `secret`                                       |
-| `vault unseal`                               | Unseals Bastion Vault with `vault/keys/unseal.key`                               |
-| `vault revoke-root`                          | Revokes the root token once the `administrator` Proxy login is verified          |
-| `vault generate-root`                        | Generates a break glass root token into `~/.vault-token` from `unseal.key`       |
-| `credentials rotate <key>`                   | Rotates a declared service admin password via CAS staging in Bastion Vault       |
-| `credentials reconcile <key>`                | Applies the Vault stored password to a drifted live service                      |
-| `credentials issue sonarqube-analysis-token` | Issues global SonarQube token to Vault and `SONAR_TOKEN`, revoking older tokens  |
-| `credentials issue gitlab-group-runner`      | Registers the shared runner and writes `gitlab-runner-configs/config.toml`       |
-| `credentials issue code-reviewer-variables`  | Writes bot tokens into CI variables of all `code_reviewer_variable_projects`     |
-| `terraform audit-state [--history]`          | Audits Terraform remote state snapshots for leaked credentials                   |
+| Subcommand                                                   | Effect                                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `status [--deep] [--to <stage\|node>]`                       | Observes the Stage 0 to Stage 5 DAG and prints each node's convergence state     |
+| `converge [--to <stage\|node>] [--dry-run] [--auto-approve]` | Converges absent and drifted nodes along the unblocked DAG subgraph              |
+| `host apply-all`                                             | Applies SELinux, local CA when absent, libvirt, and Vault Proxies in one prompt  |
+| `host verify`                                                | Verifies `terraform`, `vault`, and `ansible` on `PATH`                           |
+| `host apply-selinux`                                         | Applies `playbooks/workstation_selinux.yaml`                                     |
+| `host apply-libvirt`                                         | Applies `playbooks/workstation_libvirt.yaml`                                     |
+| `host apply-vault-proxy`                                     | Applies `playbooks/workstation_vault_proxy.yaml`                                 |
+| `host apply-vault-audit`                                     | Applies `playbooks/workstation_vault_audit.yaml` without privilege escalation    |
+| `host apply-host-telemetry`                                  | Covers publish SAN if needed, then chains telemetry and libvirt playbooks        |
+| `vault generate-tls`                                         | Clears `vault/tls/` and generates local CAs, listener certs, and terminator cert |
+| `vault init`                                                 | Verifies factory default passwords, initializes Vault, and unseals Vault         |
+| `vault enable-kv`                                            | Mounts the KV version 2 engine at `secret`                                       |
+| `vault unseal`                                               | Unseals Bastion Vault with `vault/keys/unseal.key`                               |
+| `vault revoke-root`                                          | Revokes the root token once the `administrator` Proxy login is verified          |
+| `vault generate-root`                                        | Generates a break glass root token into `~/.vault-token` from `unseal.key`       |
+| `credentials rotate <key>`                                   | Rotates a declared service admin password via CAS staging in Bastion Vault       |
+| `credentials reconcile <key>`                                | Applies the Vault stored password to a drifted live service                      |
+| `credentials issue sonarqube-analysis-token`                 | Issues global SonarQube token to Vault and `SONAR_TOKEN`, revoking older tokens  |
+| `credentials issue gitlab-group-runner`                      | Registers the shared runner and writes `gitlab-runner-configs/config.toml`       |
+| `credentials issue code-reviewer-variables`                  | Writes bot tokens into CI variables of all `code_reviewer_variable_projects`     |
+| `terraform audit-state [--history]`                          | Audits Terraform remote state snapshots for leaked credentials                   |
 
 Every subcommand bootstraps `.env` atomically (mode `0600`) with six keys: `PROJECT_ROOT`, `HOST_UID`, `HOST_GID`, `UNAME`, `UHOME`, and a randomly generated `SONARQUBE_DB_PASSWORD`. If `.env` lacks `SONARQUBE_DB_PASSWORD` while `sonarqube/postgres-data` is non empty or unreadable, bootstrap aborts to prevent overwriting the database credential. An empty `sonarqube/postgres-data` directory permits generating a new password.
 
