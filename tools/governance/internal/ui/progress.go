@@ -41,6 +41,17 @@ func IsTerminalWriter(w io.Writer) bool {
 	return isTerminalFn(int(f.Fd()))
 }
 
+// ShouldUseColor reports whether ANSI colors should be emitted to w following NO_COLOR and CLICOLOR_FORCE.
+func ShouldUseColor(w io.Writer) bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	if force := os.Getenv("CLICOLOR_FORCE"); force != "" && force != "0" {
+		return true
+	}
+	return IsTerminalWriter(w)
+}
+
 // NewProgressBar creates a progress bar targeting w. Non-interactive bars emit no terminal escape sequences.
 func NewProgressBar(w io.Writer, interactive bool) *ProgressBar {
 	bar := &ProgressBar{

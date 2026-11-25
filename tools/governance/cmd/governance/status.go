@@ -113,28 +113,60 @@ func (a *app) resolveWorkstationGraph() (*converge.Graph, error) {
 }
 
 func formatStatusTable(w io.Writer, reports []converge.NodeReport) {
+	formatStatusTableWithColor(w, reports, ui.ShouldUseColor(w))
+}
+
+func formatStatusTableWithColor(w io.Writer, reports []converge.NodeReport, useColor bool) {
 	lastStage := converge.Stage(-1)
 	counts := make(map[converge.NodeState]int, 4)
 
 	for _, rep := range reports {
 		if rep.Stage != lastStage {
-			_, _ = fmt.Fprintf(w, "\n%s\n", stageLabel(rep.Stage))
+			_, _ = fmt.Fprintf(w, "\n%s\n", ui.Colorize(ui.Step, stageLabel(rep.Stage), useColor))
 			lastStage = rep.Stage
 		}
 		counts[rep.State]++
-		_, _ = fmt.Fprintf(w, "  %-42s  %-10s  %s\n", rep.ID, rep.State, rep.Summary)
+		paddedState := fmt.Sprintf("%-10s", rep.State)
+		coloredState := ui.Colorize(stateColorLevel(rep.State), paddedState, useColor)
+		_, _ = fmt.Fprintf(w, "  %-42s  %s  %s\n", rep.ID, coloredState, rep.Summary)
 		if rep.Hint != "" {
-			_, _ = fmt.Fprintf(w, "    hint: %s\n", rep.Hint)
+			_, _ = fmt.Fprintf(w, "    %s\n", ui.Colorize(ui.Warn, "hint: "+rep.Hint, useColor))
 		}
 	}
 	_, _ = fmt.Fprintf(
 		w,
-		"\nSummary: %d CONVERGED, %d ABSENT, %d DRIFTED, %d BLOCKED\n",
-		counts[converge.StateConverged],
-		counts[converge.StateAbsent],
-		counts[converge.StateDrifted],
-		counts[converge.StateBlocked],
+		"\nSummary: %s, %s, %s, %s\n",
+		formatSummaryCount(counts[converge.StateConverged], converge.StateConverged, useColor),
+		formatSummaryCount(counts[converge.StateAbsent], converge.StateAbsent, useColor),
+		formatSummaryCount(counts[converge.StateDrifted], converge.StateDrifted, useColor),
+		formatSummaryCount(counts[converge.StateBlocked], converge.StateBlocked, useColor),
 	)
+}
+
+func stateColorLevel(state converge.NodeState) ui.Level {
+	switch state {
+	case converge.StateConverged:
+		return ui.OK
+	case converge.StateAbsent:
+		return ui.Task
+	case converge.StateDrifted:
+		return ui.Warn
+	case converge.StateBlocked:
+		return ui.Error
+	default:
+		return ui.Info
+	}
+}
+
+func formatSummaryCount(count int, state converge.NodeState, useColor bool) string {
+	text := fmt.Sprintf("%d %s", count, state)
+	if !useColor {
+		return text
+	}
+	if state != converge.StateConverged && count == 0 {
+		return text
+	}
+	return ui.Colorize(stateColorLevel(state), text, true)
 }
 
 func stageLabel(stage converge.Stage) string {

@@ -98,3 +98,41 @@ func TestComputeFilledWidthBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestShouldUseColorFollowsNoColorAndForceEnv(t *testing.T) {
+	var buf bytes.Buffer
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	if ShouldUseColor(&buf) {
+		t.Errorf("ShouldUseColor(non-TTY) = true, want false")
+	}
+
+	t.Setenv("CLICOLOR_FORCE", "1")
+	if !ShouldUseColor(&buf) {
+		t.Errorf("ShouldUseColor with CLICOLOR_FORCE=1 = false, want true")
+	}
+
+	t.Setenv("NO_COLOR", "1")
+	if ShouldUseColor(&buf) {
+		t.Errorf("ShouldUseColor with NO_COLOR=1 = true, want false")
+	}
+
+	origIsTerminal := isTerminalFn
+	t.Cleanup(func() { isTerminalFn = origIsTerminal })
+	isTerminalFn = func(int) bool { return true }
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "0")
+	if !ShouldUseColor(os.Stderr) {
+		t.Errorf("ShouldUseColor(TTY) = false, want true")
+	}
+}
+
+func TestColorizeRespectsEnabledFlag(t *testing.T) {
+	if got := Colorize(OK, "CONVERGED", false); got != "CONVERGED" {
+		t.Errorf("Colorize(disabled) = %q, want CONVERGED", got)
+	}
+	got := Colorize(OK, "CONVERGED", true)
+	if !strings.HasPrefix(got, colorGreen) || !strings.HasSuffix(got, colorReset) || !strings.Contains(got, "CONVERGED") {
+		t.Errorf("Colorize(enabled) = %q, want green ANSI wrapped CONVERGED", got)
+	}
+}

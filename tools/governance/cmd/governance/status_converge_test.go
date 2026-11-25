@@ -75,6 +75,44 @@ func TestFormatStatusTableRendersStagesStatesAndHints(t *testing.T) {
 	}
 }
 
+func TestFormatStatusTableWithColorPreservesAlignmentAndSummarySemantics(t *testing.T) {
+	reports := []converge.NodeReport{
+		{ID: "host.tools", Stage: converge.StageHostPrereqs, State: converge.StateConverged, Summary: "ok"},
+		{ID: "host.env_file", Stage: converge.StageHostPrereqs, State: converge.StateAbsent, Summary: "missing"},
+		{ID: "vault.unsealed", Stage: converge.StageCoreContainers, State: converge.StateDrifted, Summary: "sealed", Hint: "run unseal"},
+		{ID: "vault.manual_tokens", Stage: converge.StageBootstrapFacts, State: converge.StateBlocked, Summary: "blocked"},
+	}
+
+	var buf bytes.Buffer
+	formatStatusTableWithColor(&buf, reports, true)
+	out := buf.String()
+
+	for _, want := range []string{
+		ui.Colorize(ui.Step, "Stage 0: Host Prerequisites", true),
+		ui.Colorize(ui.OK, "CONVERGED ", true),
+		ui.Colorize(ui.Task, "ABSENT    ", true),
+		ui.Colorize(ui.Warn, "DRIFTED   ", true),
+		ui.Colorize(ui.Error, "BLOCKED   ", true),
+		ui.Colorize(ui.Warn, "hint: run unseal", true),
+		ui.Colorize(ui.OK, "1 CONVERGED", true),
+		ui.Colorize(ui.Error, "1 BLOCKED", true),
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("colored status table missing %q:\n%q", want, out)
+		}
+	}
+
+	buf.Reset()
+	formatStatusTableWithColor(&buf, reports[:1], true)
+	summaryOnly := buf.String()
+	if strings.Contains(summaryOnly, "\033[0;31m0 BLOCKED") {
+		t.Errorf("zero BLOCKED count should not be red-colored: %q", summaryOnly)
+	}
+	if stateColorLevel(converge.NodeState("UNKNOWN")) != ui.Info {
+		t.Errorf("stateColorLevel(UNKNOWN) != ui.Info")
+	}
+}
+
 func TestStatusCommandObservesWithoutMutatingEnv(t *testing.T) {
 	var modes []converge.ObserveMode
 	var inspected []string
