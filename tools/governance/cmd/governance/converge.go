@@ -166,8 +166,8 @@ func (a *app) convergeRevokeRootToken(ctx context.Context, _ converge.ConvergeCo
 
 func (a *app) convergeRotateSonarQubeAdmin(ctx context.Context, _ converge.ConvergeContext) error {
 	key := a.issuedTokens.SonarQubeAnalysisToken.AdminPasswordKey
-	if key == "" && len(a.credentials) > 0 {
-		key = a.credentials[0].Key
+	if key == "" {
+		return fmt.Errorf("converge: SonarQube admin password key not configured")
 	}
 	cred, ok := credentials.Lookup(a.credentials, key)
 	if !ok {

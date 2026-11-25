@@ -128,14 +128,22 @@ func loadApp(out *ui.Printer) (*app, error) {
 }
 
 func (a *app) newRootCmd() *cobra.Command {
-	var rootCmd *cobra.Command
+	var rootCmd, statusCmd, convergeCmd *cobra.Command
 	rootCmd = &cobra.Command{
 		Use:           "governance",
 		Short:         "Bastion Vault and host Ansible operations for parent-group-governance",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if cmd == rootCmd || cmd.Name() == "status" || cmd.Name() == "converge" {
+			if cmd == rootCmd || cmd == statusCmd {
+				return nil
+			}
+			if cmd == convergeCmd {
+				env, err := config.Load(filepath.Join(a.root, ".env"))
+				if err != nil {
+					return err
+				}
+				a.env = env
 				return nil
 			}
 			env, err := config.BootstrapEnv(a.root, a.out)
@@ -150,9 +158,11 @@ func (a *app) newRootCmd() *cobra.Command {
 		},
 	}
 
+	statusCmd = a.newStatusCmd()
+	convergeCmd = a.newConvergeCmd()
 	rootCmd.AddCommand(
-		a.newStatusCmd(),
-		a.newConvergeCmd(),
+		statusCmd,
+		convergeCmd,
 		a.newHostCmd(),
 		a.newVaultCmd(),
 		a.newCredentialsCmd(),

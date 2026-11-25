@@ -406,7 +406,7 @@ func (a *app) hasSecretMount(ctx context.Context) (bool, error) {
 	}
 	mounts, err := client.Sys().ListMountsWithContext(ctx)
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 	_, exists := mounts["secret/"]
 	return exists, nil
@@ -418,11 +418,11 @@ func (a *app) hasOperatorCertMount(ctx context.Context) (bool, error) {
 		if errors.Is(err, errNoObserveVaultAuth) {
 			return false, nil
 		}
-		return false, nil
+		return false, err
 	}
 	auths, err := client.Sys().ListAuthWithContext(ctx)
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 	mountName := strings.TrimSuffix(a.topology.OperatorVaultProxy.CertAuthMount, "/") + "/"
 	_, exists := auths[mountName]
@@ -442,7 +442,7 @@ func (a *app) readVaultKVMap(ctx context.Context, mount, path string) (map[strin
 		if errors.Is(err, vaultapi.ErrSecretNotFound) || strings.Contains(strings.ToLower(err.Error()), "secret not found") {
 			return nil, false, nil
 		}
-		return nil, false, nil
+		return nil, false, err
 	}
 	if secret == nil || secret.Data == nil {
 		return nil, false, nil
@@ -493,7 +493,7 @@ func (a *app) verifyFactoryDefault(ctx context.Context) (bool, string, error) {
 		}
 		fresh, err := secretrotate.AwaitFactoryDefault(probeCtx, cred.Spec, 500*time.Millisecond)
 		if err != nil {
-			return true, "", nil
+			return false, "", err
 		}
 		if !fresh {
 			return false, cred.Key, nil
@@ -566,7 +566,8 @@ func (a *app) verifyGroupVariable(ctx context.Context, key string) (bool, error)
 func (a *app) verifyProjectVariables(ctx context.Context) (present, total int, err error) {
 	client, topLevelGroup, _, ok := a.newObserveGitLabClient(ctx)
 	if !ok {
-		return 0, countExpectedProjectVars(a), nil
+		expected, countErr := countExpectedProjectVars(ctx, a)
+		return 0, expected, countErr
 	}
 	projects := a.topology.ListCodeReviewerVariableProjects(topLevelGroup)
 	for _, projectPath := range projects {
@@ -574,7 +575,10 @@ func (a *app) verifyProjectVariables(ctx context.Context) (present, total int, e
 			for _, key := range bot.VariableKeys {
 				total++
 				hasVar, varErr := client.HasProjectVariable(ctx, projectPath, key)
-				if varErr == nil && hasVar {
+				if varErr != nil {
+					return 0, 0, varErr
+				}
+				if hasVar {
 					present++
 				}
 			}
@@ -583,15 +587,15 @@ func (a *app) verifyProjectVariables(ctx context.Context) (present, total int, e
 	return present, total, nil
 }
 
-func countExpectedProjectVars(a *app) int {
-	origin, err := a.resolveOrigin(context.Background())
+func countExpectedProjectVars(ctx context.Context, a *app) (int, error) {
+	origin, err := a.resolveOrigin(ctx)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	projects := a.topology.ListCodeReviewerVariableProjects(origin.TopLevelGroup)
 	keysPerProject := 0
 	for _, bot := range a.issuedTokens.CodeReviewerVariables.BotTokens {
 		keysPerProject += len(bot.VariableKeys)
 	}
-	return len(projects) * keysPerProject
+	return len(projects) * keysPerProject, nil
 }
