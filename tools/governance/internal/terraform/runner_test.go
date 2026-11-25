@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-type checkDirenvCase struct {
+type verifyDirenvCase struct {
 	name       string
 	statusJSON string
 	statusExit string
@@ -38,8 +38,8 @@ type applyLayerCase struct {
 	wantIdentity  string
 }
 
-func TestCheckDirenvAllowedParsesStatusJSON(t *testing.T) {
-	cases := []checkDirenvCase{
+func TestVerifyDirenvAllowedParsesStatusJSON(t *testing.T) {
+	cases := []verifyDirenvCase{
 		{
 			name:       "approved envrc",
 			statusJSON: `{"state":{"foundRC":{"allowed":0,"path":"/tmp/example-layer/.envrc"}}}`,
@@ -73,7 +73,7 @@ func TestCheckDirenvAllowedParsesStatusJSON(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			runCheckDirenvCase(t, tc)
+			runVerifyDirenvCase(t, tc)
 		})
 	}
 }
@@ -168,16 +168,16 @@ func TestApplyLayerRunsDirenvExecWithFlagsAndIdentity(t *testing.T) {
 	}
 }
 
-func runCheckDirenvCase(t *testing.T, tc checkDirenvCase) {
+func runVerifyDirenvCase(t *testing.T, tc verifyDirenvCase) {
 	t.Helper()
 	layerDir := t.TempDir()
 	logPath := setupFakeDirenv(t, tc.statusJSON, tc.statusExit, "0")
 
-	ok, rcPath, err := CheckDirenvAllowed(context.Background(), layerDir)
-	assertErrState(t, "CheckDirenvAllowed", err, tc.wantErr)
+	ok, rcPath, err := VerifyDirenvAllowed(context.Background(), layerDir)
+	assertErrState(t, "VerifyDirenvAllowed", err, tc.wantErr)
 	assertSingleStatusCall(t, logPath, layerDir)
 	if !tc.wantErr && (ok != tc.wantOK || rcPath != tc.wantPath) {
-		t.Errorf("CheckDirenvAllowed = (%v, %q), want (%v, %q)", ok, rcPath, tc.wantOK, tc.wantPath)
+		t.Errorf("VerifyDirenvAllowed = (%v, %q), want (%v, %q)", ok, rcPath, tc.wantOK, tc.wantPath)
 	}
 }
 

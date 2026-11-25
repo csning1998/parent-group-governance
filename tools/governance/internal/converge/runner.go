@@ -1,4 +1,4 @@
-package reconcile
+package converge
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 )
 
 // ErrBecomePromptMissing reports a convergence plan requiring become privileges without a PromptBecome callback.
-var ErrBecomePromptMissing = errors.New("reconcile: become prompt callback is required")
+var ErrBecomePromptMissing = errors.New("converge: become prompt callback is required")
 
 // ConvergeOptions configures observation, filtering, dry-run behavior, and become password collection.
 type ConvergeOptions struct {
@@ -16,7 +16,7 @@ type ConvergeOptions struct {
 	Mode         ObserveMode
 	DryRun       bool
 	AutoApprove  bool
-	PromptBecome func(ctx context.Context) (string, error)
+	PromptBecome func(ctx context.Context) (BecomePassword, error)
 	Stdout       io.Writer
 	Stderr       io.Writer
 }
@@ -96,7 +96,7 @@ func Converge(ctx context.Context, graph *Graph, opts ConvergeOptions) (Converge
 			return res, err
 		}
 		if err := node.Converge(ctx, execCtx); err != nil {
-			return res, fmt.Errorf("reconcile: converge %s: %w", node.ID(), err)
+			return res, fmt.Errorf("converge: converge %s: %w", node.ID(), err)
 		}
 		res.Executed = append(res.Executed, node.ID())
 	}
@@ -133,7 +133,7 @@ func newUpstreamBlockedReport(node Node, rootBlocker string) NodeReport {
 func inspectNode(ctx context.Context, node Node, mode ObserveMode) (NodeReport, error) {
 	report, err := node.Inspect(ctx, mode)
 	if err != nil {
-		return NodeReport{}, fmt.Errorf("reconcile: inspect %s: %w", node.ID(), err)
+		return NodeReport{}, fmt.Errorf("converge: inspect %s: %w", node.ID(), err)
 	}
 	if report.ID == "" {
 		report.ID = node.ID()
@@ -177,7 +177,7 @@ func classifyReports(reports []NodeReport, nodeByID map[string]Node) (ConvergeRe
 	return res, plannedNodes, needsBecome
 }
 
-func resolveBecomePassword(ctx context.Context, needsBecome bool, prompt func(context.Context) (string, error)) (string, error) {
+func resolveBecomePassword(ctx context.Context, needsBecome bool, prompt func(context.Context) (BecomePassword, error)) (BecomePassword, error) {
 	if !needsBecome {
 		return "", nil
 	}

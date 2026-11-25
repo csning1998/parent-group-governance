@@ -73,7 +73,7 @@ func ApplyLayer(ctx context.Context, req RunRequest) error {
 }
 
 func requireDirenvAllowed(ctx context.Context, dir string) error {
-	allowed, rcPath, err := CheckDirenvAllowed(ctx, dir)
+	allowed, rcPath, err := VerifyDirenvAllowed(ctx, dir)
 	if err != nil {
 		return err
 	}

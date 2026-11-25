@@ -1,4 +1,4 @@
-package reconcile
+package converge
 
 import (
 	"cmp"
@@ -11,13 +11,13 @@ import (
 
 var (
 	// ErrDuplicateNode reports two nodes registered with the same ID.
-	ErrDuplicateNode = errors.New("reconcile: duplicate node id")
+	ErrDuplicateNode = errors.New("converge: duplicate node id")
 	// ErrUnknownDependency reports a node dependency referencing an unregistered node ID.
-	ErrUnknownDependency = errors.New("reconcile: unknown dependency")
+	ErrUnknownDependency = errors.New("converge: unknown dependency")
 	// ErrCycleDetected reports a cycle in the node dependency graph.
-	ErrCycleDetected = errors.New("reconcile: cycle detected")
+	ErrCycleDetected = errors.New("converge: cycle detected")
 	// ErrUnknownTarget reports an unrecognized node ID or stage selector passed to Subgraph.
-	ErrUnknownTarget = errors.New("reconcile: unknown target")
+	ErrUnknownTarget = errors.New("converge: unknown target")
 )
 
 // Graph holds a validated, topologically ordered set of reconciliation nodes.

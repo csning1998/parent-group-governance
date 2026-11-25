@@ -23,8 +23,8 @@ type direnvStatusOutput struct {
 	} `json:"state"`
 }
 
-// CheckDirenvAllowed inspects direnv status --json in dir and reports whether its .envrc is approved.
-func CheckDirenvAllowed(ctx context.Context, dir string) (bool, string, error) {
+// VerifyDirenvAllowed inspects direnv status --json in dir and reports whether its .envrc is approved.
+func VerifyDirenvAllowed(ctx context.Context, dir string) (bool, string, error) {
 	cmd := exec.CommandContext(ctx, direnvBinary, "status", "--json")
 	cmd.Dir = dir
 

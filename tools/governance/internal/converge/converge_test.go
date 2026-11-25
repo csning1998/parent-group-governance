@@ -1,8 +1,9 @@
-package reconcile
+package converge
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -181,9 +182,9 @@ func TestConvergeDryRunPlansWithoutMutatingOrPromptingBecome(t *testing.T) {
 	res, err := Converge(context.Background(), g, ConvergeOptions{
 		Mode:   ObserveFast,
 		DryRun: true,
-		PromptBecome: func(context.Context) (string, error) {
+		PromptBecome: func(context.Context) (BecomePassword, error) {
 			promptCalls++
-			return "example-become-pass", nil
+			return BecomePassword("example-become-pass"), nil
 		},
 	})
 	if err != nil {
@@ -209,9 +210,9 @@ func TestConvergePromptsBecomeOnceAndStopsOnFailure(t *testing.T) {
 		promptCalls := 0
 		res, err := Converge(context.Background(), g, ConvergeOptions{
 			Mode: ObserveFast,
-			PromptBecome: func(context.Context) (string, error) {
+			PromptBecome: func(context.Context) (BecomePassword, error) {
 				promptCalls++
-				return "example-sudo-secret", nil
+				return BecomePassword("example-sudo-secret"), nil
 			},
 		})
 		if err != nil {
@@ -246,7 +247,7 @@ func TestConvergePromptsBecomeOnceAndStopsOnFailure(t *testing.T) {
 
 		_, err := Converge(context.Background(), g, ConvergeOptions{
 			Mode:         ObserveFast,
-			PromptBecome: func(context.Context) (string, error) { return "wrong", nil },
+			PromptBecome: func(context.Context) (BecomePassword, error) { return BecomePassword("wrong"), nil },
 		})
 		if !errors.Is(err, boom) {
 			t.Fatalf("Converge error = %v, want errors.Is(_, boom)", err)
@@ -255,6 +256,28 @@ func TestConvergePromptsBecomeOnceAndStopsOnFailure(t *testing.T) {
 			t.Errorf("execution counts = (%d, %d), want (1, 0)", len(first.convergeReqs), len(second.convergeReqs))
 		}
 	})
+}
+
+func TestBecomePasswordSuppressesPlaintextFormatting(t *testing.T) {
+	const plaintext = "example-plaintext-become-secret"
+	pw := BecomePassword(plaintext)
+	formatted := []string{
+		pw.String(),
+		fmt.Sprintf("%v", pw),
+		fmt.Sprintf("%#v", pw),
+		fmt.Sprintf("%+v", ConvergeContext{BecomePassword: pw}),
+	}
+	for _, out := range formatted {
+		if strings.Contains(out, plaintext) {
+			t.Errorf("formatted output %q leaked plaintext password", out)
+		}
+		if !strings.Contains(out, "[REDACTED]") {
+			t.Errorf("formatted output %q omitted [REDACTED]", out)
+		}
+	}
+	if pw.Value() != plaintext {
+		t.Errorf("pw.Value() = %q, want %q", pw.Value(), plaintext)
+	}
 }
 
 func mustNewGraph(t *testing.T, nodes ...Node) *Graph {
@@ -303,7 +326,7 @@ func assertBecomePassword(t *testing.T, node *stubNode, want string) {
 	if len(node.convergeReqs) != 1 {
 		t.Fatalf("node %q converge calls = %d, want 1", node.id, len(node.convergeReqs))
 	}
-	if node.convergeReqs[0].BecomePassword != want {
-		t.Errorf("node %q BecomePassword = %q, want %q", node.id, node.convergeReqs[0].BecomePassword, want)
+	if node.convergeReqs[0].BecomePassword.Value() != want {
+		t.Errorf("node %q BecomePassword.Value() = %q, want %q", node.id, node.convergeReqs[0].BecomePassword.Value(), want)
 	}
 }

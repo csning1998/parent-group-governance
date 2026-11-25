@@ -28,7 +28,7 @@ type PlaybookRequest struct {
 func ExecutePlaybook(ctx context.Context, req PlaybookRequest) error {
 	cmd := playbook.NewAnsiblePlaybookCmd(
 		playbook.WithPlaybooks(req.PlaybookFile),
-		playbook.WithPlaybookOptions(resolvePlaybookOptions(req)),
+		playbook.WithPlaybookOptions(buildPlaybookOptions(req)),
 	)
 
 	env := map[string]string{
@@ -53,7 +53,7 @@ func ExecutePlaybook(ctx context.Context, req PlaybookRequest) error {
 	return nil
 }
 
-func resolvePlaybookOptions(req PlaybookRequest) *playbook.AnsiblePlaybookOptions {
+func buildPlaybookOptions(req PlaybookRequest) *playbook.AnsiblePlaybookOptions {
 	if !req.CheckMode && !req.Diff {
 		return req.Options
 	}
