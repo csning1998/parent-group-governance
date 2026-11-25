@@ -62,6 +62,24 @@ func (c *Client) HasProject(ctx context.Context, projectPath string) (bool, erro
 	return err == nil, err
 }
 
+// HasGroupVariable reports whether key exists in the specified group's CI/CD variables. A 404 response returns false without an error.
+func (c *Client) HasGroupVariable(ctx context.Context, groupID, key string) (bool, error) {
+	err := c.send(ctx, http.MethodGet, "groups/"+url.PathEscape(groupID)+"/variables/"+url.PathEscape(key), nil, nil)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// HasProjectVariable reports whether key exists in the specified project's CI/CD variables. A 404 response returns false without an error.
+func (c *Client) HasProjectVariable(ctx context.Context, projectPath, key string) (bool, error) {
+	err := c.send(ctx, http.MethodGet, "projects/"+url.PathEscape(projectPath)+"/variables/"+url.PathEscape(key), nil, nil)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // GroupRunner defines registration parameters of a GitLab group runner.
 type GroupRunner struct {
 	GroupID     string
