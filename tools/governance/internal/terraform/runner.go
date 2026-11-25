@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -105,9 +106,15 @@ func buildSubprocessEnv(bootstrapRootIdentity bool) []string {
 
 func runDirenvShell(ctx context.Context, req RunRequest, shellCommand string) (int, error) {
 	cmd := exec.CommandContext(ctx, direnvBinary, "exec", req.LayerDir, "/bin/sh", "-c", shellCommand)
+	cmd.Dir = req.LayerDir
 	cmd.Stdin = req.Stdin
 	cmd.Stdout = req.Stdout
-	cmd.Stderr = req.Stderr
+	var capturedStderr bytes.Buffer
+	if req.Stderr != nil {
+		cmd.Stderr = req.Stderr
+	} else {
+		cmd.Stderr = &capturedStderr
+	}
 	cmd.Env = buildSubprocessEnv(req.BootstrapRootIdentity)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
@@ -133,11 +140,15 @@ func runDirenvShell(ctx context.Context, req RunRequest, shellCommand string) (i
 	if err == nil {
 		return 0, nil
 	}
+	exitCode := -1
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return exitErr.ExitCode(), err
+		exitCode = exitErr.ExitCode()
 	}
-	return -1, err
+	if msg := strings.TrimSpace(capturedStderr.String()); msg != "" {
+		return exitCode, fmt.Errorf("%w: %s", err, msg)
+	}
+	return exitCode, err
 }
 
 func forwardSignalsToGroup(pid int, sigCh <-chan os.Signal, done <-chan struct{}) {

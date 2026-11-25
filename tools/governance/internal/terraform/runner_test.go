@@ -168,6 +168,18 @@ func TestApplyLayerRunsDirenvExecWithFlagsAndIdentity(t *testing.T) {
 	}
 }
 
+func TestPlanLayerIncludesStderrWhenUnbuffered(t *testing.T) {
+	layerDir := t.TempDir()
+	statusJSON := `{"state":{"foundRC":{"allowed":0,"path":"` + filepath.Join(layerDir, ".envrc") + `"}}}`
+	_ = setupFakeDirenv(t, statusJSON, "0", "1")
+	t.Setenv("FAKE_DIRENV_EXEC_STDERR", "Error: No configuration files")
+
+	_, err := PlanLayer(context.Background(), RunRequest{LayerDir: layerDir})
+	if err == nil || !strings.Contains(err.Error(), "Error: No configuration files") {
+		t.Fatalf("PlanLayer error = %v, want stderr message included", err)
+	}
+}
+
 func runVerifyDirenvCase(t *testing.T, tc verifyDirenvCase) {
 	t.Helper()
 	layerDir := t.TempDir()
@@ -235,7 +247,10 @@ if [ "${subcommand}" = "status" ]; then
   exit "${FAKE_DIRENV_STATUS_EXIT:-0}"
 fi
 if [ "${subcommand}" = "exec" ]; then
-  printf 'exec\t%s\t%s\t%s\t%s\t%s\n' "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${VAULT_PROXY_IDENTITY-__UNSET__}" >> "${FAKE_DIRENV_LOG}"
+  printf 'exec\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(pwd)" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${VAULT_PROXY_IDENTITY-__UNSET__}" >> "${FAKE_DIRENV_LOG}"
+  if [ -n "${FAKE_DIRENV_EXEC_STDERR:-}" ]; then
+    printf '%s\n' "${FAKE_DIRENV_EXEC_STDERR}" >&2
+  fi
   exit "${FAKE_DIRENV_EXEC_EXIT:-0}"
 fi
 printf 'unexpected\t%s\n' "$*" >> "${FAKE_DIRENV_LOG}"
@@ -316,7 +331,7 @@ func assertSingleExecCall(t *testing.T, logPath, wantDir, wantCmd, wantIdentity 
 		t.Fatalf("exec calls = %d (%v), want 1", len(lines), lines)
 	}
 	parts := strings.Split(lines[0], "\t")
-	wantParts := []string{"exec", wantDir, "/bin/sh", "-c", wantCmd, wantIdentity}
+	wantParts := []string{"exec", wantDir, wantDir, "/bin/sh", "-c", wantCmd, wantIdentity}
 	if len(parts) != len(wantParts) {
 		t.Fatalf("exec fields = %q, want %q", parts, wantParts)
 	}
