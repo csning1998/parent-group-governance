@@ -323,6 +323,7 @@ func convergeTerraformLayer(ctx context.Context, deps TerraformObserverDeps, spe
 		LayerDir:              layerDir,
 		BootstrapRootIdentity: bootstrapRoot,
 		AutoApprove:           req.AutoApprove,
+		Stdin:                 req.Stdin,
 		Stdout:                req.Stdout,
 		Stderr:                req.Stderr,
 	})

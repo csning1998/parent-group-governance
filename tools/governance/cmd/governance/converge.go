@@ -48,14 +48,7 @@ func (a *app) runConverge(ctx context.Context, flags convergeFlags) error {
 		mode = converge.ObserveDeep
 	}
 
-	bar, onProgress := a.startObserveProgress()
-	plan, err := converge.Converge(ctx, graph, converge.ConvergeOptions{
-		Target:            flags.target,
-		Mode:              mode,
-		DryRun:            true,
-		OnObserveProgress: onProgress,
-	})
-	bar.Finish()
+	plan, err := a.observeConvergeWave(ctx, graph, flags.target, mode)
 	if err != nil {
 		return err
 	}
@@ -68,33 +61,88 @@ func (a *app) runConverge(ctx context.Context, flags convergeFlags) error {
 	if len(plan.Planned) == 0 {
 		return handleNoPlannedNodes(a.statusWriter(), plan.Blocked)
 	}
+	return a.runConvergeWaves(ctx, graph, flags, mode, plan)
+}
 
-	_, _ = fmt.Fprintf(a.statusWriter(), "\nPlanned nodes (%d): %s\n", len(plan.Planned), strings.Join(plan.Planned, ", "))
+func (a *app) observeConvergeWave(ctx context.Context, graph *converge.Graph, target string, mode converge.ObserveMode) (converge.ConvergeResult, error) {
+	bar, onProgress := a.startObserveProgress()
+	plan, err := converge.Converge(ctx, graph, converge.ConvergeOptions{
+		Target:            target,
+		Mode:              mode,
+		DryRun:            true,
+		OnObserveProgress: onProgress,
+	})
+	bar.Finish()
+	return plan, err
+}
+
+func (a *app) runConvergeWaves(ctx context.Context, graph *converge.Graph, flags convergeFlags, mode converge.ObserveMode, plan converge.ConvergeResult) error {
+	promptFn := a.newCachedBecomePrompt()
+	totalExecuted := 0
+
+	for wave := 0; ; wave++ {
+		if (wave == 0 || !flags.autoApprove) && !a.confirmConvergeWave(plan.Planned) {
+			return nil
+		}
+		res, err := converge.Converge(ctx, graph, converge.ConvergeOptions{
+			Target:         flags.target,
+			Mode:           mode,
+			AutoApprove:    flags.autoApprove,
+			InitialReports: plan.Reports,
+			PromptBecome:   promptFn,
+			Stdin:          os.Stdin,
+			Stdout:         a.statusWriter(),
+			Stderr:         a.errWriter(),
+		})
+		if err != nil {
+			return err
+		}
+		totalExecuted += len(res.Executed)
+		if len(res.Blocked) == 0 {
+			break
+		}
+		plan, err = a.observeConvergeWave(ctx, graph, flags.target, mode)
+		if err != nil {
+			return err
+		}
+		formatStatusTable(a.statusWriter(), plan.Reports)
+		if len(plan.Planned) == 0 {
+			return fmt.Errorf("converge completed %d nodes; blocked on %s", totalExecuted, strings.Join(plan.Blocked, ", "))
+		}
+	}
+
+	a.out.Print(ui.OK, fmt.Sprintf("Converged %d nodes.", totalExecuted))
+	return nil
+}
+
+func (a *app) confirmConvergeWave(planned []string) bool {
+	_, _ = fmt.Fprintf(a.statusWriter(), "\nPlanned nodes (%d): %s\n", len(planned), strings.Join(planned, ", "))
 	if !a.out.PromptConfirm(a.in, "Proceed with convergence? Type 'Y' or 'y' to confirm: ") {
 		a.out.Print(ui.Info, msgCancelled)
-		return nil
+		return false
 	}
+	return true
+}
 
-	promptFn := a.promptBecome
-	if promptFn == nil {
-		promptFn = a.promptBecomePassword
+func (a *app) newCachedBecomePrompt() func(context.Context) (converge.BecomePassword, error) {
+	basePrompt := a.promptBecome
+	if basePrompt == nil {
+		basePrompt = a.promptBecomePassword
 	}
-	res, err := converge.Converge(ctx, graph, converge.ConvergeOptions{
-		Target:       flags.target,
-		Mode:         mode,
-		AutoApprove:  flags.autoApprove,
-		PromptBecome: promptFn,
-		Stdout:       a.statusWriter(),
-		Stderr:       a.errWriter(),
-	})
-	if err != nil {
-		return err
+	var cached converge.BecomePassword
+	var hasCached bool
+	return func(ctx context.Context) (converge.BecomePassword, error) {
+		if hasCached {
+			return cached, nil
+		}
+		pw, err := basePrompt(ctx)
+		if err != nil {
+			return "", err
+		}
+		cached = pw
+		hasCached = true
+		return cached, nil
 	}
-	if len(res.Blocked) > 0 {
-		return fmt.Errorf("converge completed %d nodes; blocked on %s", len(res.Executed), strings.Join(res.Blocked, ", "))
-	}
-	a.out.Print(ui.OK, fmt.Sprintf("Converged %d nodes.", len(res.Executed)))
-	return nil
 }
 
 func (a *app) printDryRunPlan(planned []string) {

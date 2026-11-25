@@ -16,8 +16,10 @@ type ConvergeOptions struct {
 	Mode              ObserveMode
 	DryRun            bool
 	AutoApprove       bool
+	InitialReports    []NodeReport
 	PromptBecome      func(ctx context.Context) (BecomePassword, error)
 	OnObserveProgress func(ObserveEvent)
+	Stdin             io.Reader
 	Stdout            io.Writer
 	Stderr            io.Writer
 }
@@ -85,9 +87,12 @@ func Converge(ctx context.Context, graph *Graph, opts ConvergeOptions) (Converge
 		return ConvergeResult{}, err
 	}
 
-	reports, err := ObserveWithProgress(ctx, graph, opts.Mode, opts.Target, opts.OnObserveProgress)
-	if err != nil {
-		return ConvergeResult{}, err
+	reports := opts.InitialReports
+	if reports == nil {
+		reports, err = ObserveWithProgress(ctx, graph, opts.Mode, opts.Target, opts.OnObserveProgress)
+		if err != nil {
+			return ConvergeResult{}, err
+		}
 	}
 
 	res, plannedNodes, needsBecome := classifyReports(reports, indexSubgraphNodes(nodes))
@@ -103,6 +108,7 @@ func Converge(ctx context.Context, graph *Graph, opts ConvergeOptions) (Converge
 	execCtx := ConvergeContext{
 		BecomePassword: becomePass,
 		AutoApprove:    opts.AutoApprove,
+		Stdin:          opts.Stdin,
 		Stdout:         opts.Stdout,
 		Stderr:         opts.Stderr,
 	}

@@ -116,26 +116,41 @@ func runDirenvShell(ctx context.Context, req RunRequest, shellCommand string) (i
 		cmd.Stderr = &capturedStderr
 	}
 	cmd.Env = buildSubprocessEnv(req.BootstrapRootIdentity)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	isInteractiveApply := req.Stdin != nil && !req.AutoApprove && shellCommand == terraformApplyShellCommand
+	useProcessGroup := !isInteractiveApply
+	if useProcessGroup {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error {
+			err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			if errors.Is(err, syscall.ESRCH) {
+				return os.ErrProcessDone
+			}
+			return err
+		}
+	}
 
 	if err := cmd.Start(); err != nil {
 		return -1, err
 	}
 
-	sigCh := make(chan os.Signal, 2)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	done := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		forwardSignalsToGroup(cmd.Process.Pid, sigCh, done)
-	}()
+	sigCh := make(chan os.Signal, 2)
+	done := make(chan struct{})
+	if useProcessGroup {
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			forwardSignalsToGroup(cmd.Process.Pid, sigCh, done)
+		}()
+	}
 
 	err := cmd.Wait()
-	signal.Stop(sigCh)
-	close(done)
-	wg.Wait()
+	if useProcessGroup {
+		signal.Stop(sigCh)
+		close(done)
+		wg.Wait()
+	}
 
 	if err == nil {
 		return 0, nil

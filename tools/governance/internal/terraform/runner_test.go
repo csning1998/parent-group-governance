@@ -6,8 +6,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 type verifyDirenvCase struct {
@@ -180,6 +183,59 @@ func TestPlanLayerIncludesStderrWhenUnbuffered(t *testing.T) {
 	}
 }
 
+func TestPlanLayerCancellationKillsProcessGroup(t *testing.T) {
+	layerDir := t.TempDir()
+	statusJSON := `{"state":{"foundRC":{"allowed":0,"path":"` + filepath.Join(layerDir, ".envrc") + `"}}}`
+	_ = setupFakeDirenv(t, statusJSON, "0", "0")
+	t.Setenv("FAKE_DIRENV_EXEC_SLEEP", "3")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	var stdout, stderr bytes.Buffer
+	start := time.Now()
+	_, err := PlanLayer(ctx, RunRequest{
+		LayerDir: layerDir,
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	})
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatalf("PlanLayer after timeout expected error, got nil")
+	}
+	if elapsed >= 1500*time.Millisecond {
+		t.Fatalf("PlanLayer took %s after context timeout, orphaned child held pipe open", elapsed)
+	}
+}
+
+func TestApplyLayerInteractiveKeepsForegroundProcessGroup(t *testing.T) {
+	layerDir := t.TempDir()
+	statusJSON := `{"state":{"foundRC":{"allowed":0,"path":"` + filepath.Join(layerDir, ".envrc") + `"}}}`
+	_ = setupFakeDirenv(t, statusJSON, "0", "0")
+	pgidFile := filepath.Join(t.TempDir(), "pgid")
+	t.Setenv("FAKE_DIRENV_PGID_FILE", pgidFile)
+
+	var stdout, stderr bytes.Buffer
+	err := ApplyLayer(context.Background(), RunRequest{
+		LayerDir:    layerDir,
+		AutoApprove: false,
+		Stdin:       strings.NewReader("yes\n"),
+		Stdout:      &stdout,
+		Stderr:      &stderr,
+	})
+	if err != nil {
+		t.Fatalf("ApplyLayer interactive error: %v", err)
+	}
+	raw, readErr := os.ReadFile(pgidFile)
+	if readErr != nil {
+		t.Fatalf("read pgidFile: %v", readErr)
+	}
+	wantPGID := strconv.Itoa(syscall.Getpgrp())
+	if got := strings.TrimSpace(string(raw)); got != wantPGID {
+		t.Fatalf("interactive child pgid = %q, want parent foreground pgid %q", got, wantPGID)
+	}
+}
+
 func runVerifyDirenvCase(t *testing.T, tc verifyDirenvCase) {
 	t.Helper()
 	layerDir := t.TempDir()
@@ -248,8 +304,15 @@ if [ "${subcommand}" = "status" ]; then
 fi
 if [ "${subcommand}" = "exec" ]; then
   printf 'exec\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(pwd)" "${2:-}" "${3:-}" "${4:-}" "${5:-}" "${VAULT_PROXY_IDENTITY-__UNSET__}" >> "${FAKE_DIRENV_LOG}"
+  if [ -n "${FAKE_DIRENV_PGID_FILE:-}" ]; then
+    ps -o pgid= -p "$$" | tr -d ' ' > "${FAKE_DIRENV_PGID_FILE}"
+  fi
   if [ -n "${FAKE_DIRENV_EXEC_STDERR:-}" ]; then
     printf '%s\n' "${FAKE_DIRENV_EXEC_STDERR}" >&2
+  fi
+  if [ -n "${FAKE_DIRENV_EXEC_SLEEP:-}" ]; then
+    /bin/sh -c "sleep ${FAKE_DIRENV_EXEC_SLEEP}" &
+    wait
   fi
   exit "${FAKE_DIRENV_EXEC_EXIT:-0}"
 fi

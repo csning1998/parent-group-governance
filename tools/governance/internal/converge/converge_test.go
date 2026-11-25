@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/terraform"
 )
 
 type stubNode struct {
@@ -372,5 +374,41 @@ func TestObserveWithProgressEmitsStartAndDoneEvents(t *testing.T) {
 	}
 	if !slices.Equal(convergeEvents, want) {
 		t.Fatalf("Converge OnObserveProgress events = %+v, want %+v", convergeEvents, want)
+	}
+}
+
+func TestConvergeReusesInitialReportsAndForwardsStdin(t *testing.T) {
+	node := &stubNode{id: "example.one", stage: StageHostPrereqs, state: StateAbsent}
+	g := mustNewGraph(t, node)
+	stdin := strings.NewReader("yes\n")
+
+	res, err := Converge(context.Background(), g, ConvergeOptions{
+		InitialReports: []NodeReport{{ID: "example.one", Stage: StageHostPrereqs, State: StateAbsent}},
+		Stdin:          stdin,
+	})
+	if err != nil {
+		t.Fatalf("Converge(InitialReports) error = %v", err)
+	}
+	if node.inspectCalls != 0 || len(res.Executed) != 1 || node.convergeReqs[0].Stdin != stdin {
+		t.Fatalf("inspectCalls=%d executed=%v gotStdin=%v, want (0, [example.one], same reader)", node.inspectCalls, res.Executed, node.convergeReqs[0].Stdin == stdin)
+	}
+}
+
+func TestBuildTerraformNodesForwardsStdinToApplyLayer(t *testing.T) {
+	var gotReq terraform.RunRequest
+	nodes := BuildTerraformNodes(TerraformObserverDeps{
+		ProjectRoot:          "/tmp/example-root",
+		HasOperatorCertMount: func(context.Context) (bool, error) { return true, nil },
+		ApplyLayer: func(_ context.Context, req terraform.RunRequest) error {
+			gotReq = req
+			return nil
+		},
+	})
+	stdin := strings.NewReader("yes\n")
+	if err := nodes[0].Converge(context.Background(), ConvergeContext{Stdin: stdin}); err != nil {
+		t.Fatalf("Converge error = %v", err)
+	}
+	if gotReq.Stdin != stdin {
+		t.Fatalf("ApplyLayer received Stdin != ConvergeContext.Stdin")
 	}
 }

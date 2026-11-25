@@ -84,6 +84,7 @@ type ObserveEvent struct {
 type ConvergeContext struct {
 	BecomePassword BecomePassword
 	AutoApprove    bool
+	Stdin          io.Reader
 	Stdout         io.Writer
 	Stderr         io.Writer
 }

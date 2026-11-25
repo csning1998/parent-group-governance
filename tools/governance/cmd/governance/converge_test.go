@@ -212,6 +212,90 @@ func TestNestedSubcommandNamedStatusStillBootstrapsEnv(t *testing.T) {
 	}
 }
 
+func TestConvergeCommandObservesOncePerConfirmedWave(t *testing.T) {
+	inspectCalls := 0
+	convergeCalls := 0
+	g, err := converge.NewGraph(&stubNode{
+		id:    "node.once",
+		stage: converge.StageHostPrereqs,
+		inspectFn: func(context.Context, converge.ObserveMode) (converge.NodeReport, error) {
+			inspectCalls++
+			return converge.NodeReport{ID: "node.once", Stage: converge.StageHostPrereqs, State: converge.StateAbsent, Summary: "absent"}, nil
+		},
+		convergeFn: func(context.Context, converge.ConvergeContext) error {
+			convergeCalls++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGraph: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	a := newTestCLIApp(t.TempDir(), "Y\n", g, &stdout, &stderr)
+	cmd := a.newRootCmd()
+	cmd.SetArgs([]string{"converge", "--auto-approve"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("converge error: %v", err)
+	}
+	if inspectCalls != 1 || convergeCalls != 1 {
+		t.Errorf("inspectCalls=%d convergeCalls=%d, want (1, 1)", inspectCalls, convergeCalls)
+	}
+}
+
+func TestConvergeCommandReobservesAndConvergesUnblockedWaves(t *testing.T) {
+	upstreamDone := false
+	downstreamDone := false
+	g, err := converge.NewGraph(
+		&stubNode{
+			id:    "node.upstream",
+			stage: converge.StageHostPrereqs,
+			inspectFn: func(context.Context, converge.ObserveMode) (converge.NodeReport, error) {
+				if upstreamDone {
+					return converge.NodeReport{ID: "node.upstream", Stage: converge.StageHostPrereqs, State: converge.StateConverged, Summary: "ok"}, nil
+				}
+				return converge.NodeReport{ID: "node.upstream", Stage: converge.StageHostPrereqs, State: converge.StateAbsent, Summary: "missing"}, nil
+			},
+			convergeFn: func(context.Context, converge.ConvergeContext) error {
+				upstreamDone = true
+				return nil
+			},
+		},
+		&stubNode{
+			id:    "node.downstream",
+			stage: converge.StageCoreContainers,
+			deps:  []string{"node.upstream"},
+			inspectFn: func(context.Context, converge.ObserveMode) (converge.NodeReport, error) {
+				if !upstreamDone {
+					return converge.NodeReport{ID: "node.downstream", Stage: converge.StageCoreContainers, State: converge.StateBlocked, Summary: "waiting on upstream"}, nil
+				}
+				if downstreamDone {
+					return converge.NodeReport{ID: "node.downstream", Stage: converge.StageCoreContainers, State: converge.StateConverged, Summary: "ok"}, nil
+				}
+				return converge.NodeReport{ID: "node.downstream", Stage: converge.StageCoreContainers, State: converge.StateAbsent, Summary: "ready"}, nil
+			},
+			convergeFn: func(context.Context, converge.ConvergeContext) error {
+				downstreamDone = true
+				return nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewGraph: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	a := newTestCLIApp(t.TempDir(), "Y\n", g, &stdout, &stderr)
+	cmd := a.newRootCmd()
+	cmd.SetArgs([]string{"converge", "--auto-approve"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("converge multi-wave error: %v", err)
+	}
+	if !upstreamDone || !downstreamDone {
+		t.Errorf("upstreamDone=%v downstreamDone=%v, want (true, true)", upstreamDone, downstreamDone)
+	}
+}
+
 func TestMainMenuConvergedToSixCategoriesAndSubmenus(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard)}
 	got := menuLabels(a.buildMenuOptions())
