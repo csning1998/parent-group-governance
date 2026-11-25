@@ -17,6 +17,12 @@ import (
 // ErrNotFound marks a GitLab response with status 404.
 var ErrNotFound = errors.New("gitlabapi: resource not found")
 
+const (
+	groupsPathPrefix    = "groups/"
+	projectsPathPrefix  = "projects/"
+	variablesPathSuffix = "/variables"
+)
+
 // Client authenticates every request with one personal access token.
 type Client struct {
 	baseURL string
@@ -45,17 +51,17 @@ func New(baseURL, token string) *Client {
 
 // UpsertGroupVariable creates or updates a CI/CD variable within the specified group.
 func (c *Client) UpsertGroupVariable(ctx context.Context, groupID string, v Variable) error {
-	return c.upsertVariable(ctx, "groups/"+url.PathEscape(groupID)+"/variables", v)
+	return c.upsertVariable(ctx, groupsPathPrefix+url.PathEscape(groupID)+variablesPathSuffix, v)
 }
 
 // UpsertProjectVariable creates or updates a project CI/CD variable at projectPath.
 func (c *Client) UpsertProjectVariable(ctx context.Context, projectPath string, v Variable) error {
-	return c.upsertVariable(ctx, "projects/"+url.PathEscape(projectPath)+"/variables", v)
+	return c.upsertVariable(ctx, projectsPathPrefix+url.PathEscape(projectPath)+variablesPathSuffix, v)
 }
 
 // HasProject reports whether the token can access projectPath. A 404 response returns false without an error.
 func (c *Client) HasProject(ctx context.Context, projectPath string) (bool, error) {
-	err := c.send(ctx, http.MethodGet, "projects/"+url.PathEscape(projectPath), nil, nil)
+	err := c.send(ctx, http.MethodGet, projectsPathPrefix+url.PathEscape(projectPath), nil, nil)
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
@@ -64,7 +70,7 @@ func (c *Client) HasProject(ctx context.Context, projectPath string) (bool, erro
 
 // HasGroupVariable reports whether key exists in the specified group's CI/CD variables. A 404 response returns false without an error.
 func (c *Client) HasGroupVariable(ctx context.Context, groupID, key string) (bool, error) {
-	err := c.send(ctx, http.MethodGet, "groups/"+url.PathEscape(groupID)+"/variables/"+url.PathEscape(key), nil, nil)
+	err := c.send(ctx, http.MethodGet, groupsPathPrefix+url.PathEscape(groupID)+variablesPathSuffix+"/"+url.PathEscape(key), nil, nil)
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
@@ -73,7 +79,7 @@ func (c *Client) HasGroupVariable(ctx context.Context, groupID, key string) (boo
 
 // HasProjectVariable reports whether key exists in the specified project's CI/CD variables. A 404 response returns false without an error.
 func (c *Client) HasProjectVariable(ctx context.Context, projectPath, key string) (bool, error) {
-	err := c.send(ctx, http.MethodGet, "projects/"+url.PathEscape(projectPath)+"/variables/"+url.PathEscape(key), nil, nil)
+	err := c.send(ctx, http.MethodGet, projectsPathPrefix+url.PathEscape(projectPath)+variablesPathSuffix+"/"+url.PathEscape(key), nil, nil)
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}

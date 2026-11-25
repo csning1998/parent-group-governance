@@ -161,7 +161,7 @@ func TestHasProject(t *testing.T) {
 	}
 }
 
-func TestHasGroupAndProjectVariables(t *testing.T) {
+func TestHasGroupVariable(t *testing.T) {
 	cases := map[string]struct {
 		status  int
 		want    bool
@@ -172,36 +172,47 @@ func TestHasGroupAndProjectVariables(t *testing.T) {
 		"server error":     {status: http.StatusInternalServerError, wantErr: true},
 	}
 	for name, tc := range cases {
-		t.Run("group/"+name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodGet || r.URL.EscapedPath() != "/groups/42/variables/SONAR_TOKEN" {
-					t.Fatalf("got %s %s", r.Method, r.URL.EscapedPath())
-				}
-				w.WriteHeader(tc.status)
-			}))
-			t.Cleanup(srv.Close)
-
+		t.Run(name, func(t *testing.T) {
+			srv := newVariableProbeServer(t, "/groups/42/variables/SONAR_TOKEN", tc.status)
 			got, err := New(srv.URL, "pat").HasGroupVariable(context.Background(), "42", "SONAR_TOKEN")
 			if (err != nil) != tc.wantErr || got != tc.want {
 				t.Fatalf("HasGroupVariable() = %t, %v, want %t err=%t", got, err, tc.want, tc.wantErr)
 			}
 		})
+	}
+}
 
-		t.Run("project/"+name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodGet || r.URL.EscapedPath() != "/projects/example-group%2Fexample-project/variables/TAG_PUSH_TOKEN" {
-					t.Fatalf("got %s %s", r.Method, r.URL.EscapedPath())
-				}
-				w.WriteHeader(tc.status)
-			}))
-			t.Cleanup(srv.Close)
-
+func TestHasProjectVariable(t *testing.T) {
+	cases := map[string]struct {
+		status  int
+		want    bool
+		wantErr bool
+	}{
+		"present variable": {status: http.StatusOK, want: true},
+		"missing variable": {status: http.StatusNotFound, want: false},
+		"server error":     {status: http.StatusInternalServerError, wantErr: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			srv := newVariableProbeServer(t, "/projects/example-group%2Fexample-project/variables/TAG_PUSH_TOKEN", tc.status)
 			got, err := New(srv.URL, "pat").HasProjectVariable(context.Background(), "example-group/example-project", "TAG_PUSH_TOKEN")
 			if (err != nil) != tc.wantErr || got != tc.want {
 				t.Fatalf("HasProjectVariable() = %t, %v, want %t err=%t", got, err, tc.want, tc.wantErr)
 			}
 		})
 	}
+}
+
+func newVariableProbeServer(t *testing.T, wantPath string, status int) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.EscapedPath() != wantPath {
+			t.Fatalf("got %s %s, want GET %s", r.Method, r.URL.EscapedPath(), wantPath)
+		}
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 // TestCreateGroupRunner asserts the group runner form and the rejection of a response without a token.
