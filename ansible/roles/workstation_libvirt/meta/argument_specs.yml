@@ -46,3 +46,8 @@ argument_specs:
         type: int
         required: false
         description: Maximum startup wait in seconds for virtnetworkd until firewalld enters the running state.
+      workstation_libvirt_out_of_band_containers:
+        type: dict
+        required: false
+        description: >-
+          Mapping of compose service keys to container names monitored for restart warnings when role files change.

@@ -38,6 +38,7 @@
     owner: "{{ workstation_libvirt_operator_user }}"
     group: "{{ workstation_libvirt_operator_user }}"
     mode: "0644"
+  register: _workstation_libvirt_vault_hcl
 
 # The vault-terminator container loads both files at startup. Configuration changes take effect upon container restart.
 - name: "E4. Render the TLS terminator configuration from the declared listeners"
@@ -47,6 +48,7 @@
     owner: "{{ workstation_libvirt_operator_user }}"
     group: "{{ workstation_libvirt_operator_user }}"
     mode: "0644"
+  register: _workstation_libvirt_haproxy_cfg
 
 # Renders haproxy-telemetry.cfg for vault-telemetry-terminator once workstation_host_telemetry records the scrape IP
 # in local facts.
@@ -57,9 +59,10 @@
     owner: "{{ workstation_libvirt_operator_user }}"
     group: "{{ workstation_libvirt_operator_user }}"
     mode: "0644"
+  register: _workstation_libvirt_haproxy_telemetry_cfg
   when: (ansible_local | default({})).host_telemetry.scrape_ip is defined
 
-# Writes listener addresses to environment files instead of hardcoding IPs in compose.yml. Both terminator containers
+# Writes listener addresses to environment files in place of hardcoded IPs in compose.yml. Both terminator containers
 # read terminator.env. The role appends TERMINATOR_SCRAPE_IP when the scrape IP fact exists.
 - name: "E5. Render the container environment files from the declared listeners"
   ansible.builtin.copy:
@@ -68,6 +71,7 @@
     owner: "{{ workstation_libvirt_operator_user }}"
     group: "{{ workstation_libvirt_operator_user }}"
     mode: "0644"
+  register: _workstation_libvirt_env_files
   loop:
     - dest: "{{ workstation_libvirt_vault.config_path | dirname }}/vault.env"
       content: >-

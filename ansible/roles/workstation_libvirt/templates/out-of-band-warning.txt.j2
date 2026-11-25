@@ -1,0 +1,13 @@
+{%- set scopes       = _workstation_libvirt_changed_scopes | join(', ') -%}
+{%- set containers   = _workstation_libvirt_running_affected_containers | join(', ') -%}
+{%- set vault_server = workstation_libvirt_out_of_band_containers.vault_server -%}
+{%- set services     = _workstation_libvirt_running_affected_containers
+                       | map('extract', _workstation_libvirt_service_map)
+                       | join(' ') -%}
+
+Out-of-band Bastion services require restart after changes to [{{ scopes }}].
+Running affected containers: {{ containers }}.
+Run: podman compose up -d --force-recreate {{ services }}.
+{% if vault_server in _workstation_libvirt_running_affected_containers %}
+Vault must be unsealed with ./governance vault unseal after recreating {{ vault_server }}.
+{% endif %}

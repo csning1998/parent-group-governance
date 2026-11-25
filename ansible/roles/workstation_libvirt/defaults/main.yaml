@@ -39,3 +39,9 @@ workstation_libvirt_scrape_ports: >-
 
 # Maximum startup wait in seconds for virtnetworkd until firewalld enters the running state.
 workstation_libvirt_firewalld_ready_timeout: 120
+
+# Container names from compose.yml which load rendered configs or bind the publish network at startup.
+workstation_libvirt_out_of_band_containers:
+  vault_server: "parent-group-governance-vault-bastion"
+  vault_terminator: "parent-group-governance-vault-bastion-terminator"
+  vault_telemetry_terminator: "parent-group-governance-vault-bastion-telemetry-terminator"
