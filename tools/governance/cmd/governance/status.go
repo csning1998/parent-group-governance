@@ -73,7 +73,7 @@ func (a *app) newStatusCmd() *cobra.Command {
 			return a.runStatus(cmd.Context(), mode, target)
 		},
 	}
-	cmd.Flags().BoolVar(&deep, "deep", false, "Run Ansible --check and terraform plan on ready nodes")
+	cmd.Flags().BoolVar(&deep, "deep", false, "Run terraform plan -detailed-exitcode on ready Terraform layers")
 	cmd.Flags().StringVar(&target, "to", "", "Limit status inspection to ancestors of a target node or stage")
 	return cmd
 }
@@ -338,13 +338,14 @@ func (a *app) inspectHostVaultAudit(ctx context.Context, _ converge.ObserveMode)
 	defer cancel()
 
 	out, err := exec.CommandContext(probeCtx, "systemctl", "--user", "is-enabled", "vault-audit-check.timer").Output()
-	if err != nil {
-		return converge.StateAbsent, "vault-audit-check.timer not installed", nil
-	}
-	if strings.TrimSpace(string(out)) == "enabled" {
+	state := strings.TrimSpace(string(out))
+	if err == nil && state == "enabled" {
 		return converge.StateConverged, "vault-audit-check.timer enabled", nil
 	}
-	return converge.StateDrifted, "vault-audit-check.timer disabled", nil
+	if state == "disabled" || state == "masked" || state == "static" {
+		return converge.StateDrifted, "vault-audit-check.timer " + state, nil
+	}
+	return converge.StateAbsent, "vault-audit-check.timer not installed", nil
 }
 
 func (a *app) inspectHostTelemetry(_ context.Context, _ converge.ObserveMode) (converge.NodeState, string, error) {

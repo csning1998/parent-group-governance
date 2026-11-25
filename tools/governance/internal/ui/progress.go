@@ -128,9 +128,9 @@ func (p *ProgressBar) runTicker() {
 func (p *ProgressBar) renderLocked() {
 	filled := computeFilledWidth(p.current, p.total, progressBarWidth)
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", progressBarWidth-filled)
-	frame := spinnerFrames[p.spinIdx%len(spinnerFrames)]
+	frame := Colorize(Task, spinnerFrames[p.spinIdx%len(spinnerFrames)], ShouldUseColor(p.out))
 	elapsed := time.Since(p.startedAt).Seconds()
-	writef(p.out, "\r\033[2K%s%s%s [%s] %d/%d  %s (%.1fs)", colorCyan, frame, colorReset, bar, p.current, p.total, p.label, elapsed)
+	writef(p.out, "\r\033[2K%s [%s] %d/%d  %s (%.1fs)", frame, bar, p.current, p.total, p.label, elapsed)
 }
 
 func computeFilledWidth(current, total, width int) int {

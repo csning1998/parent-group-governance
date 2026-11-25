@@ -247,9 +247,38 @@ func TestHostLocalProbes(t *testing.T) {
 
 		writeExecutable(t, filepath.Join(bin, "systemctl"), "#!/bin/sh\necho disabled\nexit 1\n")
 		assertProbeState(t, a.inspectHostVaultProxy, converge.StateDrifted)
+		assertProbeState(t, a.inspectHostVaultAudit, converge.StateDrifted)
+
+		writeExecutable(t, filepath.Join(bin, "systemctl"), "#!/bin/sh\necho masked\nexit 1\n")
+		assertProbeState(t, a.inspectHostVaultAudit, converge.StateDrifted)
+
+		writeExecutable(t, filepath.Join(bin, "systemctl"), "#!/bin/sh\nexit 1\n")
 		assertProbeState(t, a.inspectHostVaultAudit, converge.StateAbsent)
 		_, _, _ = a.inspectHostTelemetry(context.Background(), converge.ObserveFast)
 	})
+}
+
+func TestDeepFlagHelpMatchesObservedBehavior(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	a := newTestCLIApp(t.TempDir(), "", nil, &stdout, &stderr)
+	rootCmd := a.newRootCmd()
+
+	for _, name := range []string{"status", "converge"} {
+		sub, _, err := rootCmd.Find([]string{name})
+		if err != nil || sub == nil {
+			t.Fatalf("Find(%q): sub=%v err=%v", name, sub, err)
+		}
+		flag := sub.Flags().Lookup("deep")
+		if flag == nil {
+			t.Fatalf("%s missing --deep flag", name)
+		}
+		if !strings.Contains(flag.Usage, "terraform plan") {
+			t.Errorf("%s --deep usage = %q, want mention of terraform plan", name, flag.Usage)
+		}
+		if strings.Contains(flag.Usage, "Ansible --check") {
+			t.Errorf("%s --deep usage = %q, still falsely claims Ansible --check", name, flag.Usage)
+		}
+	}
 }
 
 func newTestCLIApp(root, input string, g *converge.Graph, stdout, stderr *bytes.Buffer) *app {

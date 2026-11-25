@@ -398,8 +398,8 @@ func TestSubmenuBackAndEmptyCredentialsMenu(t *testing.T) {
 		{label: "Act", run: func(context.Context) error { return nil }},
 		{label: "Back", run: nil},
 	})
-	if err == nil || err.Error() != msgMenuBack {
-		t.Fatalf("runSubmenu Back = %v, want %q", err, msgMenuBack)
+	if !errors.As(err, new(*menuBackError)) {
+		t.Fatalf("runSubmenu Back = %v, want *menuBackError", err)
 	}
 
 	a.in = bufio.NewReader(strings.NewReader("5\n2\n6\n"))

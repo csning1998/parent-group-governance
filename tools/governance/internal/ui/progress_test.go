@@ -136,3 +136,19 @@ func TestColorizeRespectsEnabledFlag(t *testing.T) {
 		t.Errorf("Colorize(enabled) = %q, want green ANSI wrapped CONVERGED", got)
 	}
 }
+
+func TestProgressBarSuppressesColorWhenNoColorSet(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	var buf syncBuffer
+	bar := NewProgressBar(&buf, true)
+	bar.Update(1, 2, "host.tools")
+	bar.Finish()
+
+	out := buf.String()
+	if !strings.Contains(out, "1/2") || !strings.Contains(out, "host.tools") {
+		t.Fatalf("progress output missing count or label: %q", out)
+	}
+	if strings.Contains(out, colorCyan) || strings.Contains(out, colorReset) {
+		t.Errorf("progress output emitted ANSI color codes under NO_COLOR=1: %q", out)
+	}
+}

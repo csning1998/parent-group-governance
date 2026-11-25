@@ -34,7 +34,7 @@ func (a *app) newConvergeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flags.target, "to", "", "Stop convergence at the named stage or node ID")
 	cmd.Flags().BoolVar(&flags.dryRun, "dry-run", false, "Print planned convergence actions without modifying state")
 	cmd.Flags().BoolVar(&flags.autoApprove, "auto-approve", false, "Pass -auto-approve to Terraform apply invocations")
-	cmd.Flags().BoolVar(&flags.deep, "deep", false, "Observe using Ansible --check and terraform plan before converging")
+	cmd.Flags().BoolVar(&flags.deep, "deep", false, "Observe using terraform plan -detailed-exitcode on ready Terraform layers before converging")
 	return cmd
 }
 

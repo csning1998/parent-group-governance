@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
@@ -96,7 +97,7 @@ func (a *app) runMenu(ctx context.Context) error {
 			return nil
 		}
 		if err := chosen.run(ctx); err != nil {
-			if err.Error() == msgMenuBack {
+			if errors.As(err, new(*menuBackError)) {
 				continue
 			}
 			return err
