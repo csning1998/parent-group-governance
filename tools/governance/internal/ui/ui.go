@@ -63,6 +63,15 @@ func (p *Printer) Print(level Level, msg string) {
 	writef(dest, "%s[%s] %s%s\n", color, tag, msg, colorReset)
 }
 
+// Colorize wraps text in ANSI color codes matching level when enabled is true.
+func Colorize(level Level, text string, enabled bool) string {
+	if !enabled {
+		return text
+	}
+	_, color := level.label()
+	return color + text + colorReset
+}
+
 // PrintDivider outputs a 60 character horizontal line using char. An empty char defaults to "-".
 func (p *Printer) PrintDivider(char string) {
 	if char == "" {

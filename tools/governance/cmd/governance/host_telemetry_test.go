@@ -114,7 +114,7 @@ func TestBuildHostTelemetryPlaybookReportsAnUnpublishedSegment(t *testing.T) {
 
 func TestHostTelemetryIsAMenuOptionAndAHostCommand(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard)}
-	if labels := menuLabels(a.buildMenuOptions()); !slices.Contains(labels, labelHostTelemetry) {
+	if labels := menuLabels(a.buildHostMenuOptions()); !slices.Contains(labels, labelHostTelemetry) {
 		t.Errorf("menu labels = %q, want %q", labels, labelHostTelemetry)
 	}
 	cmd, _, err := a.newHostCmd().Find([]string{"apply-host-telemetry"})

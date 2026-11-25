@@ -12,13 +12,13 @@ This document records the naming conventions which are specific to the Terraform
 
 The following rules of the organization naming standard apply directly in this repository:
 
-| Naming axis         | Rule                                                                                                                                       | Source in the organization naming standard |
-| :------------------ | :----------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------- |
-| Any name            | A name MUST NOT repeat a qualifier already implied by the namespace.                                                                       | Section 3 Item A                           |
-| Shared namespace    | A name in a shared namespace MUST include the owner code qualifier.                                                                        | Section 3 Item A                           |
-| Vault instance noun | The Vault instance nouns are `bastion` and `downstream`. The noun `production` MUST name the stage only.                                   | Section 4 Item B and Item C                |
-| Terraform output    | An output name MUST follow the form `<subject>_<attribute>`. A new output MUST NOT repeat the subject already stated by the layer name.    | Section 5 Item D                           |
-| Subcommand verbs    | A CLI subcommand MUST use verb-initial ordering.                                                                                           | Section 3 Item C                           |
+| Naming axis         | Rule                                                                                                                                    | Source in the organization naming standard |
+| :------------------ | :-------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------- |
+| Any name            | A name MUST NOT repeat a qualifier already implied by the namespace.                                                                    | Section 3 Item A                           |
+| Shared namespace    | A name in a shared namespace MUST include the owner code qualifier.                                                                     | Section 3 Item A                           |
+| Vault instance noun | The Vault instance nouns are `bastion` and `downstream`. The noun `production` MUST name the stage only.                                | Section 4 Item B and Item C                |
+| Terraform output    | An output name MUST follow the form `<subject>_<attribute>`. A new output MUST NOT repeat the subject already stated by the layer name. | Section 5 Item D                           |
+| Subcommand verbs    | A CLI subcommand MUST use verb-initial ordering.                                                                                        | Section 3 Item C                           |
 
 ## Section 2. Vault Instances and Core Nouns
 
@@ -61,14 +61,20 @@ The following rules of the organization naming standard apply directly in this r
 
 1. Functions in `tools/governance` MUST follow verb-initial naming conventions:
     - `Resolve` MUST denote computing a path, address, or runtime parameter dynamically from ambient host state or configuration values. Static field accessors MUST NOT use `Resolve`.
-    - `Build` MUST denote assembling an in-memory configuration or composite data structure from validated inputs.
+    - `Build` MUST denote assembling an in-memory configuration or composite data structure from validated inputs (such as `buildPlaybookOptions`, `BuildHostNodes`, and `BuildVaultNodes`).
     - `Generate` MUST denote creating cryptographic material, TLS certificates, or high-entropy random tokens.
     - `Deploy` MUST denote transmitting and validating a secret change against an external target service. Operations performing live secret deployment MUST NOT use the verb `Apply`.
     - `Stage` MUST denote recording a transactional write-ahead entry to an auxiliary Vault field prior to external deployment.
     - `Commit` MUST denote persisting a deployed and verified secret into primary Vault KV-v2 storage.
     - `Reconcile` MUST denote pushing an existing Vault credential outward to synchronize a drifted external service without credential rotation.
-    - `Verify` MUST denote inspecting host binary prerequisites or probing credential validity without mutating state.
+    - `Verify` MUST denote inspecting host binary prerequisites, direnv approvals (`VerifyDirenvAllowed`), or probing credential validity (`VerifyFactoryDefault`, `VerifyAdminProxy`) without mutating state.
+    - `Inspect` MUST denote reading non-credential runtime state of a service, container, or convergence node without mutating state (such as `InspectStatus`, `Node.Inspect`, and `InspectContainers`).
+    - `Observe` MUST denote evaluating a convergence DAG subgraph in topological order to collect `NodeReport` states and propagate upstream `StateBlocked` status without mutating state.
+    - `Converge` MUST denote driving convergence DAG nodes from `StateAbsent` or `StateDrifted` to their declared state in topological order, distinct from `Reconcile`.
+    - `Apply` MUST denote executing declarative infrastructure convergence via Ansible playbooks or Terraform layers (such as `ApplyLayer`), and MUST NOT denote live secret deployment.
+    - `Plan` MUST denote running a read-only declarative diff via Terraform (such as `PlanLayer`) to classify pending changes without mutating infrastructure.
+    - `Validate` MUST denote verifying in-memory data structures or configuration payloads against schema preconditions (such as `ValidateNetworkAllocation`) without mutating external state.
 2. The Go codebase MUST enforce strong typing for domain primitives:
-    - Sensitive credentials MUST be encapsulated within domain types which suppress plaintext leakage during string formatting.
+    - Sensitive credentials MUST be encapsulated within domain types which suppress plaintext leakage during string formatting (such as `BecomePassword`).
     - High-entropy tokens generated through `crypto/rand` MUST be modeled using the dedicated type `RandomToken`, and MUST NOT include a hex qualifier when encoded in URL-safe base64.
     - Access roles and credential keys MUST use distinct string-derived domain types rather than primitive strings.

@@ -23,7 +23,7 @@ type hostFixture struct {
 func TestApplyAllMenuOptionRunsEveryHostStep(t *testing.T) {
 	f := newHostFixture(t, "example-become", "")
 
-	err := f.a.buildMenuOptions()[0].run(context.Background())
+	err := f.a.buildHostMenuOptions()[0].run(context.Background())
 	if err != nil {
 		t.Fatalf("Apply All: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestHostMenuOptionsRunTheirPlaybookAlone(t *testing.T) {
 	for label, playbook := range cases {
 		t.Run(label, func(t *testing.T) {
 			f := newHostFixture(t, "example-become", "")
-			options := f.a.buildMenuOptions()
+			options := f.a.buildHostMenuOptions()
 			i := slices.IndexFunc(options, func(o menuOption) bool { return o.label == label })
 			if i < 0 {
 				t.Fatalf("menu lacks %q", label)

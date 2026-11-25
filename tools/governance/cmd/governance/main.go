@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/converge"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/gitremote"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
@@ -30,9 +32,13 @@ type app struct {
 	env          *config.Env
 	out          *ui.Printer
 	in           *bufio.Reader
+	stdout       io.Writer
+	stderr       io.Writer
 
-	// Overridable in tests to avoid invoking git.
+	// Overridable in tests to avoid invoking git, DAG assembly, or TTY prompts.
 	resolveOrigin func(context.Context) (gitlabOrigin, error)
+	buildGraph    func() (*converge.Graph, error)
+	promptBecome  func(context.Context) (converge.BecomePassword, error)
 }
 
 type gitlabOrigin struct {
@@ -109,6 +115,8 @@ func loadApp(out *ui.Printer) (*app, error) {
 		issuedTokens: issued,
 		out:          out,
 		in:           bufio.NewReader(os.Stdin),
+		stdout:       os.Stdout,
+		stderr:       os.Stderr,
 		resolveOrigin: func(ctx context.Context) (gitlabOrigin, error) {
 			remote, err := gitremote.Resolve(ctx, root)
 			if err != nil {
@@ -120,14 +128,22 @@ func loadApp(out *ui.Printer) (*app, error) {
 }
 
 func (a *app) newRootCmd() *cobra.Command {
-	var rootCmd *cobra.Command
+	var rootCmd, statusCmd, convergeCmd *cobra.Command
 	rootCmd = &cobra.Command{
 		Use:           "governance",
 		Short:         "Bastion Vault and host Ansible operations for parent-group-governance",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if cmd == rootCmd {
+			if cmd == rootCmd || cmd == statusCmd {
+				return nil
+			}
+			if cmd == convergeCmd {
+				env, err := config.Load(filepath.Join(a.root, ".env"))
+				if err != nil {
+					return err
+				}
+				a.env = env
 				return nil
 			}
 			env, err := config.BootstrapEnv(a.root, a.out)
@@ -142,7 +158,11 @@ func (a *app) newRootCmd() *cobra.Command {
 		},
 	}
 
+	statusCmd = a.newStatusCmd()
+	convergeCmd = a.newConvergeCmd()
 	rootCmd.AddCommand(
+		statusCmd,
+		convergeCmd,
 		a.newHostCmd(),
 		a.newVaultCmd(),
 		a.newCredentialsCmd(),

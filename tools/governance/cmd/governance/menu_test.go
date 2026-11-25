@@ -9,11 +9,9 @@ import (
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
 )
 
-const labelApplyAll = "[Host] Apply All Workstation Prerequisites"
-
 func TestBuildMenuOptionsNamesTheServiceAdminPasswords(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard), credentials: []credentials.Credential{{Key: "example-admin-password"}}}
-	labels := menuLabels(a.buildMenuOptions())
+	labels := menuLabels(a.buildCredentialsMenuOptions())
 
 	for _, want := range []string{
 		"[Credentials] Rotate Service Admin Passwords",
@@ -27,7 +25,7 @@ func TestBuildMenuOptionsNamesTheServiceAdminPasswords(t *testing.T) {
 
 func TestBuildMenuOptionsOffersEachHostStepAlone(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard)}
-	labels := menuLabels(a.buildMenuOptions())
+	labels := menuLabels(a.buildHostMenuOptions())
 
 	for _, want := range []string{
 		"[Host] Apply Workstation SELinux Policy and File Contexts",
@@ -40,12 +38,12 @@ func TestBuildMenuOptionsOffersEachHostStepAlone(t *testing.T) {
 	}
 }
 
-func TestBuildMenuOptionsOpensWithApplyAllAndEndsWithQuit(t *testing.T) {
+func TestBuildMenuOptionsOpensWithStatusAndEndsWithQuit(t *testing.T) {
 	a := &app{out: ui.New(io.Discard, io.Discard)}
 	options := a.buildMenuOptions()
 
-	if first := options[0]; first.label != labelApplyAll || first.run == nil {
-		t.Errorf("first menu option = %q, want %q with an action", first.label, labelApplyAll)
+	if first := options[0]; first.label != "Status & Converge" || first.run == nil {
+		t.Errorf("first menu option = %q, want Status & Converge with an action", first.label)
 	}
 	if last := options[len(options)-1]; last.label != "Quit" || last.run != nil {
 		t.Errorf("last menu option = %q, want Quit without an action", last.label)

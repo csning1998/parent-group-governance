@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/converge"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/secretrotate"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/vaultclient"
@@ -17,49 +19,24 @@ type menuOption struct {
 	run   func(ctx context.Context) error
 }
 
-// buildMenuOptions returns interactive menu entries with Apply All first and Quit last.
+// buildMenuOptions returns the six-category interactive root menu with Quit last.
 func (a *app) buildMenuOptions() []menuOption {
-	options := []menuOption{
-		{"[Host] Apply All Workstation Prerequisites", func(ctx context.Context) error { return a.runHostAll(ctx) }},
-		{"[Host] Verify Host IaC Tools", func(ctx context.Context) error { return a.verifyEnvironment() }},
-		{"[Host] Apply Workstation SELinux Policy and File Contexts", func(ctx context.Context) error { return a.runHostSELinuxPlaybook(ctx) }},
-		{"[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites", func(ctx context.Context) error { return a.runHostLibvirtPlaybook(ctx) }},
-		{"[Host] Apply Workstation Vault Proxies", func(ctx context.Context) error { return a.runHostVaultProxyPlaybook(ctx) }},
-		{"[Host] Apply Workstation Vault Audit Check", func(ctx context.Context) error { return a.runHostVaultAuditPlaybook(ctx) }},
-		{"[Host] Apply Host Telemetry Scrape Network", func(ctx context.Context) error { return a.runHostTelemetryPlaybook(ctx) }},
-		{"[Vault] Set up TLS for Bastion Vault", func(ctx context.Context) error { return a.generateVaultTLS(ctx) }},
-		{"[Vault] Initialize Bastion Vault", func(ctx context.Context) error { return a.initVault(ctx) }},
-		{"[Vault] Enable KV-v2 Engine", func(ctx context.Context) error { return a.enableVaultKV(ctx) }},
-		{"[Vault] Unseal Bastion Vault", func(ctx context.Context) error { return a.unsealVault(ctx) }},
-		{"[Vault] Revoke Root Token After Bootstrap", func(ctx context.Context) error { return a.revokeRootToken(ctx) }},
-		{"[Vault] Generate Root Token for Break-Glass", func(ctx context.Context) error { return a.generateRootToken(ctx) }},
+	return []menuOption{
+		{"Status & Converge", func(ctx context.Context) error {
+			return a.runSubmenu(ctx, "Status & Converge", a.buildStatusMenuOptions())
+		}},
+		{"Host Prerequisites", func(ctx context.Context) error {
+			return a.runSubmenu(ctx, "Host Prerequisites", a.buildHostMenuOptions())
+		}},
+		{"Bastion Vault", func(ctx context.Context) error { return a.runSubmenu(ctx, "Bastion Vault", a.buildVaultMenuOptions()) }},
+		{"Credentials & Registry", func(ctx context.Context) error {
+			return a.runSubmenu(ctx, "Credentials & Registry", a.buildCredentialsMenuOptions())
+		}},
+		{"Terraform & State Audit", func(ctx context.Context) error {
+			return a.runSubmenu(ctx, "Terraform & State Audit", a.buildTerraformMenuOptions())
+		}},
+		{"Quit", nil},
 	}
-	if len(a.credentials) > 0 {
-		options = append(options,
-			menuOption{"[Credentials] Rotate Service Admin Passwords", func(ctx context.Context) error { return a.runRotateCredentialMenu(ctx) }},
-			menuOption{"[Credentials] Reconcile Service Admin Passwords with the Live Service", func(ctx context.Context) error { return a.runReconcileCredentialMenu(ctx) }},
-		)
-	}
-	if a.issuedTokens.SonarQubeAnalysisToken.UserTokensEndpoint != "" {
-		options = append(options,
-			menuOption{"[Credentials] Issue the SonarQube Analysis Token", func(ctx context.Context) error { return a.issueSonarQubeAnalysisToken(ctx) }},
-		)
-	}
-	if a.issuedTokens.GitLabGroupRunner.ConfigPath != "" {
-		options = append(options,
-			menuOption{"[Credentials] Register the GitLab Group Runner", func(ctx context.Context) error { return a.registerGitLabGroupRunner(ctx) }},
-		)
-	}
-	if len(a.issuedTokens.CodeReviewerVariables.BotTokens) > 0 {
-		options = append(options,
-			menuOption{"[Credentials] Publish the Code Reviewer Variables", func(ctx context.Context) error { return a.publishCodeReviewerVariables(ctx) }},
-		)
-	}
-	options = append(options,
-		menuOption{"[Terraform] Audit State Secrets", func(ctx context.Context) error { return a.runStateAuditMenu(ctx) }},
-		menuOption{"Quit", nil},
-	)
-	return options
 }
 
 func (a *app) printVaultStatusBanner(ctx context.Context) {
@@ -119,12 +96,48 @@ func (a *app) runMenu(ctx context.Context) error {
 			a.out.Print(ui.Info, "Exiting.")
 			return nil
 		}
+		if err := chosen.run(ctx); err != nil {
+			if errors.As(err, new(*menuBackError)) {
+				continue
+			}
+			return err
+		}
+		return nil
+	}
+}
+
+const msgMenuBack = "menu back"
+
+func (a *app) runSubmenu(ctx context.Context, title string, options []menuOption) error {
+	labels := make([]string, len(options))
+	for i, opt := range options {
+		labels[i] = opt.label
+	}
+	for {
+		a.out.PrintDivider("")
+		index, ok := a.out.PromptSelect(a.in, title+" (select an action):", labels)
+		if !ok {
+			a.out.Print(ui.Error, msgInvalidOption)
+			continue
+		}
+		chosen := options[index]
+		if chosen.run == nil {
+			return &menuBackError{}
+		}
 		return chosen.run(ctx)
 	}
 }
 
+type menuBackError struct{}
+
+func (*menuBackError) Error() string { return msgMenuBack }
+
 // runReconcileCredentialMenu reconciles each selected Vault credential in turn without stopping on a single failure.
 func (a *app) runReconcileCredentialMenu(ctx context.Context) error {
+	if len(a.credentials) == 0 {
+		a.out.Print(ui.Warn, "No credentials declared in workstation-topology.yaml.")
+		return nil
+	}
 	client, err := a.newRotationClient()
 	if err != nil {
 		return err
@@ -155,6 +168,10 @@ func (a *app) runReconcileCredentialMenu(ctx context.Context) error {
 
 // runRotateCredentialMenu rotates each selected credential in turn without stopping on a single failure.
 func (a *app) runRotateCredentialMenu(ctx context.Context) error {
+	if len(a.credentials) == 0 {
+		a.out.Print(ui.Warn, "No credentials declared in workstation-topology.yaml.")
+		return nil
+	}
 	keys := make([]string, len(a.credentials))
 	labels := make([]string, len(a.credentials))
 
@@ -191,4 +208,69 @@ func (a *app) runSelectedCredentials(keys []string, indices []int, run func(stri
 		}
 	}
 	return lastErr
+}
+
+func (a *app) buildStatusMenuOptions() []menuOption {
+	return []menuOption{
+		{"[Status] View Workstation DAG Status (Fast)", func(ctx context.Context) error { return a.runStatus(ctx, converge.ObserveFast, "") }},
+		{"[Status] View Workstation DAG Status (Deep)", func(ctx context.Context) error { return a.runStatus(ctx, converge.ObserveDeep, "") }},
+		{"[Converge] Plan Convergence (Dry-Run)", func(ctx context.Context) error { return a.runConverge(ctx, convergeFlags{dryRun: true}) }},
+		{"[Converge] Converge All Ready Nodes", func(ctx context.Context) error { return a.runConverge(ctx, convergeFlags{}) }},
+		{"Back", nil},
+	}
+}
+
+func (a *app) buildHostMenuOptions() []menuOption {
+	return []menuOption{
+		{"[Host] Apply All Workstation Prerequisites", func(ctx context.Context) error { return a.runHostAll(ctx) }},
+		{"[Host] Verify Host IaC Tools", func(ctx context.Context) error { return a.verifyEnvironment() }},
+		{"[Host] Apply Workstation SELinux Policy and File Contexts", func(ctx context.Context) error { return a.runHostSELinuxPlaybook(ctx) }},
+		{"[Host] Apply Workstation Libvirt Network and Bastion Vault Prerequisites", func(ctx context.Context) error { return a.runHostLibvirtPlaybook(ctx) }},
+		{"[Host] Apply Workstation Vault Proxies", func(ctx context.Context) error { return a.runHostVaultProxyPlaybook(ctx) }},
+		{"[Host] Apply Workstation Vault Audit Check", func(ctx context.Context) error { return a.runHostVaultAuditPlaybook(ctx) }},
+		{"[Host] Apply Host Telemetry Scrape Network", func(ctx context.Context) error { return a.runHostTelemetryPlaybook(ctx) }},
+		{"Back", nil},
+	}
+}
+
+func (a *app) buildVaultMenuOptions() []menuOption {
+	return []menuOption{
+		{"[Vault] Set up TLS for Bastion Vault", func(ctx context.Context) error { return a.generateVaultTLS(ctx) }},
+		{"[Vault] Initialize Bastion Vault", func(ctx context.Context) error { return a.initVault(ctx) }},
+		{"[Vault] Enable KV-v2 Engine", func(ctx context.Context) error { return a.enableVaultKV(ctx) }},
+		{"[Vault] Unseal Bastion Vault", func(ctx context.Context) error { return a.unsealVault(ctx) }},
+		{"[Vault] Revoke Root Token After Bootstrap", func(ctx context.Context) error { return a.revokeRootToken(ctx) }},
+		{"[Vault] Generate Root Token for Break-Glass", func(ctx context.Context) error { return a.generateRootToken(ctx) }},
+		{"Back", nil},
+	}
+}
+
+func (a *app) buildCredentialsMenuOptions() []menuOption {
+	options := []menuOption{
+		{"[Credentials] Rotate Service Admin Passwords", func(ctx context.Context) error { return a.runRotateCredentialMenu(ctx) }},
+		{"[Credentials] Reconcile Service Admin Passwords with the Live Service", func(ctx context.Context) error { return a.runReconcileCredentialMenu(ctx) }},
+	}
+	if a.issuedTokens.SonarQubeAnalysisToken.UserTokensEndpoint != "" {
+		options = append(options,
+			menuOption{"[Credentials] Issue the SonarQube Analysis Token", func(ctx context.Context) error { return a.issueSonarQubeAnalysisToken(ctx) }},
+		)
+	}
+	if a.issuedTokens.GitLabGroupRunner.ConfigPath != "" {
+		options = append(options,
+			menuOption{"[Credentials] Register the GitLab Group Runner", func(ctx context.Context) error { return a.registerGitLabGroupRunner(ctx) }},
+		)
+	}
+	if len(a.issuedTokens.CodeReviewerVariables.BotTokens) > 0 {
+		options = append(options,
+			menuOption{"[Credentials] Publish the Code Reviewer Variables", func(ctx context.Context) error { return a.publishCodeReviewerVariables(ctx) }},
+		)
+	}
+	return append(options, menuOption{"Back", nil})
+}
+
+func (a *app) buildTerraformMenuOptions() []menuOption {
+	return []menuOption{
+		{"[Terraform] Audit State Secrets", func(ctx context.Context) error { return a.runStateAuditMenu(ctx) }},
+		{"Back", nil},
+	}
 }
