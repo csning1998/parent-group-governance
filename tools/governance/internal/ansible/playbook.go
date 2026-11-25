@@ -18,6 +18,8 @@ type PlaybookRequest struct {
 	PlaybookFile string
 	Options      *playbook.AnsiblePlaybookOptions
 	ExtraEnv     map[string]string
+	CheckMode    bool
+	Diff         bool
 }
 
 // ExecutePlaybook executes req.PlaybookFile with ANSIBLE_CONFIG pointing to req.AnsibleDir/ansible.cfg.
@@ -26,7 +28,7 @@ type PlaybookRequest struct {
 func ExecutePlaybook(ctx context.Context, req PlaybookRequest) error {
 	cmd := playbook.NewAnsiblePlaybookCmd(
 		playbook.WithPlaybooks(req.PlaybookFile),
-		playbook.WithPlaybookOptions(req.Options),
+		playbook.WithPlaybookOptions(resolvePlaybookOptions(req)),
 	)
 
 	env := map[string]string{
@@ -49,4 +51,21 @@ func ExecutePlaybook(ctx context.Context, req PlaybookRequest) error {
 		return fmt.Errorf("%s failed, the task output above names the failing task", req.PlaybookFile)
 	}
 	return nil
+}
+
+func resolvePlaybookOptions(req PlaybookRequest) *playbook.AnsiblePlaybookOptions {
+	if !req.CheckMode && !req.Diff {
+		return req.Options
+	}
+	var opts playbook.AnsiblePlaybookOptions
+	if req.Options != nil {
+		opts = *req.Options
+	}
+	if req.CheckMode {
+		opts.Check = true
+	}
+	if req.Diff {
+		opts.Diff = true
+	}
+	return &opts
 }

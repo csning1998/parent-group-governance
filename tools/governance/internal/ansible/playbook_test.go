@@ -143,3 +143,42 @@ func TestExecutePlaybookPassesThroughPlaybookOptions(t *testing.T) {
 		t.Errorf("ExecutePlaybook with Tags set = %v, want nil", err)
 	}
 }
+
+func TestExecutePlaybookAppliesCheckModeAndDiff(t *testing.T) {
+	requireAnsiblePlaybook(t)
+	dir := t.TempDir()
+	playbookPath := filepath.Join(dir, "check-diff.yaml")
+	const assertCheckAndDiffYAML = "---\n- hosts: localhost\n  connection: local\n  gather_facts: false\n  tasks:\n    - name: Verify check and diff mode are enabled\n      ansible.builtin.assert:\n        that:\n          - ansible_check_mode | bool\n          - ansible_diff_mode | bool\n"
+	if err := os.WriteFile(playbookPath, []byte(assertCheckAndDiffYAML), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	t.Run("nil options", func(t *testing.T) {
+		err := ExecutePlaybook(context.Background(), PlaybookRequest{
+			AnsibleDir:   dir,
+			PlaybookFile: playbookPath,
+			CheckMode:    true,
+			Diff:         true,
+		})
+		if err != nil {
+			t.Errorf("ExecutePlaybook with nil Options and CheckMode/Diff = %v, want nil", err)
+		}
+	})
+
+	t.Run("preserves caller options", func(t *testing.T) {
+		opts := &playbook.AnsiblePlaybookOptions{}
+		err := ExecutePlaybook(context.Background(), PlaybookRequest{
+			AnsibleDir:   dir,
+			PlaybookFile: playbookPath,
+			Options:      opts,
+			CheckMode:    true,
+			Diff:         true,
+		})
+		if err != nil {
+			t.Errorf("ExecutePlaybook with CheckMode/Diff = %v, want nil", err)
+		}
+		if opts.Check || opts.Diff {
+			t.Errorf("caller Options mutated: Check=%v Diff=%v, want false/false", opts.Check, opts.Diff)
+		}
+	})
+}
