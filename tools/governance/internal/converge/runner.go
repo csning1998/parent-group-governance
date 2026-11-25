@@ -12,13 +12,14 @@ var ErrBecomePromptMissing = errors.New("converge: become prompt callback is req
 
 // ConvergeOptions configures observation, filtering, dry-run behavior, and become password collection.
 type ConvergeOptions struct {
-	Target       string
-	Mode         ObserveMode
-	DryRun       bool
-	AutoApprove  bool
-	PromptBecome func(ctx context.Context) (BecomePassword, error)
-	Stdout       io.Writer
-	Stderr       io.Writer
+	Target            string
+	Mode              ObserveMode
+	DryRun            bool
+	AutoApprove       bool
+	PromptBecome      func(ctx context.Context) (BecomePassword, error)
+	OnObserveProgress func(ObserveEvent)
+	Stdout            io.Writer
+	Stderr            io.Writer
 }
 
 // ConvergeResult summarizes observation reports and execution outcomes for a Converge run.
@@ -32,31 +33,45 @@ type ConvergeResult struct {
 
 // Observe inspects the target subgraph in topological order and propagates Blocked state to downstream dependents.
 func Observe(ctx context.Context, graph *Graph, mode ObserveMode, target string) ([]NodeReport, error) {
+	return ObserveWithProgress(ctx, graph, mode, target, nil)
+}
+
+// ObserveWithProgress inspects the target subgraph in topological order while invoking onProgress before and after each node.
+func ObserveWithProgress(
+	ctx context.Context,
+	graph *Graph,
+	mode ObserveMode,
+	target string,
+	onProgress func(ObserveEvent),
+) ([]NodeReport, error) {
 	mode = defaultObserveMode(mode)
 	nodes, err := graph.Subgraph(target)
 	if err != nil {
 		return nil, err
 	}
 
-	reports := make([]NodeReport, 0, len(nodes))
+	total := len(nodes)
+	reports := make([]NodeReport, 0, total)
 	blockedBy := make(map[string]string)
 
-	for _, node := range nodes {
+	for i, node := range nodes {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if rootBlocker, blocked := findBlockedUpstream(node.DependsOn(), blockedBy); blocked {
-			blockedBy[node.ID()] = rootBlocker
-			reports = append(reports, newUpstreamBlockedReport(node, rootBlocker))
-			continue
-		}
-		report, err := inspectNode(ctx, node, mode)
+		idx := i + 1
+		emitObserveEvent(onProgress, ObserveEvent{Index: idx, Total: total, NodeID: node.ID(), Stage: node.Stage()})
+		report, err := evaluateNode(ctx, node, mode, blockedBy)
 		if err != nil {
 			return nil, err
 		}
-		if report.State == StateBlocked {
-			blockedBy[node.ID()] = node.ID()
-		}
+		emitObserveEvent(onProgress, ObserveEvent{
+			Index:  idx,
+			Total:  total,
+			NodeID: node.ID(),
+			Stage:  node.Stage(),
+			Done:   true,
+			State:  report.State,
+		})
 		reports = append(reports, report)
 	}
 	return reports, nil
@@ -70,7 +85,7 @@ func Converge(ctx context.Context, graph *Graph, opts ConvergeOptions) (Converge
 		return ConvergeResult{}, err
 	}
 
-	reports, err := Observe(ctx, graph, opts.Mode, opts.Target)
+	reports, err := ObserveWithProgress(ctx, graph, opts.Mode, opts.Target, opts.OnObserveProgress)
 	if err != nil {
 		return ConvergeResult{}, err
 	}
@@ -101,6 +116,27 @@ func Converge(ctx context.Context, graph *Graph, opts ConvergeOptions) (Converge
 		res.Executed = append(res.Executed, node.ID())
 	}
 	return res, nil
+}
+
+func emitObserveEvent(fn func(ObserveEvent), ev ObserveEvent) {
+	if fn != nil {
+		fn(ev)
+	}
+}
+
+func evaluateNode(ctx context.Context, node Node, mode ObserveMode, blockedBy map[string]string) (NodeReport, error) {
+	if rootBlocker, blocked := findBlockedUpstream(node.DependsOn(), blockedBy); blocked {
+		blockedBy[node.ID()] = rootBlocker
+		return newUpstreamBlockedReport(node, rootBlocker), nil
+	}
+	report, err := inspectNode(ctx, node, mode)
+	if err != nil {
+		return NodeReport{}, err
+	}
+	if report.State == StateBlocked {
+		blockedBy[node.ID()] = node.ID()
+	}
+	return report, nil
 }
 
 func defaultObserveMode(mode ObserveMode) ObserveMode {

@@ -70,6 +70,16 @@ type NodeReport struct {
 	RequiresBecome bool
 }
 
+// ObserveEvent reports per-node progress during DAG observation.
+type ObserveEvent struct {
+	Index  int
+	Total  int
+	NodeID string
+	Stage  Stage
+	Done   bool
+	State  NodeState
+}
+
 // ConvergeContext supplies shared runtime parameters to a node's Converge step.
 type ConvergeContext struct {
 	BecomePassword BecomePassword

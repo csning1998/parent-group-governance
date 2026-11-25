@@ -18,6 +18,7 @@ import (
 
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/converge"
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/gitlabapi"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/secretrotate"
@@ -82,12 +83,26 @@ func (a *app) runStatus(ctx context.Context, mode converge.ObserveMode, target s
 	if err != nil {
 		return err
 	}
-	reports, err := converge.Observe(ctx, graph, mode, target)
+	bar, onProgress := a.startObserveProgress()
+	reports, err := converge.ObserveWithProgress(ctx, graph, mode, target, onProgress)
+	bar.Finish()
 	if err != nil {
 		return err
 	}
 	formatStatusTable(a.statusWriter(), reports)
 	return nil
+}
+
+func (a *app) startObserveProgress() (*ui.ProgressBar, func(converge.ObserveEvent)) {
+	errW := a.errWriter()
+	bar := ui.NewProgressBar(errW, ui.IsTerminalWriter(errW))
+	return bar, func(ev converge.ObserveEvent) {
+		completed := max(ev.Index-1, 0)
+		if ev.Done {
+			completed = ev.Index
+		}
+		bar.Update(completed, ev.Total, ev.NodeID)
+	}
 }
 
 func (a *app) resolveWorkstationGraph() (*converge.Graph, error) {

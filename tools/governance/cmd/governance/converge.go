@@ -48,11 +48,14 @@ func (a *app) runConverge(ctx context.Context, flags convergeFlags) error {
 		mode = converge.ObserveDeep
 	}
 
+	bar, onProgress := a.startObserveProgress()
 	plan, err := converge.Converge(ctx, graph, converge.ConvergeOptions{
-		Target: flags.target,
-		Mode:   mode,
-		DryRun: true,
+		Target:            flags.target,
+		Mode:              mode,
+		DryRun:            true,
+		OnObserveProgress: onProgress,
 	})
+	bar.Finish()
 	if err != nil {
 		return err
 	}

@@ -330,3 +330,47 @@ func assertBecomePassword(t *testing.T, node *stubNode, want string) {
 		t.Errorf("node %q BecomePassword.Value() = %q, want %q", node.id, node.convergeReqs[0].BecomePassword.Value(), want)
 	}
 }
+
+func TestObserveWithProgressEmitsStartAndDoneEvents(t *testing.T) {
+	g := mustNewGraph(t,
+		&stubNode{id: "example.first", stage: StageHostPrereqs, state: StateConverged},
+		&stubNode{id: "example.second", stage: StageCoreContainers, deps: []string{"example.first"}, state: StateBlocked},
+		&stubNode{id: "example.third", stage: StageBootstrapFacts, deps: []string{"example.second"}, state: StateAbsent},
+	)
+
+	var events []ObserveEvent
+	reports, err := ObserveWithProgress(context.Background(), g, ObserveFast, "", func(ev ObserveEvent) {
+		events = append(events, ev)
+	})
+	if err != nil {
+		t.Fatalf("ObserveWithProgress error = %v", err)
+	}
+	if len(reports) != 3 {
+		t.Fatalf("reports len = %d, want 3", len(reports))
+	}
+	want := []ObserveEvent{
+		{Index: 1, Total: 3, NodeID: "example.first", Stage: StageHostPrereqs, Done: false},
+		{Index: 1, Total: 3, NodeID: "example.first", Stage: StageHostPrereqs, Done: true, State: StateConverged},
+		{Index: 2, Total: 3, NodeID: "example.second", Stage: StageCoreContainers, Done: false},
+		{Index: 2, Total: 3, NodeID: "example.second", Stage: StageCoreContainers, Done: true, State: StateBlocked},
+		{Index: 3, Total: 3, NodeID: "example.third", Stage: StageBootstrapFacts, Done: false},
+		{Index: 3, Total: 3, NodeID: "example.third", Stage: StageBootstrapFacts, Done: true, State: StateBlocked},
+	}
+	if !slices.Equal(events, want) {
+		t.Fatalf("ObserveWithProgress events = %+v, want %+v", events, want)
+	}
+
+	var convergeEvents []ObserveEvent
+	_, err = Converge(context.Background(), g, ConvergeOptions{
+		DryRun: true,
+		OnObserveProgress: func(ev ObserveEvent) {
+			convergeEvents = append(convergeEvents, ev)
+		},
+	})
+	if err != nil {
+		t.Fatalf("Converge(DryRun) error = %v", err)
+	}
+	if !slices.Equal(convergeEvents, want) {
+		t.Fatalf("Converge OnObserveProgress events = %+v, want %+v", convergeEvents, want)
+	}
+}
