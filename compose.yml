@@ -36,6 +36,8 @@ services:
       - ./vault/tls:/opt/vault/tls
       # Mounts the host directory receiving the file audit log configured by foundation-vault-bastion.
       - ./vault/audit:/opt/vault/audit
+      # Mounts the host directory receiving Bastion Vault server operational logs (ADR-144).
+      - ./vault/logs:/opt/vault/logs
     user: "${HOST_UID}:${HOST_GID}"
     cap_add:
       - IPC_LOCK
@@ -120,6 +122,26 @@ services:
       - ./vault/tls/publish.pem:/etc/haproxy/tls/publish.pem:ro
       - ./vault/tls/publish-key.pem:/etc/haproxy/tls/publish-key.pem:ro
       - ./vault/tls/ca-ml-dsa-87.pem:/etc/haproxy/tls/ca-ml-dsa-87.pem:ro
+    user: "${HOST_UID}:${HOST_GID}"
+    network_mode: "host"
+    userns_mode: keep-id
+    restart: always
+
+  # Ships Bastion Vault server operational logs (excluding audit logs) to the segment 250 rendezvous (ADR-144).
+  vault-log-shipper:
+    image: docker.io/grafana/alloy:v1.10.0
+    container_name: parent-group-governance-vault-log-shipper
+    profiles: ["host-log-shipper"]
+    command:
+      - run
+      - --server.http.listen-addr=127.0.0.1:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./vault/logs:/opt/vault/logs:ro
+      - ./vault/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./vault/alloy/pki-root-ca.pem:/etc/alloy/pki-root-ca.pem:ro
+      - ./vault/alloy/data:/var/lib/alloy/data
     user: "${HOST_UID}:${HOST_GID}"
     network_mode: "host"
     userns_mode: keep-id

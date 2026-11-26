@@ -30,6 +30,15 @@
   loop_control:
     label: "{{ item.item }}"
 
+# The vault-server container reads vault.hcl and writes server operational logs to vault/logs.
+- name: "E2. Ensure the Bastion Vault operational log directory exists"
+  ansible.builtin.file:
+    path: "{{ workstation_libvirt_vault.config_path | dirname }}/logs"
+    state: directory
+    owner: "{{ workstation_libvirt_operator_user }}"
+    group: "{{ workstation_libvirt_operator_user }}"
+    mode: "0750"
+
 # The vault-server container reads this file at startup. Listener modifications take effect upon container restart.
 - name: "E3. Render the Bastion Vault configuration from the declared listeners"
   ansible.builtin.template:

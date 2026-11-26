@@ -4,6 +4,12 @@ api_addr      = "https://{{ workstation_libvirt_vault_bastion.publish_ip }}:{{ w
 cluster_addr  = "https://{{ workstation_libvirt_vault_bastion.loopback_ip }}:{{ workstation_libvirt_vault_bastion.cluster_port }}"
 disable_mlock = false
 
+# Separates server operational logs from the audit log for off-host shipping (ADR-144).
+# log_rotate_max_files must be non-zero because Vault default 0 retains rotated files indefinitely.
+log_file             = "/opt/vault/logs/vault.log"
+log_rotate_duration  = "24h"
+log_rotate_max_files = 14
+
 # Unauthenticated generate-root permits break-glass recovery with unseal key quorum after root token revocation.
 enable_unauthenticated_access = ["generate-root"]
 
