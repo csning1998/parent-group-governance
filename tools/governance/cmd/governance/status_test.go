@@ -230,19 +230,28 @@ func TestHostLocalProbes(t *testing.T) {
 		writeExecutable(t, filepath.Join(bin, "systemctl"), "#!/bin/sh\nif [ \"$2\" = \"is-enabled\" ]; then echo enabled; fi\nexit 0\n")
 		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
+		textfileDir := filepath.Join(root, "textfile")
+		if err := os.MkdirAll(textfileDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
 		a := &app{
 			root: root,
 			home: root,
-			topology: topology.VaultTopology{OperatorVaultProxy: topology.OperatorVaultProxy{
-				UserConfigDir: ".config/vault-proxy",
-				Identities:    map[string]topology.ProxyIdentity{"administrator": {ListenPort: 8212}},
-			}},
+			topology: topology.VaultTopology{
+				OperatorVaultProxy: topology.OperatorVaultProxy{
+					UserConfigDir: ".config/vault-proxy",
+					Identities:    map[string]topology.ProxyIdentity{"administrator": {ListenPort: 8212}},
+				},
+				HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: textfileDir},
+			},
 		}
 		assertProbeState(t, a.inspectHostVaultProxy, converge.StateAbsent)
 		writePlainFile(t, filepath.Join(root, ".config", "vault-proxy", "ca.pem"), "ca")
 		assertProbeState(t, a.inspectHostVaultProxy, converge.StateDrifted)
 		writePlainFile(t, filepath.Join(root, ".config", "vault-proxy", "administrator", "client.pem"), "cert")
 		assertProbeState(t, a.inspectHostVaultProxy, converge.StateConverged)
+		assertProbeState(t, a.inspectHostVaultAudit, converge.StateDrifted)
+		writePlainFile(t, filepath.Join(root, ".config", "vault-audit", "config.json"), `{"textfile_dir":"`+textfileDir+`"}`)
 		assertProbeState(t, a.inspectHostVaultAudit, converge.StateConverged)
 
 		writeExecutable(t, filepath.Join(bin, "systemctl"), "#!/bin/sh\necho disabled\nexit 1\n")

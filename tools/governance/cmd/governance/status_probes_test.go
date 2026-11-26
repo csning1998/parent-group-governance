@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/converge"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
@@ -286,4 +287,82 @@ func loadExampleCredential(t *testing.T, verifyURL string) []credentials.Credent
 		t.Fatal(err)
 	}
 	return creds
+}
+
+func TestInspectVaultAuditArtifacts(t *testing.T) {
+	t.Run("converged when config and textfile dir match topology", func(t *testing.T) {
+		home := t.TempDir()
+		textfileDir := t.TempDir()
+		writePlainFile(t, filepath.Join(home, ".config", "vault-audit", "config.json"), `{"textfile_dir":"`+textfileDir+`"}`)
+		a := &app{
+			home: home,
+			topology: topology.VaultTopology{
+				HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: textfileDir},
+			},
+		}
+		state, _, err := a.inspectVaultAuditArtifacts()
+		if err != nil {
+			t.Fatalf("inspectVaultAuditArtifacts: %v", err)
+		}
+		if state != converge.StateConverged {
+			t.Errorf("state = %s, want %s", state, converge.StateConverged)
+		}
+	})
+
+	t.Run("drifted when config missing", func(t *testing.T) {
+		home := t.TempDir()
+		textfileDir := t.TempDir()
+		a := &app{
+			home: home,
+			topology: topology.VaultTopology{
+				HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: textfileDir},
+			},
+		}
+		state, _, err := a.inspectVaultAuditArtifacts()
+		if err != nil {
+			t.Fatalf("inspectVaultAuditArtifacts: %v", err)
+		}
+		if state != converge.StateDrifted {
+			t.Errorf("state = %s, want %s", state, converge.StateDrifted)
+		}
+	})
+
+	t.Run("drifted when textfile_dir mismatches topology", func(t *testing.T) {
+		home := t.TempDir()
+		textfileDir := t.TempDir()
+		otherDir := t.TempDir()
+		writePlainFile(t, filepath.Join(home, ".config", "vault-audit", "config.json"), `{"textfile_dir":"`+otherDir+`"}`)
+		a := &app{
+			home: home,
+			topology: topology.VaultTopology{
+				HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: textfileDir},
+			},
+		}
+		state, _, err := a.inspectVaultAuditArtifacts()
+		if err != nil {
+			t.Fatalf("inspectVaultAuditArtifacts: %v", err)
+		}
+		if state != converge.StateDrifted {
+			t.Errorf("state = %s, want %s", state, converge.StateDrifted)
+		}
+	})
+
+	t.Run("drifted when textfile dir absent", func(t *testing.T) {
+		home := t.TempDir()
+		missingDir := filepath.Join(t.TempDir(), "absent-textfile")
+		writePlainFile(t, filepath.Join(home, ".config", "vault-audit", "config.json"), `{"textfile_dir":"`+missingDir+`"}`)
+		a := &app{
+			home: home,
+			topology: topology.VaultTopology{
+				HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: missingDir},
+			},
+		}
+		state, _, err := a.inspectVaultAuditArtifacts()
+		if err != nil {
+			t.Fatalf("inspectVaultAuditArtifacts: %v", err)
+		}
+		if state != converge.StateDrifted {
+			t.Errorf("state = %s, want %s", state, converge.StateDrifted)
+		}
+	})
 }

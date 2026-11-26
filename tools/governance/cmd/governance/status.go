@@ -340,12 +340,41 @@ func (a *app) inspectHostVaultAudit(ctx context.Context, _ converge.ObserveMode)
 	out, err := exec.CommandContext(probeCtx, "systemctl", "--user", "is-enabled", "vault-audit-check.timer").Output()
 	state := strings.TrimSpace(string(out))
 	if err == nil && state == "enabled" {
-		return converge.StateConverged, "vault-audit-check.timer enabled", nil
+		return a.inspectVaultAuditArtifacts()
 	}
 	if state == "disabled" || state == "masked" || state == "static" {
 		return converge.StateDrifted, "vault-audit-check.timer " + state, nil
 	}
 	return converge.StateAbsent, "vault-audit-check.timer not installed", nil
+}
+
+func (a *app) inspectVaultAuditArtifacts() (converge.NodeState, string, error) {
+	configPath := filepath.Join(a.home, ".config", "vault-audit", "config.json")
+	raw, err := os.ReadFile(configPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return converge.StateDrifted, "vault-audit config.json absent", nil
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("status: read %s: %w", configPath, err)
+	}
+	var cfg struct {
+		TextfileDir string `json:"textfile_dir"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return converge.StateDrifted, "vault-audit config.json invalid JSON", nil
+	}
+	if strings.TrimSpace(cfg.TextfileDir) == "" {
+		return converge.StateDrifted, "vault-audit config.json lacks textfile_dir", nil
+	}
+	expectedDir := a.topology.HostTelemetryScrape.TextfileCollectorDir
+	if expectedDir != "" && cfg.TextfileDir != expectedDir {
+		return converge.StateDrifted, fmt.Sprintf("vault-audit textfile_dir %q differs from topology %q", cfg.TextfileDir, expectedDir), nil
+	}
+	info, statErr := os.Stat(cfg.TextfileDir)
+	if statErr != nil || !info.IsDir() {
+		return converge.StateDrifted, fmt.Sprintf("vault-audit textfile_dir %q missing or not a directory", cfg.TextfileDir), nil
+	}
+	return converge.StateConverged, "vault-audit-check.timer and textfile collector configured", nil
 }
 
 func (a *app) inspectHostTelemetry(_ context.Context, _ converge.ObserveMode) (converge.NodeState, string, error) {
