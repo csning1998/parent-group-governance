@@ -125,6 +125,7 @@ func assertLibvirtNetworkTasksRegistered(t *testing.T, path string) {
 
 func assertLibvirtVaultConfigTasksRegistered(t *testing.T, path string) {
 	t.Helper()
+	base := filepath.Base(path)
 	tasks := mustReadYAML[[]libvirtWarningTask](t, path)
 	requiredTemplates := map[string]bool{
 		"vault.hcl.j2":             false,
@@ -133,30 +134,45 @@ func assertLibvirtVaultConfigTasksRegistered(t *testing.T, path string) {
 	}
 	sawCopy := false
 	for _, task := range tasks {
-		if task.Template != nil {
-			if src, ok := task.Template["src"].(string); ok {
-				if _, tracked := requiredTemplates[src]; tracked {
-					requiredTemplates[src] = true
-					if task.Register == "" {
-						t.Errorf("%s task %q (%s) must set register", filepath.Base(path), task.Name, src)
-					}
-				}
-			}
+		if src, ok := templateTaskSrc(task); ok {
+			recordTrackedTemplateTask(t, base, task, src, requiredTemplates)
 		}
 		if task.Copy != nil {
 			sawCopy = true
-			if task.Register == "" {
-				t.Errorf("%s task %q (copy) must set register", filepath.Base(path), task.Name)
-			}
+			assertTaskRegistered(t, base, task, "copy")
 		}
 	}
 	for src, found := range requiredTemplates {
 		if !found {
-			t.Errorf("%s missing template task for %s", filepath.Base(path), src)
+			t.Errorf("%s missing template task for %s", base, src)
 		}
 	}
 	if !sawCopy {
-		t.Errorf("%s missing copy task for container environment files", filepath.Base(path))
+		t.Errorf("%s missing copy task for container environment files", base)
+	}
+}
+
+func templateTaskSrc(task libvirtWarningTask) (string, bool) {
+	if task.Template == nil {
+		return "", false
+	}
+	src, ok := task.Template["src"].(string)
+	return src, ok
+}
+
+func recordTrackedTemplateTask(t *testing.T, base string, task libvirtWarningTask, src string, requiredTemplates map[string]bool) {
+	t.Helper()
+	if _, tracked := requiredTemplates[src]; !tracked {
+		return
+	}
+	requiredTemplates[src] = true
+	assertTaskRegistered(t, base, task, src)
+}
+
+func assertTaskRegistered(t *testing.T, base string, task libvirtWarningTask, label string) {
+	t.Helper()
+	if task.Register == "" {
+		t.Errorf("%s task %q (%s) must set register", base, task.Name, label)
 	}
 }
 

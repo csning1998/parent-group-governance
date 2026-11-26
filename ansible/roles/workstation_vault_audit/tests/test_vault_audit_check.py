@@ -383,7 +383,7 @@ def test_main_writes_prometheus_textfile_metrics_atomically(
 
     prom_path = textfile_dir / "vault_audit.prom"
     assert prom_path.exists()
-    assert stat.S_IMODE(prom_path.stat().st_mode) == 0o644
+    assert stat.S_IMODE(prom_path.stat().st_mode) == 0o640
     assert [p.name for p in textfile_dir.iterdir()] == ["vault_audit.prom"]
 
     body = prom_path.read_text(encoding="utf-8")

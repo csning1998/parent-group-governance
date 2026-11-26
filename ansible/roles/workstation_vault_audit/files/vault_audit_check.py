@@ -82,31 +82,24 @@ def in_cidrs(address, cidrs):
     return any(ip in ipaddress.ip_network(cidr) for cidr in cidrs)
 
 
-def classified_findings(entry, config):
-    """Yields (category, message) tuples for each rule the response entry violates."""
-    request = entry.get("request", {})
-    path = request.get("path", "")
-    operation = request.get("operation", "")
-    remote = request.get("remote_address", "")
-    error = entry.get("error", "") or ""
-    policies = entry.get("auth", {}).get("policies", []) or []
-    accessor = entry.get("auth", {}).get("accessor", "")
+def _transit_findings(path, remote, error, where, config):
     mount = config["transit_mount"]
+    if not path.startswith(f"{mount}/"):
+        return
     unseal_path = re.compile(rf"^{re.escape(mount)}/(encrypt|decrypt)/[^/]+$")
-
-    where = f"path={path} operation={operation} remote={remote} accessor={accessor}"
-    if path.startswith(f"{mount}/") and not unseal_path.match(path):
+    is_unseal = bool(unseal_path.match(path))
+    if not is_unseal:
         yield (
             "transit_key_admin",
             f"transit key administration on the unseal mount: {where}",
         )
-    if path.startswith(f"{mount}/") and error:
+    if error:
         yield (
             "transit_unseal_failed",
             f"transit unseal request failed ({error}): {where}",
         )
     if (
-        unseal_path.match(path)
+        is_unseal
         and config["transit_source_cidrs"]
         and not in_cidrs(remote, config["transit_source_cidrs"])
     ):
@@ -114,6 +107,9 @@ def classified_findings(entry, config):
             "transit_unseal_unexpected_source",
             f"transit unseal request from an unexpected source: {where}",
         )
+
+
+def _access_and_policy_findings(path, operation, error, policies, where):
     if path.startswith("sys/audit") and operation in WRITE_OPERATIONS:
         yield ("audit_device_change", f"audit device change: {where}")
     if path == "sys/generate-root" or path.startswith("sys/generate-root/"):
@@ -131,6 +127,21 @@ def classified_findings(entry, config):
             "denied_policy_or_role_write",
             f"denied policy or role write: {where}",
         )
+
+
+def classified_findings(entry, config):
+    """Yields (category, message) tuples for each rule the response entry violates."""
+    request = entry.get("request", {})
+    path = request.get("path", "")
+    operation = request.get("operation", "")
+    remote = request.get("remote_address", "")
+    error = entry.get("error", "") or ""
+    policies = entry.get("auth", {}).get("policies", []) or []
+    accessor = entry.get("auth", {}).get("accessor", "")
+
+    where = f"path={path} operation={operation} remote={remote} accessor={accessor}"
+    yield from _transit_findings(path, remote, error, where, config)
+    yield from _access_and_policy_findings(path, operation, error, policies, where)
     if matches_kv_write_alert(path, operation, config["kv_write_alert_paths"]):
         yield ("kv_write_alert_path", f"KV write to an alert path: {where}")
 
@@ -207,7 +218,7 @@ def write_textfile_metrics(textfile_dir, counts, last_seen, run_timestamp):
     prom_path = os.path.join(textfile_dir, "vault_audit.prom")
     with open(tmp_path, "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
-    os.chmod(tmp_path, 0o644)
+    os.chmod(tmp_path, 0o640)
     os.replace(tmp_path, prom_path)
 
 
