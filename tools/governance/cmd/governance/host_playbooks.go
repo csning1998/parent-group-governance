@@ -148,6 +148,10 @@ func (a *app) buildVaultProxyPlaybook(ctx context.Context) (hostPlaybook, error)
 }
 
 func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, error) {
+	facts, err := config.DetectHostFacts()
+	if err != nil {
+		return hostPlaybook{}, err
+	}
 	kv, err := a.newAdministratorKV()
 	if err != nil {
 		return hostPlaybook{}, err
@@ -168,8 +172,9 @@ func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, err
 	return hostPlaybook{
 		file: "playbooks/workstation_host_telemetry.yaml",
 		extraVars: map[string]any{
-			"workstation_host_telemetry_scrape_cidr": cidr,
-			"workstation_host_telemetry_scrape_ip":   scrapeIP,
+			"workstation_host_telemetry_operator_user": facts.CurrentUname,
+			"workstation_host_telemetry_scrape_cidr":   cidr,
+			"workstation_host_telemetry_scrape_ip":     scrapeIP,
 		},
 		doneMsg: "Host telemetry scrape network applied.",
 	}, nil

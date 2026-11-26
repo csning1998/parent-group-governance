@@ -11,6 +11,7 @@ workstation_vault_audit_libexec_dir: "{{ workstation_vault_audit_home }}/.local/
 workstation_vault_audit_config_dir: "{{ workstation_vault_audit_home }}/.config/vault-audit"
 workstation_vault_audit_state_dir: "{{ workstation_vault_audit_home }}/.local/state/vault-audit"
 workstation_vault_audit_unit_dir: "{{ workstation_vault_audit_home }}/.config/systemd/user"
+workstation_vault_audit_textfile_dir: "{{ workstation_vault_audit_host_telemetry_scrape.textfile_collector_dir }}"
 
 # The check reads the new audit entries on every run and writes each finding to the journal at priority alert.
 workstation_vault_audit_check_interval: "5min"

@@ -153,9 +153,10 @@ type HostTelemetryRegistry struct {
 	IPField   string `yaml:"ip_field"`
 }
 
-// HostTelemetryScrape contains the Vault registry reference for the host telemetry scrape network.
+// HostTelemetryScrape contains the Vault registry reference and host collector directory for telemetry.
 type HostTelemetryScrape struct {
-	Registry HostTelemetryRegistry `yaml:"registry"`
+	Registry             HostTelemetryRegistry `yaml:"registry"`
+	TextfileCollectorDir string                `yaml:"textfile_collector_dir"`
 }
 
 // VaultTopology represents the Bastion Vault and operator proxy network endpoints declared in workstation-topology.yaml.

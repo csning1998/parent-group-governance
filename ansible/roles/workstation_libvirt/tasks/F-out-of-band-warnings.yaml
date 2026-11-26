@@ -1,0 +1,115 @@
+---
+- name: "F1. Collect changed scopes from network and Vault configuration tasks"
+  ansible.builtin.set_fact:
+    _workstation_libvirt_affected_containers: []
+    _workstation_libvirt_running_affected_containers: []
+    _workstation_libvirt_changed_scopes: >-
+      {{
+        (
+          ['publish-network']
+          if (_workstation_libvirt_publish_net_define.changed | default(false))
+          or (_workstation_libvirt_publish_net_active.changed | default(false))
+          else []
+        )
+        + (
+          ['vault.hcl']
+          if (_workstation_libvirt_vault_hcl.changed | default(false))
+          else []
+        )
+        + (
+          ['haproxy.cfg']
+          if (_workstation_libvirt_haproxy_cfg.changed | default(false))
+          else []
+        )
+        + (
+          ['haproxy-telemetry.cfg']
+          if (_workstation_libvirt_haproxy_telemetry_cfg.changed | default(false))
+          else []
+        )
+        + (
+          _workstation_libvirt_env_files.results | default([])
+          | selectattr('changed', 'defined')
+          | selectattr('changed', 'equalto', true)
+          | map(attribute='item.dest')
+          | map('basename')
+          | list
+        )
+      }}
+
+- name: "F2. Map changed scopes to affected out-of-band containers"
+  ansible.builtin.set_fact:
+    _workstation_libvirt_affected_containers: >-
+      {{
+        (
+          [workstation_libvirt_out_of_band_containers.vault_server]
+          if ('vault.hcl' in _workstation_libvirt_changed_scopes)
+          or ('vault.env' in _workstation_libvirt_changed_scopes)
+          else []
+        )
+        + (
+          [workstation_libvirt_out_of_band_containers.vault_terminator]
+          if ('publish-network' in _workstation_libvirt_changed_scopes)
+          or ('haproxy.cfg' in _workstation_libvirt_changed_scopes)
+          or ('terminator.env' in _workstation_libvirt_changed_scopes)
+          else []
+        )
+        + (
+          [workstation_libvirt_out_of_band_containers.vault_telemetry_terminator]
+          if ('haproxy-telemetry.cfg' in _workstation_libvirt_changed_scopes)
+          or ('terminator.env' in _workstation_libvirt_changed_scopes)
+          else []
+        )
+      }}
+    _workstation_libvirt_service_map: >-
+      {{
+        {
+          workstation_libvirt_out_of_band_containers.vault_server: 'vault-server',
+          workstation_libvirt_out_of_band_containers.vault_terminator: 'vault-terminator',
+          workstation_libvirt_out_of_band_containers.vault_telemetry_terminator: 'vault-telemetry-terminator',
+        }
+      }}
+  when: _workstation_libvirt_changed_scopes | length > 0
+
+# Resolves the operator UID because the rootless Podman socket lives under that user runtime directory.
+- name: "F3. Read the passwd entry of the operator"
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ workstation_libvirt_operator_user }}"
+  when: (_workstation_libvirt_affected_containers | default([])) | length > 0
+
+- name: "F4. List running out-of-band Bastion containers under the operator account"
+  become: true
+  become_user: "{{ workstation_libvirt_operator_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts.getent_passwd[workstation_libvirt_operator_user][1] }}"
+  ansible.builtin.command:
+    argv:
+      - podman
+      - ps
+      - --format
+      - json
+  register: _workstation_libvirt_running_containers
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: (_workstation_libvirt_affected_containers | default([])) | length > 0
+
+- name: "F5. Filter affected containers to those currently running"
+  ansible.builtin.set_fact:
+    _workstation_libvirt_running_affected_containers: >-
+      {%- set running = _workstation_libvirt_running_containers.stdout
+        | default('[]', true)
+        | from_json
+        | default([], true)
+        | map(attribute='Names')
+        | flatten
+        | list -%}
+      {{ _workstation_libvirt_affected_containers | select('in', running) | list }}
+  when:
+    - (_workstation_libvirt_affected_containers | default([])) | length > 0
+    - (_workstation_libvirt_running_containers.rc | default(1) | int) == 0
+
+- name: "F6. Warn when configuration changes affect running out-of-band services"
+  ansible.builtin.debug:
+    msg: "{{ (lookup('ansible.builtin.template', 'out-of-band-warning.txt.j2') | trim).splitlines() }}"
+  when: (_workstation_libvirt_running_affected_containers | default([])) | length > 0

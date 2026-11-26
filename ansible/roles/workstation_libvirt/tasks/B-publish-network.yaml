@@ -7,12 +7,14 @@
     command: define
     name: "{{ workstation_libvirt_publish_network.name }}"
     xml: "{{ lookup('template', 'publish-network.xml.j2') }}"
+  register: _workstation_libvirt_publish_net_define
 
 - name: "B2. Ensure Bastion Vault publish network is active"
   community.libvirt.virt_net:
     uri: qemu:///system
     state: active
     name: "{{ workstation_libvirt_publish_network.name }}"
+  register: _workstation_libvirt_publish_net_active
 
 - name: "B3. Ensure Bastion Vault publish network autostarts"
   community.libvirt.virt_net:

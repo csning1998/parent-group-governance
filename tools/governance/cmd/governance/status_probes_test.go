@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/converge"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/pkg/credentials"
@@ -286,4 +287,58 @@ func loadExampleCredential(t *testing.T, verifyURL string) []credentials.Credent
 		t.Fatal(err)
 	}
 	return creds
+}
+
+func TestInspectVaultAuditArtifacts(t *testing.T) {
+	cases := []struct {
+		name      string
+		createDir bool
+		writeCfg  bool
+		mismatch  bool
+		want      converge.NodeState
+	}{
+		{name: "converged when config and textfile dir match topology", createDir: true, writeCfg: true, want: converge.StateConverged},
+		{name: "drifted when config missing", createDir: true, want: converge.StateDrifted},
+		{name: "drifted when textfile_dir mismatches topology", createDir: true, writeCfg: true, mismatch: true, want: converge.StateDrifted},
+		{name: "drifted when textfile dir absent", writeCfg: true, want: converge.StateDrifted},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := setupVaultAuditArtifactsApp(t, tc.createDir, tc.writeCfg, tc.mismatch)
+			assertVaultAuditArtifactsState(t, a, tc.want)
+		})
+	}
+}
+
+func setupVaultAuditArtifactsApp(t *testing.T, createDir, writeCfg, mismatch bool) *app {
+	t.Helper()
+	home := t.TempDir()
+	textfileDir := filepath.Join(t.TempDir(), "absent-textfile")
+	if createDir {
+		textfileDir = t.TempDir()
+	}
+	if writeCfg {
+		configuredDir := textfileDir
+		if mismatch {
+			configuredDir = t.TempDir()
+		}
+		writePlainFile(t, filepath.Join(home, ".config", "vault-audit", "config.json"), `{"textfile_dir":"`+configuredDir+`"}`)
+	}
+	return &app{
+		home: home,
+		topology: topology.VaultTopology{
+			HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: textfileDir},
+		},
+	}
+}
+
+func assertVaultAuditArtifactsState(t *testing.T, a *app, want converge.NodeState) {
+	t.Helper()
+	state, _, err := a.inspectVaultAuditArtifacts()
+	if err != nil {
+		t.Fatalf("inspectVaultAuditArtifacts: %v", err)
+	}
+	if state != want {
+		t.Errorf("state = %s, want %s", state, want)
+	}
 }

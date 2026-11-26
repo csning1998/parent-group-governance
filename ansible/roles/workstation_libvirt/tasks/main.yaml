@@ -56,3 +56,6 @@
 
 - name: "Section E. Render the Bastion Vault configuration"
   ansible.builtin.include_tasks: E-vault-config.yaml
+
+- name: "Section F. Warn when configuration changes affect running out-of-band services"
+  ansible.builtin.include_tasks: F-out-of-band-warnings.yaml

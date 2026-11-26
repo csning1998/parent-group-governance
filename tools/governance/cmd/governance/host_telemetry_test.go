@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/config"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/topology"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/ui"
 	"gitlab.com/csning1998-lab/parent-group-governance/tools/governance/internal/vault"
@@ -46,10 +47,15 @@ func TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress(t *testi
 		t.Fatalf("GenerateTLS: %v", err)
 	}
 
+	facts, err := config.DetectHostFacts()
+	if err != nil {
+		t.Fatalf("DetectHostFacts: %v", err)
+	}
 	pb, err := a.buildHostTelemetryPlaybook(context.Background())
 	want := map[string]any{
-		"workstation_host_telemetry_scrape_cidr": "192.0.2.0/24",
-		"workstation_host_telemetry_scrape_ip":   "192.0.2.1",
+		"workstation_host_telemetry_operator_user": facts.CurrentUname,
+		"workstation_host_telemetry_scrape_cidr":   "192.0.2.0/24",
+		"workstation_host_telemetry_scrape_ip":     "192.0.2.1",
 	}
 	if err != nil || pb.file != "playbooks/workstation_host_telemetry.yaml" || !maps.Equal(pb.extraVars, want) {
 		t.Errorf("buildHostTelemetryPlaybook = %+v, %v, want the telemetry playbook with %v", pb, err, want)

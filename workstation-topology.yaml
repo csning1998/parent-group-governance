@@ -23,6 +23,8 @@ host_telemetry_scrape:
     ip_field: "host_telemetry_scrape_ip"
   # Host TCP ports exposed to the scrape segment alongside vault_bastion.metrics_port (node_exporter and libvirt_exporter).
   host_exporter_ports: [9100, 9177]
+  # Directory scraped by prometheus-node-exporter --collector.textfile.directory (ADR-144).
+  textfile_collector_dir: "/var/lib/prometheus/node-exporter"
 
 # Access Plane: Local forwarding proxies mediating mTLS client authentication.
 # Identity keys determine the access tier and the owner code per documentation/workstation-topology-specification.md.

@@ -87,7 +87,30 @@
   ansible.builtin.setup:
     filter: ansible_local
 
-- name: "C4. Report the terminator restarts"
+- name: "C4. Grant the operator write access to the textfile collector directory"
+  ansible.posix.acl:
+    path: "{{ workstation_host_telemetry_host_telemetry_scrape.textfile_collector_dir }}"
+    entity: "{{ workstation_host_telemetry_operator_user }}"
+    etype: user
+    permissions: rwx
+    state: present
+  when:
+    - workstation_host_telemetry_operator_user | length > 0
+    - workstation_host_telemetry_host_telemetry_scrape.textfile_collector_dir | default('') | length > 0
+
+- name: "C5. Grant prometheus default read access on newly created textfile metrics"
+  ansible.posix.acl:
+    path: "{{ workstation_host_telemetry_host_telemetry_scrape.textfile_collector_dir }}"
+    entity: prometheus
+    etype: user
+    permissions: r
+    default: true
+    state: present
+  when:
+    - workstation_host_telemetry_operator_user | length > 0
+    - workstation_host_telemetry_host_telemetry_scrape.textfile_collector_dir | default('') | length > 0
+
+- name: "C6. Report the terminator restarts"
   ansible.builtin.debug:
     msg: >-
       Run podman compose restart vault-terminator to load the publish certificate, and run
