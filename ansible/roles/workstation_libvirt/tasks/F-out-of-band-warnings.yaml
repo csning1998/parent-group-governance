@@ -1,6 +1,8 @@
 ---
 - name: "F1. Collect changed scopes from network and Vault configuration tasks"
   ansible.builtin.set_fact:
+    _workstation_libvirt_affected_containers: []
+    _workstation_libvirt_running_affected_containers: []
     _workstation_libvirt_changed_scopes: >-
       {{
         (

@@ -21,6 +21,7 @@ type libvirtWarningTask struct {
 	VirtNet      map[string]any    `yaml:"community.libvirt.virt_net"`
 	Template     map[string]any    `yaml:"ansible.builtin.template"`
 	Copy         map[string]any    `yaml:"ansible.builtin.copy"`
+	SetFact      map[string]any    `yaml:"ansible.builtin.set_fact"`
 	Command      any               `yaml:"ansible.builtin.command"`
 	Debug        map[string]any    `yaml:"ansible.builtin.debug"`
 	Register     string            `yaml:"register"`
@@ -183,6 +184,7 @@ func assertLibvirtOutOfBandWarningFile(t *testing.T, path string) {
 		return
 	}
 	tasks := mustReadYAML[[]libvirtWarningTask](t, path)
+	assertWarningFactResetTask(t, filepath.Base(path), tasks)
 	sawPodmanProbe := false
 	sawDebugWarn := false
 	for _, task := range tasks {
@@ -240,5 +242,34 @@ func assertWarningDebugTask(t *testing.T, path string, task libvirtWarningTask) 
 	msg, _ := task.Debug["msg"].(string)
 	if strings.TrimSpace(msg) == "" {
 		t.Errorf("%s task %q must define non-empty debug.msg", base, task.Name)
+	}
+}
+
+func assertWarningFactResetTask(t *testing.T, base string, tasks []libvirtWarningTask) {
+	t.Helper()
+	for _, task := range tasks {
+		if _, ok := task.SetFact["_workstation_libvirt_changed_scopes"]; !ok {
+			continue
+		}
+		if task.When != nil {
+			t.Errorf("%s task %q must reset facts unconditionally", base, task.Name)
+		}
+		assertEmptySliceFact(t, base, task, "_workstation_libvirt_affected_containers")
+		assertEmptySliceFact(t, base, task, "_workstation_libvirt_running_affected_containers")
+		return
+	}
+	t.Errorf("%s missing set_fact task for _workstation_libvirt_changed_scopes", base)
+}
+
+func assertEmptySliceFact(t *testing.T, base string, task libvirtWarningTask, key string) {
+	t.Helper()
+	raw, exists := task.SetFact[key]
+	if !exists {
+		t.Errorf("%s task %q must reset %s to []", base, task.Name, key)
+		return
+	}
+	items, ok := raw.([]any)
+	if !ok || len(items) != 0 {
+		t.Errorf("%s task %q %s = %#v, want empty list []", base, task.Name, key, raw)
 	}
 }
