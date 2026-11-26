@@ -1,0 +1,4 @@
+---
+host_log_rendezvous: "{{ workstation_topology.host_log_rendezvous }}"
+
+workstation_host_telemetry_host_log_rendezvous: "{{ host_log_rendezvous }}"

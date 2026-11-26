@@ -23,12 +23,37 @@ argument_specs:
         type: dict
         required: true
         description: Telemetry scrape topology mapped from group_vars/all/host_telemetry_scrape.yaml.
+      workstation_host_telemetry_host_log_rendezvous:
+        type: dict
+        required: true
+        description: Log rendezvous topology mapped from group_vars/all/host_log_rendezvous.yaml.
 
       # Optional
       workstation_host_telemetry_operator_user:
         type: str
         required: false
-        description: Unprivileged operator account granted write ACL on textfile_collector_dir.
+        description: Unprivileged operator account granted textfile collector ACL and owning Grafana Alloy directories.
+      workstation_host_telemetry_repository:
+        type: str
+        required: false
+        description: Repository root holding vault/alloy configuration and pki-root trust anchor.
+      workstation_host_telemetry_log_rendezvous_cidr:
+        type: str
+        required: false
+        description: Segment 250 IPv4 CIDR read from the Vault registry by the CLI.
+      workstation_host_telemetry_log_rendezvous_ip:
+        type: str
+        required: false
+        description: Destination host-log-rendezvous IPv4 address read from the Vault registry.
+      workstation_host_telemetry_log_rendezvous_server_names:
+        type: list
+        elements: str
+        required: false
+        description: Expected TLS server names of the segment 250 rendezvous endpoint.
+      workstation_host_telemetry_pki_root_ca_pem:
+        type: str
+        required: false
+        description: PEM-encoded pki-root CA certificate trusted by the Grafana Alloy log shipper.
       workstation_host_telemetry_scrape_ports:
         type: list
         elements: int

@@ -1,0 +1,29 @@
+// Rendered by Ansible role workstation_host_telemetry (ADR-144).
+// Ships Bastion Vault server operational logs only; audit logs stay on the host.
+// Declared rendezvous server names: {{ workstation_host_telemetry_log_rendezvous_server_names | join(', ') }}
+
+local.file_match "vault_server_logs" {
+  path_targets = [{
+    __path__ = "/opt/vault/logs/vault.log",
+    job      = "bastion-vault",
+    service  = "vault-server",
+  }]
+}
+
+loki.source.file "vault_server_logs" {
+  targets    = local.file_match.vault_server_logs.targets
+  forward_to = [loki.write.rendezvous.receiver]
+}
+
+loki.write "rendezvous" {
+  endpoint {
+    url = "https://{{ workstation_host_telemetry_log_rendezvous_ip }}:{{ workstation_host_telemetry_host_log_rendezvous.loki_push_port }}{{ workstation_host_telemetry_host_log_rendezvous.loki_push_path }}"
+    tls_config {
+      ca_file     = "/etc/alloy/pki-root-ca.pem"
+      server_name = "{{ workstation_host_telemetry_log_rendezvous_server_names[0] }}"
+    }
+  }
+  external_labels = {
+    source = "workstation-bastion",
+  }
+}

@@ -1,0 +1,6 @@
+<network>
+  <name>{{ workstation_host_telemetry_host_log_rendezvous.network_name }}</name>
+  <forward mode="route"/>
+  <bridge stp="on" delay="0"/>
+  <ip address="{{ _workstation_host_telemetry_log_rendezvous_host_ip }}" prefix="{{ workstation_host_telemetry_log_rendezvous_cidr.split('/')[1] }}"/>
+</network>
