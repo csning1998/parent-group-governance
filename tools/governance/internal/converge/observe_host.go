@@ -32,6 +32,8 @@ const (
 	NodeHostVaultAudit = "host.vault_audit"
 	// NodeHostTelemetry inspects publish SAN coverage, host telemetry, and terminators.
 	NodeHostTelemetry = "host.telemetry"
+	// NodeHostVaultLogShipper inspects Bastion Vault server log_file separation and Grafana Alloy shipper config.
+	NodeHostVaultLogShipper = "host.vault_log_shipper"
 )
 
 var (
@@ -63,23 +65,25 @@ type ContainerState struct {
 
 // HostObserverDeps injects filesystem roots, environment probes, and convergence actions for host nodes.
 type HostObserverDeps struct {
-	ProjectRoot       string
-	Home              string
-	LookPath          func(file string) (string, error)
-	InspectContainers func(ctx context.Context) ([]ContainerState, error)
-	InspectSELinux    func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
-	InspectLibvirt    func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
-	InspectVaultProxy func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
-	InspectVaultAudit func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
-	InspectTelemetry  func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
-	BootstrapEnv      func(ctx context.Context, req ConvergeContext) error
-	ApplySELinux      func(ctx context.Context, req ConvergeContext) error
-	EnsureTLSCA       func(ctx context.Context, req ConvergeContext) error
-	ApplyLibvirt      func(ctx context.Context, req ConvergeContext) error
-	ApplyVaultProxy   func(ctx context.Context, req ConvergeContext) error
-	StartContainers   func(ctx context.Context, req ConvergeContext) error
-	ApplyVaultAudit   func(ctx context.Context, req ConvergeContext) error
-	ApplyTelemetry    func(ctx context.Context, req ConvergeContext) error
+	ProjectRoot            string
+	Home                   string
+	LookPath               func(file string) (string, error)
+	InspectContainers      func(ctx context.Context) ([]ContainerState, error)
+	InspectSELinux         func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
+	InspectLibvirt         func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
+	InspectVaultProxy      func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
+	InspectVaultAudit      func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
+	InspectTelemetry       func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
+	InspectVaultLogShipper func(ctx context.Context, mode ObserveMode) (NodeState, string, error)
+	BootstrapEnv           func(ctx context.Context, req ConvergeContext) error
+	ApplySELinux           func(ctx context.Context, req ConvergeContext) error
+	EnsureTLSCA            func(ctx context.Context, req ConvergeContext) error
+	ApplyLibvirt           func(ctx context.Context, req ConvergeContext) error
+	ApplyVaultProxy        func(ctx context.Context, req ConvergeContext) error
+	StartContainers        func(ctx context.Context, req ConvergeContext) error
+	ApplyVaultAudit        func(ctx context.Context, req ConvergeContext) error
+	ApplyTelemetry         func(ctx context.Context, req ConvergeContext) error
+	ApplyVaultLogShipper   func(ctx context.Context, req ConvergeContext) error
 }
 
 // BuildHostNodes constructs the DAG nodes covering Stage 0, Stage 1 container.core, and Stage 4 host observability.
@@ -126,6 +130,7 @@ func BuildHostNodes(deps HostObserverDeps) []Node {
 		},
 		buildDelegatedHostNode(NodeHostVaultAudit, StageBastionObservability, []string{"terraform.foundation_vault_bastion"}, false, deps.InspectVaultAudit, deps.ApplyVaultAudit),
 		buildDelegatedHostNode(NodeHostTelemetry, StageBastionObservability, []string{"terraform.foundation_vault_bastion"}, true, deps.InspectTelemetry, deps.ApplyTelemetry),
+		buildDelegatedHostNode(NodeHostVaultLogShipper, StageBastionObservability, []string{"terraform.foundation_vault_bastion"}, true, deps.InspectVaultLogShipper, deps.ApplyVaultLogShipper),
 	}
 }
 

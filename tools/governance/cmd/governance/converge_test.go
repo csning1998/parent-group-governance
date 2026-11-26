@@ -341,8 +341,8 @@ func TestWorkstationGraphWiringAndConvergeHelpers(t *testing.T) {
 
 	f.a.stdout, f.a.stderr = io.Discard, io.Discard
 	graph, err := f.a.resolveWorkstationGraph()
-	if err != nil || len(graph.Order()) != 27 {
-		t.Fatalf("resolveWorkstationGraph = (%d nodes, %v), want 27 nodes", len(graph.Order()), err)
+	if err != nil || len(graph.Order()) != 28 {
+		t.Fatalf("resolveWorkstationGraph = (%d nodes, %v), want 28 nodes", len(graph.Order()), err)
 	}
 	if got := stageLabel(converge.Stage(99)); got != "Stage 99" {
 		t.Errorf("stageLabel(99) = %q, want Stage 99", got)
@@ -431,6 +431,7 @@ func TestWorkstationDepsClosuresAndConvergeBranches(t *testing.T) {
 		deps.Host.ApplyVaultProxy,
 		deps.Host.ApplyVaultAudit,
 		deps.Host.ApplyTelemetry,
+		deps.Host.ApplyVaultLogShipper,
 		deps.Vault.InitVault,
 		deps.Vault.UnsealVault,
 		deps.Vault.EnableKVSecret,

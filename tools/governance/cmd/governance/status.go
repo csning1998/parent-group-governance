@@ -180,14 +180,15 @@ func stageLabel(stage converge.Stage) string {
 func (a *app) buildWorkstationDeps() converge.WorkstationDeps {
 	return converge.WorkstationDeps{
 		Host: converge.HostObserverDeps{
-			ProjectRoot:       a.root,
-			Home:              a.home,
-			InspectContainers: inspectPodmanContainers,
-			InspectSELinux:    a.inspectHostSELinux,
-			InspectLibvirt:    a.inspectHostLibvirt,
-			InspectVaultProxy: a.inspectHostVaultProxy,
-			InspectVaultAudit: a.inspectHostVaultAudit,
-			InspectTelemetry:  a.inspectHostTelemetry,
+			ProjectRoot:            a.root,
+			Home:                   a.home,
+			InspectContainers:      inspectPodmanContainers,
+			InspectSELinux:         a.inspectHostSELinux,
+			InspectLibvirt:         a.inspectHostLibvirt,
+			InspectVaultProxy:      a.inspectHostVaultProxy,
+			InspectVaultAudit:      a.inspectHostVaultAudit,
+			InspectTelemetry:       a.inspectHostTelemetry,
+			InspectVaultLogShipper: a.inspectHostVaultLogShipper,
 			BootstrapEnv: func(context.Context, converge.ConvergeContext) error {
 				env, err := config.BootstrapEnv(a.root, a.out)
 				if err == nil {
@@ -195,13 +196,14 @@ func (a *app) buildWorkstationDeps() converge.WorkstationDeps {
 				}
 				return err
 			},
-			ApplySELinux:    func(ctx context.Context, req converge.ConvergeContext) error { return a.runSELinuxStep(ctx, req) },
-			EnsureTLSCA:     func(ctx context.Context, _ converge.ConvergeContext) error { return a.ensureLocalCA(ctx) },
-			ApplyLibvirt:    func(ctx context.Context, req converge.ConvergeContext) error { return a.runLibvirtStep(ctx, req) },
-			ApplyVaultProxy: func(ctx context.Context, req converge.ConvergeContext) error { return a.runVaultProxyStep(ctx, req) },
-			StartContainers: a.startCoreContainers,
-			ApplyVaultAudit: func(ctx context.Context, _ converge.ConvergeContext) error { return a.runHostVaultAuditPlaybook(ctx) },
-			ApplyTelemetry:  func(ctx context.Context, req converge.ConvergeContext) error { return a.runTelemetrySteps(ctx, req) },
+			ApplySELinux:         func(ctx context.Context, req converge.ConvergeContext) error { return a.runSELinuxStep(ctx, req) },
+			EnsureTLSCA:          func(ctx context.Context, _ converge.ConvergeContext) error { return a.ensureLocalCA(ctx) },
+			ApplyLibvirt:         func(ctx context.Context, req converge.ConvergeContext) error { return a.runLibvirtStep(ctx, req) },
+			ApplyVaultProxy:      func(ctx context.Context, req converge.ConvergeContext) error { return a.runVaultProxyStep(ctx, req) },
+			StartContainers:      a.startCoreContainers,
+			ApplyVaultAudit:      func(ctx context.Context, _ converge.ConvergeContext) error { return a.runHostVaultAuditPlaybook(ctx) },
+			ApplyTelemetry:       func(ctx context.Context, req converge.ConvergeContext) error { return a.runTelemetrySteps(ctx, req) },
+			ApplyVaultLogShipper: func(ctx context.Context, req converge.ConvergeContext) error { return a.runTelemetrySteps(ctx, req) },
 		},
 		Vault: converge.VaultObserverDeps{
 			ProjectRoot:     a.root,
@@ -387,6 +389,30 @@ func (a *app) inspectHostTelemetry(_ context.Context, _ converge.ObserveMode) (c
 		return converge.StateConverged, "host telemetry fact and haproxy config present", nil
 	default:
 		return converge.StateDrifted, "host telemetry artifacts partially present", nil
+	}
+}
+
+func (a *app) inspectHostVaultLogShipper(_ context.Context, _ converge.ObserveMode) (converge.NodeState, string, error) {
+	present := 0
+	for _, p := range []string{
+		filepath.Join(a.root, "vault", "logs"),
+		filepath.Join(a.root, "vault", "alloy", "config.alloy"),
+		filepath.Join(a.root, "vault", "alloy", "pki-root-ca.pem"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			present++
+		}
+	}
+	if hclRaw, err := os.ReadFile(filepath.Join(a.root, "vault", "vault.hcl")); err == nil && strings.Contains(string(hclRaw), "log_file") {
+		present++
+	}
+	switch present {
+	case 0:
+		return converge.StateAbsent, "vault log shipper artifacts absent", nil
+	case 4:
+		return converge.StateConverged, "vault log_file and Alloy shipper configured", nil
+	default:
+		return converge.StateDrifted, fmt.Sprintf("%d/4 vault log shipper prerequisites present", present), nil
 	}
 }
 

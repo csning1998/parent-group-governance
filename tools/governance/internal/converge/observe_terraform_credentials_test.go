@@ -408,8 +408,8 @@ func TestBuildWorkstationGraphTopology(t *testing.T) {
 		t.Fatalf("BuildWorkstationGraph unexpected error: %v", err)
 	}
 	order := graph.Order()
-	if len(order) != 27 {
-		t.Fatalf("graph node count = %d, want 27", len(order))
+	if len(order) != 28 {
+		t.Fatalf("graph node count = %d, want 28", len(order))
 	}
 
 	sub, err := graph.Subgraph(NodeTerraformFoundationVaultBastion)
@@ -459,7 +459,7 @@ func assertManualTokensBlocksDownstream(t *testing.T) {
 	if byID[NodeVaultNetworkAllocation].State != StateConverged {
 		t.Errorf("vault.network_allocation = %q, want CONVERGED", byID[NodeVaultNetworkAllocation].State)
 	}
-	for _, id := range []string{NodeVaultManualTokens, NodeTerraformFoundationVaultBastion, NodeHostTelemetry, NodeVaultRootHygiene} {
+	for _, id := range []string{NodeVaultManualTokens, NodeTerraformFoundationVaultBastion, NodeHostTelemetry, NodeHostVaultLogShipper, NodeVaultRootHygiene} {
 		if byID[id].State != StateBlocked {
 			t.Errorf("%s State = %q, want BLOCKED", id, byID[id].State)
 		}
@@ -475,11 +475,12 @@ func newFullPassWorkstationDeps(root string) WorkstationDeps {
 			InspectContainers: func(context.Context) ([]ContainerState, error) {
 				return buildContainerStates(coreContainers, true), nil
 			},
-			InspectSELinux:    convergedHostInspect,
-			InspectLibvirt:    convergedHostInspect,
-			InspectVaultProxy: convergedHostInspect,
-			InspectVaultAudit: convergedHostInspect,
-			InspectTelemetry:  convergedHostInspect,
+			InspectSELinux:         convergedHostInspect,
+			InspectLibvirt:         convergedHostInspect,
+			InspectVaultProxy:      convergedHostInspect,
+			InspectVaultAudit:      convergedHostInspect,
+			InspectTelemetry:       convergedHostInspect,
+			InspectVaultLogShipper: convergedHostInspect,
 		},
 		Vault: VaultObserverDeps{
 			ProjectRoot:     root,

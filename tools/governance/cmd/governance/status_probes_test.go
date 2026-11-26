@@ -342,3 +342,32 @@ func assertVaultAuditArtifactsState(t *testing.T, a *app, want converge.NodeStat
 		t.Errorf("state = %s, want %s", state, want)
 	}
 }
+
+func TestInspectHostVaultLogShipper(t *testing.T) {
+	t.Run("absent when no log shipper artifacts exist", func(t *testing.T) {
+		a := &app{root: t.TempDir()}
+		assertProbeState(t, a.inspectHostVaultLogShipper, converge.StateAbsent)
+	})
+
+	t.Run("drifted when artifacts partial or vault.hcl lacks log_file", func(t *testing.T) {
+		root := t.TempDir()
+		a := &app{root: root}
+		if err := os.MkdirAll(filepath.Join(root, "vault", "logs"), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		writePlainFile(t, filepath.Join(root, "vault", "vault.hcl"), "ui = true\n")
+		assertProbeState(t, a.inspectHostVaultLogShipper, converge.StateDrifted)
+	})
+
+	t.Run("converged when logs dir, log_file, alloy config, and pki root CA exist", func(t *testing.T) {
+		root := t.TempDir()
+		a := &app{root: root}
+		if err := os.MkdirAll(filepath.Join(root, "vault", "logs"), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		writePlainFile(t, filepath.Join(root, "vault", "vault.hcl"), "log_file = \"/opt/vault/logs/vault.log\"\n")
+		writePlainFile(t, filepath.Join(root, "vault", "alloy", "config.alloy"), "loki.write \"rendezvous\" {}\n")
+		writePlainFile(t, filepath.Join(root, "vault", "alloy", "pki-root-ca.pem"), "pem\n")
+		assertProbeState(t, a.inspectHostVaultLogShipper, converge.StateConverged)
+	})
+}
