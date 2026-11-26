@@ -204,3 +204,21 @@ func TestResolveStateBackendToken(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadParsesHostTelemetryTextfileCollectorDir(t *testing.T) {
+	path := writeTopology(t, `vault_bastion:
+  loopback_ip: "127.0.0.1"
+  publish_ip: "172.16.0.1"
+  api_port: 8200
+host_telemetry_scrape:
+  textfile_collector_dir: "/var/lib/prometheus/node-exporter"
+`)
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := "/var/lib/prometheus/node-exporter"
+	if got.HostTelemetryScrape.TextfileCollectorDir != want {
+		t.Errorf("TextfileCollectorDir = %q, want %q", got.HostTelemetryScrape.TextfileCollectorDir, want)
+	}
+}

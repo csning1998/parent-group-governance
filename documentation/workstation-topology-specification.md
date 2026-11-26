@@ -75,6 +75,7 @@ The `vault_bastion` map configures the network listener endpoints bound by the l
     - `network_name` (`string`): Name of the routed libvirt network which contains the host address on the segment (`host-telemetry-scrape`).
     - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, and `ip_field` of the segment and the host address. `foundation-vault-bastion` publishes both at `registry/platform/network/allocation`.
     - `host_exporter_ports` (`list(number)`): Ports of node_exporter and the libvirt exporter on the host. The scrape ports are these ports and `vault_bastion.metrics_port`.
+    - `textfile_collector_dir` (`string`): Absolute host path scraped by `prometheus-node-exporter --collector.textfile.directory` where `workstation_vault_audit` writes alert summary metrics (ADR-144).
 
 ### Item B. Access Plane: `operator_vault_proxy`
 
@@ -251,6 +252,7 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `code_reviewer_variables.bot_tokens`           | Terraform foundation-vault-bastion | `terraform/layers/foundation-vault-bastion/access-operator-proxy.tf` | Grants the administrator identity read access on each bot token path. |
 | `identities.*.code_reviewer_variable_projects` | Go CLI topology package            | `tools/governance/internal/topology/topology.go`                     | Lists the projects receiving the code reviewer variables.             |
 | `host_telemetry_scrape.registry`               | Go CLI operations                  | `tools/governance/cmd/governance/host_playbooks.go`                  | Reads the segment injected by `apply-host-telemetry`.                 |
-| `host_telemetry_scrape`                        | Ansible workstation_host_telemetry | `ansible/roles/workstation_host_telemetry/tasks/main.yaml`           | Declares the network and the firewalld policy of the segment.         |
+| `host_telemetry_scrape`                        | Ansible workstation_host_telemetry | `ansible/roles/workstation_host_telemetry/tasks/main.yaml`           | Declares the network, firewalld policy, and collector ACL.            |
+| `host_telemetry_scrape.textfile_collector_dir` | Ansible workstation_vault_audit    | `ansible/roles/workstation_vault_audit/templates/config.json.j2`     | Configures the output directory for Prometheus textfile `.prom` files.|
 
 ---
