@@ -439,3 +439,42 @@ def test_main_writes_prometheus_textfile_metrics_atomically(
         f'vault_audit_finding_last_seen_timestamp_seconds{{category="break_glass_root_use"}} {ts1}'
         in body2
     )
+
+
+def test_main_persists_state_before_textfile_write_failure(
+    monkeypatch, tmp_path, captured_alerts
+):
+    log = tmp_path / "audit.log"
+    write_lines(
+        log,
+        [json.dumps(build_response("secret/data/x", policies=["root"]))],
+    )
+    textfile_dir = tmp_path / "textfile"
+    textfile_dir.mkdir()
+    state_file = tmp_path / "state" / "check-state.json"
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                **CONFIG,
+                "log_path": str(log),
+                "state_file": str(state_file),
+                "textfile_dir": str(textfile_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fail_write(*_args, **_kwargs):
+        raise PermissionError("textfile dir not writable")
+
+    monkeypatch.setattr(check, "write_textfile_metrics", fail_write)
+
+    with pytest.raises(PermissionError, match="textfile dir not writable"):
+        run_main(monkeypatch, config_path)
+
+    assert len(captured_alerts) == 1
+    assert state_file.exists()
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    assert state["offset"] == log.stat().st_size
+    assert state["counts"] == {"root_token_use": 1}

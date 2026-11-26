@@ -253,13 +253,13 @@ def main():
     state["counts"] = counts
     state["last_seen"] = last_seen
 
-    textfile_dir = config.get("textfile_dir")
-    if textfile_dir:
-        write_textfile_metrics(textfile_dir, counts, last_seen, run_timestamp)
-
     os.makedirs(os.path.dirname(state_path), exist_ok=True)
     with open(state_path, "w", encoding="utf-8") as handle:
         json.dump(state, handle)
+
+    textfile_dir = config.get("textfile_dir")
+    if textfile_dir:
+        write_textfile_metrics(textfile_dir, counts, last_seen, run_timestamp)
 
 
 if __name__ == "__main__":
