@@ -7,6 +7,9 @@
       - workstation_vault_audit_home != "/root"
       - workstation_vault_audit_repository is string
       - workstation_vault_audit_repository is abs
+      - workstation_vault_audit_host_telemetry_scrape is mapping
+      - workstation_vault_audit_textfile_dir is string
+      - workstation_vault_audit_textfile_dir is abs
     fail_msg: >-
       workstation_vault_audit_home must be the operator home directory, and workstation_vault_audit_repository must be
       the absolute path of the repository checkout. The CLI injects both extra vars.

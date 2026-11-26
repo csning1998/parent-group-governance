@@ -1,0 +1,81 @@
+---
+argument_specs:
+  main:
+    short_description: Deploy the rootless Bastion Vault audit log rotation and check units.
+    description: >-
+      Installs the Vault audit check script, renders logrotate and JSON configuration, and manages the
+      systemd user timer that emits auth alerts and Prometheus textfile metrics.
+    options:
+      # Required
+      workstation_vault_audit_home:
+        type: str
+        required: true
+        description: Operator home directory receiving user config, libexec, state, and systemd units.
+      workstation_vault_audit_repository:
+        type: str
+        required: true
+        description: Absolute path of the repository checkout hosting vault/audit logs.
+      workstation_vault_audit_host_telemetry_scrape:
+        type: dict
+        required: true
+        description: Host telemetry scrape configuration projected from group_vars/all/host_telemetry_scrape.yaml.
+
+      # Optional
+      workstation_vault_audit_dir:
+        type: str
+        required: false
+        description: Directory holding the Bastion Vault audit log files.
+      workstation_vault_audit_log:
+        type: str
+        required: false
+        description: Absolute path of the active Bastion Vault audit log file.
+      workstation_vault_audit_container:
+        type: str
+        required: false
+        description: Rootless container name receiving SIGHUP after log rotation.
+      workstation_vault_audit_libexec_dir:
+        type: str
+        required: false
+        description: Operator directory installing the Python audit check script.
+      workstation_vault_audit_config_dir:
+        type: str
+        required: false
+        description: Operator directory storing config.json and logrotate.conf.
+      workstation_vault_audit_state_dir:
+        type: str
+        required: false
+        description: Operator directory storing audit check offset, counts, and logrotate state.
+      workstation_vault_audit_unit_dir:
+        type: str
+        required: false
+        description: Operator systemd user unit directory.
+      workstation_vault_audit_textfile_dir:
+        type: str
+        required: false
+        description: Directory where Prometheus textfile metrics are atomically written.
+      workstation_vault_audit_check_interval:
+        type: str
+        required: false
+        description: Systemd timer interval between audit log scans.
+      workstation_vault_audit_rotate_size:
+        type: str
+        required: false
+        description: Maximum log size before logrotate rotates audit.log.
+      workstation_vault_audit_rotate_keep:
+        type: int
+        required: false
+        description: Number of rotated audit log files retained.
+      workstation_vault_audit_transit_mount:
+        type: str
+        required: false
+        description: Transit mount monitored for unexpected key operations or failed auto-unseal calls.
+      workstation_vault_audit_transit_source_cidrs:
+        type: list
+        elements: str
+        required: false
+        description: Allowed source CIDRs for transit auto-unseal requests.
+      workstation_vault_audit_kv_write_alert_paths:
+        type: list
+        elements: dict
+        required: false
+        description: Protected KV v2 mounts and paths whose mutation emits an audit alert.
