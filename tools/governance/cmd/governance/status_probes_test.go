@@ -290,79 +290,55 @@ func loadExampleCredential(t *testing.T, verifyURL string) []credentials.Credent
 }
 
 func TestInspectVaultAuditArtifacts(t *testing.T) {
-	t.Run("converged when config and textfile dir match topology", func(t *testing.T) {
-		home := t.TempDir()
-		textfileDir := t.TempDir()
-		writePlainFile(t, filepath.Join(home, ".config", "vault-audit", "config.json"), `{"textfile_dir":"`+textfileDir+`"}`)
-		a := &app{
-			home: home,
-			topology: topology.VaultTopology{
-				HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: textfileDir},
-			},
-		}
-		state, _, err := a.inspectVaultAuditArtifacts()
-		if err != nil {
-			t.Fatalf("inspectVaultAuditArtifacts: %v", err)
-		}
-		if state != converge.StateConverged {
-			t.Errorf("state = %s, want %s", state, converge.StateConverged)
-		}
-	})
+	cases := []struct {
+		name      string
+		createDir bool
+		writeCfg  bool
+		mismatch  bool
+		want      converge.NodeState
+	}{
+		{name: "converged when config and textfile dir match topology", createDir: true, writeCfg: true, want: converge.StateConverged},
+		{name: "drifted when config missing", createDir: true, want: converge.StateDrifted},
+		{name: "drifted when textfile_dir mismatches topology", createDir: true, writeCfg: true, mismatch: true, want: converge.StateDrifted},
+		{name: "drifted when textfile dir absent", writeCfg: true, want: converge.StateDrifted},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := setupVaultAuditArtifactsApp(t, tc.createDir, tc.writeCfg, tc.mismatch)
+			assertVaultAuditArtifactsState(t, a, tc.want)
+		})
+	}
+}
 
-	t.Run("drifted when config missing", func(t *testing.T) {
-		home := t.TempDir()
-		textfileDir := t.TempDir()
-		a := &app{
-			home: home,
-			topology: topology.VaultTopology{
-				HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: textfileDir},
-			},
+func setupVaultAuditArtifactsApp(t *testing.T, createDir, writeCfg, mismatch bool) *app {
+	t.Helper()
+	home := t.TempDir()
+	textfileDir := filepath.Join(t.TempDir(), "absent-textfile")
+	if createDir {
+		textfileDir = t.TempDir()
+	}
+	if writeCfg {
+		configuredDir := textfileDir
+		if mismatch {
+			configuredDir = t.TempDir()
 		}
-		state, _, err := a.inspectVaultAuditArtifacts()
-		if err != nil {
-			t.Fatalf("inspectVaultAuditArtifacts: %v", err)
-		}
-		if state != converge.StateDrifted {
-			t.Errorf("state = %s, want %s", state, converge.StateDrifted)
-		}
-	})
+		writePlainFile(t, filepath.Join(home, ".config", "vault-audit", "config.json"), `{"textfile_dir":"`+configuredDir+`"}`)
+	}
+	return &app{
+		home: home,
+		topology: topology.VaultTopology{
+			HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: textfileDir},
+		},
+	}
+}
 
-	t.Run("drifted when textfile_dir mismatches topology", func(t *testing.T) {
-		home := t.TempDir()
-		textfileDir := t.TempDir()
-		otherDir := t.TempDir()
-		writePlainFile(t, filepath.Join(home, ".config", "vault-audit", "config.json"), `{"textfile_dir":"`+otherDir+`"}`)
-		a := &app{
-			home: home,
-			topology: topology.VaultTopology{
-				HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: textfileDir},
-			},
-		}
-		state, _, err := a.inspectVaultAuditArtifacts()
-		if err != nil {
-			t.Fatalf("inspectVaultAuditArtifacts: %v", err)
-		}
-		if state != converge.StateDrifted {
-			t.Errorf("state = %s, want %s", state, converge.StateDrifted)
-		}
-	})
-
-	t.Run("drifted when textfile dir absent", func(t *testing.T) {
-		home := t.TempDir()
-		missingDir := filepath.Join(t.TempDir(), "absent-textfile")
-		writePlainFile(t, filepath.Join(home, ".config", "vault-audit", "config.json"), `{"textfile_dir":"`+missingDir+`"}`)
-		a := &app{
-			home: home,
-			topology: topology.VaultTopology{
-				HostTelemetryScrape: topology.HostTelemetryScrape{TextfileCollectorDir: missingDir},
-			},
-		}
-		state, _, err := a.inspectVaultAuditArtifacts()
-		if err != nil {
-			t.Fatalf("inspectVaultAuditArtifacts: %v", err)
-		}
-		if state != converge.StateDrifted {
-			t.Errorf("state = %s, want %s", state, converge.StateDrifted)
-		}
-	})
+func assertVaultAuditArtifactsState(t *testing.T, a *app, want converge.NodeState) {
+	t.Helper()
+	state, _, err := a.inspectVaultAuditArtifacts()
+	if err != nil {
+		t.Fatalf("inspectVaultAuditArtifacts: %v", err)
+	}
+	if state != want {
+		t.Errorf("state = %s, want %s", state, want)
+	}
 }
