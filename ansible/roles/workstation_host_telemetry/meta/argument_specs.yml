@@ -25,6 +25,10 @@ argument_specs:
         description: Telemetry scrape topology mapped from group_vars/all/host_telemetry_scrape.yaml.
 
       # Optional
+      workstation_host_telemetry_operator_user:
+        type: str
+        required: false
+        description: Unprivileged operator account granted write ACL on textfile_collector_dir.
       workstation_host_telemetry_scrape_ports:
         type: list
         elements: int
