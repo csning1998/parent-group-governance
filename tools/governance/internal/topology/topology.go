@@ -159,11 +159,30 @@ type HostTelemetryScrape struct {
 	TextfileCollectorDir string                `yaml:"textfile_collector_dir"`
 }
 
+// HostLogRendezvousRegistry specifies the Vault KV v2 coordinates of the segment 250 log rendezvous.
+type HostLogRendezvousRegistry struct {
+	Mount            string `yaml:"vault_kv_mount"`
+	Path             string `yaml:"vault_kv_path"`
+	CIDRField        string `yaml:"cidr_field"`
+	IPField          string `yaml:"ip_field"`
+	ServerNamesField string `yaml:"server_names_field"`
+}
+
+// HostLogRendezvous configures Bastion Vault server log shipping over segment 250 to Loki.
+type HostLogRendezvous struct {
+	NetworkName   string                    `yaml:"network_name"`
+	LokiPushPort  int                       `yaml:"loki_push_port"`
+	LokiPushPath  string                    `yaml:"loki_push_path"`
+	PKIRootCAPath string                    `yaml:"pki_root_ca_path"`
+	Registry      HostLogRendezvousRegistry `yaml:"registry"`
+}
+
 // VaultTopology represents the Bastion Vault and operator proxy network endpoints declared in workstation-topology.yaml.
 type VaultTopology struct {
 	BastionVault        BastionVault        `yaml:"vault_bastion"`
 	OperatorVaultProxy  OperatorVaultProxy  `yaml:"operator_vault_proxy"`
 	HostTelemetryScrape HostTelemetryScrape `yaml:"host_telemetry_scrape"`
+	HostLogRendezvous   HostLogRendezvous   `yaml:"host_log_rendezvous"`
 }
 
 // ResolveProxyEndpoint resolves the proxy connection parameters of the single identity with access role.

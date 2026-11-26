@@ -222,3 +222,42 @@ host_telemetry_scrape:
 		t.Errorf("TextfileCollectorDir = %q, want %q", got.HostTelemetryScrape.TextfileCollectorDir, want)
 	}
 }
+
+func TestLoadParsesHostLogRendezvous(t *testing.T) {
+	path := writeTopology(t, `vault_bastion:
+  loopback_ip: "127.0.0.1"
+  publish_ip: "172.16.0.1"
+  api_port: 8200
+host_log_rendezvous:
+  network_name: "host-log-rendezvous"
+  loki_push_port: 443
+  loki_push_path: "/loki/api/v1/push"
+  pki_root_ca_path: "pki-root/cert/ca"
+  registry:
+    vault_kv_mount: "registry"
+    vault_kv_path: "platform/network/allocation"
+    cidr_field: "host_log_rendezvous_cidr"
+    ip_field: "host_log_rendezvous_ip"
+    server_names_field: "host_log_rendezvous_server_names"
+`)
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := HostLogRendezvous{
+		NetworkName:   "host-log-rendezvous",
+		LokiPushPort:  443,
+		LokiPushPath:  "/loki/api/v1/push",
+		PKIRootCAPath: "pki-root/cert/ca",
+		Registry: HostLogRendezvousRegistry{
+			Mount:            "registry",
+			Path:             "platform/network/allocation",
+			CIDRField:        "host_log_rendezvous_cidr",
+			IPField:          "host_log_rendezvous_ip",
+			ServerNamesField: "host_log_rendezvous_server_names",
+		},
+	}
+	if got.HostLogRendezvous != want {
+		t.Errorf("HostLogRendezvous = %+v, want %+v", got.HostLogRendezvous, want)
+	}
+}

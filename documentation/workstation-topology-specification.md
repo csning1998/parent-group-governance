@@ -77,6 +77,17 @@ The `vault_bastion` map configures the network listener endpoints bound by the l
     - `host_exporter_ports` (`list(number)`): Ports of node_exporter and the libvirt exporter on the host. The scrape ports are these ports and `vault_bastion.metrics_port`.
     - `textfile_collector_dir` (`string`): Absolute host path scraped by `prometheus-node-exporter --collector.textfile.directory` where `workstation_vault_audit` writes alert summary metrics (ADR-144).
 
+#### `host_log_rendezvous` (Observability Plane)
+
+- Type: `object`
+- Semantics: Declares the routed libvirt segment (third octet 250) and Bastion registry coordinates for shipping Bastion Vault operational server logs to Loki via Grafana Alloy (ADR-143, ADR-144). Audit logs remain on the host.
+- Child fields:
+    - `network_name` (`string`): Name of the routed libvirt network (`host-log-rendezvous`).
+    - `loki_push_port` (`integer`): Destination HTTPS port at the rendezvous endpoint (`443`).
+    - `loki_push_path` (`string`): HTTP push path on the Loki rendezvous (`/loki/api/v1/push`).
+    - `pki_root_ca_path` (`string`): Bastion Vault path yielding the `pki-root` CA certificate trusted by Alloy (`pki-root/cert/ca`).
+    - `registry` (`object`): `vault_kv_mount`, `vault_kv_path`, `cidr_field`, `ip_field`, and `server_names_field` published by `foundation-vault-bastion`.
+
 ### Item B. Access Plane: `operator_vault_proxy`
 
 The `operator_vault_proxy` map configures workstation local forwarding proxies. Each proxy authenticates callers via mTLS client certificates. The proxy then injects a valid Vault token into each request.
@@ -254,5 +265,6 @@ The four operator identities defined in `operator_vault_proxy.identities` fulfil
 | `host_telemetry_scrape.registry`               | Go CLI operations                  | `tools/governance/cmd/governance/host_playbooks.go`                  | Reads the segment injected by `apply-host-telemetry`.                 |
 | `host_telemetry_scrape`                        | Ansible workstation_host_telemetry | `ansible/roles/workstation_host_telemetry/tasks/main.yaml`           | Declares the network, firewalld policy, and collector ACL.            |
 | `host_telemetry_scrape.textfile_collector_dir` | Ansible workstation_vault_audit    | `ansible/roles/workstation_vault_audit/templates/config.json.j2`     | Configures the output directory for Prometheus textfile `.prom` files.|
+| `host_log_rendezvous`                          | Go CLI operations & Ansible        | `tools/governance/cmd/governance/host_playbooks.go`, `ansible/roles/workstation_host_telemetry/` | Configures segment 250 network, `pki-root` CA trust, and Grafana Alloy push target. |
 
 ---

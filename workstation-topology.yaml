@@ -26,6 +26,19 @@ host_telemetry_scrape:
   # Directory scraped by prometheus-node-exporter --collector.textfile.directory (ADR-144).
   textfile_collector_dir: "/var/lib/prometheus/node-exporter"
 
+# Observability Plane: routed libvirt segment for shipping Bastion Vault server logs to Loki (ADR-143, ADR-144).
+host_log_rendezvous:
+  network_name: "host-log-rendezvous"
+  loki_push_port: 443
+  loki_push_path: "/loki/api/v1/push"
+  pki_root_ca_path: "pki-root/cert/ca"
+  registry:
+    vault_kv_mount: "registry"
+    vault_kv_path: "platform/network/allocation"
+    cidr_field: "host_log_rendezvous_cidr"
+    ip_field: "host_log_rendezvous_ip"
+    server_names_field: "host_log_rendezvous_server_names"
+
 # Access Plane: Local forwarding proxies mediating mTLS client authentication.
 # Identity keys determine the access tier and the owner code per documentation/workstation-topology-specification.md.
 operator_vault_proxy:
