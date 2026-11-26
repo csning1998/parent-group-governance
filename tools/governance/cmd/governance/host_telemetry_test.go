@@ -54,6 +54,7 @@ func TestBuildHostTelemetryPlaybookInjectsTheSegmentAndCoversTheAddress(t *testi
 	pb, err := a.buildHostTelemetryPlaybook(context.Background())
 	want := map[string]any{
 		"workstation_host_telemetry_operator_user": facts.CurrentUname,
+		"workstation_host_telemetry_repository":    a.root,
 		"workstation_host_telemetry_scrape_cidr":   "192.0.2.0/24",
 		"workstation_host_telemetry_scrape_ip":     "192.0.2.1",
 	}

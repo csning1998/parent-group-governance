@@ -42,6 +42,22 @@ func (v vaultKV) WriteField(ctx context.Context, f issuedtokens.VaultField, valu
 	return nil
 }
 
+// ReadCertificate reads a PEM certificate stored at a Vault PKI logical path.
+func (v vaultKV) ReadCertificate(ctx context.Context, path string) (string, error) {
+	secret, err := v.client.Logical().ReadWithContext(ctx, path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	if secret == nil || secret.Data == nil {
+		return "", fmt.Errorf("%s returned empty secret data", path)
+	}
+	cert, ok := secret.Data["certificate"].(string)
+	if !ok || cert == "" {
+		return "", fmt.Errorf("%s lacks field certificate", path)
+	}
+	return cert, nil
+}
+
 func (a *app) newAdministratorKV() (vaultKV, error) {
 	cfg, err := a.buildProxyConfig(accessAdministrator)
 	if err != nil {

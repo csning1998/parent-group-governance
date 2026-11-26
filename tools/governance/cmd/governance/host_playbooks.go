@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -169,15 +170,52 @@ func (a *app) buildHostTelemetryPlaybook(ctx context.Context) (hostPlaybook, err
 	if _, err := vault.EnsurePublishCertCovers(a.newVaultPaths().TLSDir(), net.ParseIP(scrapeIP)); err != nil {
 		return hostPlaybook{}, err
 	}
+	extraVars := map[string]any{
+		"workstation_host_telemetry_operator_user": facts.CurrentUname,
+		"workstation_host_telemetry_scrape_cidr":   cidr,
+		"workstation_host_telemetry_scrape_ip":     scrapeIP,
+	}
+	if err := a.addLogRendezvousExtraVars(ctx, kv, extraVars); err != nil {
+		return hostPlaybook{}, err
+	}
 	return hostPlaybook{
-		file: "playbooks/workstation_host_telemetry.yaml",
-		extraVars: map[string]any{
-			"workstation_host_telemetry_operator_user": facts.CurrentUname,
-			"workstation_host_telemetry_scrape_cidr":   cidr,
-			"workstation_host_telemetry_scrape_ip":     scrapeIP,
-		},
-		doneMsg: "Host telemetry scrape network applied.",
+		file:      "playbooks/workstation_host_telemetry.yaml",
+		extraVars: extraVars,
+		doneMsg:   "Host telemetry scrape network applied.",
 	}, nil
+}
+
+func (a *app) addLogRendezvousExtraVars(ctx context.Context, kv vaultKV, extraVars map[string]any) error {
+	extraVars["workstation_host_telemetry_repository"] = a.root
+	rendezvous := a.topology.HostLogRendezvous
+	if rendezvous.Registry.Path == "" {
+		return nil
+	}
+	cidr, err := kv.ReadField(ctx, issuedtokens.VaultField{Mount: rendezvous.Registry.Mount, Path: rendezvous.Registry.Path, Field: rendezvous.Registry.CIDRField})
+	if err != nil {
+		return err
+	}
+	rendezvousIP, err := kv.ReadField(ctx, issuedtokens.VaultField{Mount: rendezvous.Registry.Mount, Path: rendezvous.Registry.Path, Field: rendezvous.Registry.IPField})
+	if err != nil {
+		return err
+	}
+	rawNames, err := kv.ReadField(ctx, issuedtokens.VaultField{Mount: rendezvous.Registry.Mount, Path: rendezvous.Registry.Path, Field: rendezvous.Registry.ServerNamesField})
+	if err != nil {
+		return err
+	}
+	var serverNames []string
+	if err := json.Unmarshal([]byte(rawNames), &serverNames); err != nil {
+		return fmt.Errorf("decode %s: %w", rendezvous.Registry.ServerNamesField, err)
+	}
+	caPEM, err := kv.ReadCertificate(ctx, rendezvous.PKIRootCAPath)
+	if err != nil {
+		return err
+	}
+	extraVars["workstation_host_telemetry_log_rendezvous_cidr"] = cidr
+	extraVars["workstation_host_telemetry_log_rendezvous_ip"] = rendezvousIP
+	extraVars["workstation_host_telemetry_log_rendezvous_server_names"] = serverNames
+	extraVars["workstation_host_telemetry_pki_root_ca_pem"] = caPEM
+	return nil
 }
 
 func (a *app) buildVaultAuditPlaybook() hostPlaybook {
